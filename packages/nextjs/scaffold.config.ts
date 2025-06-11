@@ -1,4 +1,32 @@
+import { defineChain } from "viem";
 import * as chains from "viem/chains";
+
+// Custom chain definition for Geo Genesis testnet (chain ID 19411)
+export const geoGenesis = defineChain({
+  id: 19411,
+  name: "Geo Genesis Testnet",
+  network: "geo-genesis",
+  nativeCurrency: {
+    name: "Geo",
+    symbol: "GEO",
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: [process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL || "https://geo.genesis.rpc.url"],
+    },
+    public: {
+      http: [process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL || "https://geo.genesis.rpc.url"],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: "Geo Explorer",
+      url: "https://explorer.geo.genesis/",
+    },
+  },
+  testnet: true,
+});
 
 export type ScaffoldConfig = {
   targetNetworks: readonly chains.Chain[];
@@ -13,7 +41,7 @@ export const DEFAULT_ALCHEMY_API_KEY = "oKxs-03sij-U_N0iOlrSsZFr29-IqbuF";
 
 const scaffoldConfig = {
   // The networks on which your DApp is live
-  targetNetworks: [chains.hardhat],
+  targetNetworks: [chains.hardhat, geoGenesis],
 
   // The interval at which your front-end polls the RPC servers for new data
   // it has no effect if you only target the local network (default is 4000)
