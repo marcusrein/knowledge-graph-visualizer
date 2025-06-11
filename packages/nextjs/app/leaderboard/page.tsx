@@ -2,17 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { NextPage } from "next";
-import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 interface LeaderboardRow {
   userAddress: string;
   points: string | number;
 }
-
-export const metadata = getMetadata({
-  title: "Leaderboard",
-  description: "Top contributors to the knowledge graph",
-});
 
 const LeaderboardPage: NextPage = () => {
   const [rows, setRows] = useState<LeaderboardRow[]>([]);

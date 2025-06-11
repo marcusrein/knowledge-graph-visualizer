@@ -38,7 +38,7 @@ ensureDb();
 // Optional on-chain ContributionTracker integration
 const trackerAddress = process.env.TRACKER_CONTRACT_ADDRESS;
 const privateKey = process.env.PRIVATE_KEY; // backend signer private key (dev only)
-const rpcUrl = process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL;
+const rpcUrl = process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL || "https://rpc-geo-genesis-h0q2s21xx8.t.conduit.xyz";
 
 let trackerContract: any = null;
 if (trackerAddress && privateKey && rpcUrl) {

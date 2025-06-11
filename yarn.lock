@@ -3707,6 +3707,7 @@ __metadata:
     "@types/node": ~18.19.50
     cors: ~2.8.5
     dotenv: ~16.4.5
+    ethers: ~6.13.2
     express: ~4.19.2
     knex: ~3.1.0
     sqlite3: ~5.1.6
@@ -3763,6 +3764,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@se-2/nextjs@workspace:packages/nextjs"
   dependencies:
+    "@graphprotocol/grc-20": ^0.17.1
     "@heroicons/react": ~2.1.5
     "@rainbow-me/rainbowkit": 2.2.5
     "@tailwindcss/postcss": 4.0.15
@@ -3778,6 +3780,7 @@ __metadata:
     blo: ~1.2.0
     burner-connector: 0.0.14
     daisyui: 5.0.9
+    effect: ^3.16.5
     eslint: ~9.23.0
     eslint-config-next: ~15.2.3
     eslint-config-prettier: ~10.1.1
@@ -8278,7 +8281,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"effect@npm:^3.13.6":
+"effect@npm:^3.13.6, effect@npm:^3.16.5":
   version: 3.16.5
   resolution: "effect@npm:3.16.5"
   dependencies:

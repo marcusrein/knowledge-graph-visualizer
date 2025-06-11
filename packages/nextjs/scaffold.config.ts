@@ -13,10 +13,13 @@ export const geoGenesis = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL || "https://geo.genesis.rpc.url"],
+      http: [process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL || "https://rpc-geo-genesis-h0q2s21xx8.t.conduit.xyz"],
     },
     public: {
-      http: [process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL || "https://geo.genesis.rpc.url"],
+      http: [process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL || "https://rpc-geo-genesis-h0q2s21xx8.t.conduit.xyz"],
+    },
+    webSocket: {
+      http: ["wss://rpc-geo-genesis-h0q2s21xx8.t.conduit.xyz"],
     },
   },
   blockExplorers: {
