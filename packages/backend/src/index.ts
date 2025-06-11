@@ -60,11 +60,13 @@ app.post("/api/upload", async (req, res) => {
   }
 
   try {
-    const cid = await Ipfs.publishEdit({
+    const result = await Ipfs.publishEdit({
       name: `Upload from ${userAddress}`,
       ops: edits,
       author: userAddress,
     });
+
+    const cidString = result.cid.toString();
 
     // Save contribution record
     await db("contributions").insert({
@@ -84,7 +86,7 @@ app.post("/api/upload", async (req, res) => {
       }
     }
 
-    res.json({ cid });
+    res.json({ cid: cidString });
   } catch (e: any) {
     console.error(e);
     res.status(500).json({ error: e.message });

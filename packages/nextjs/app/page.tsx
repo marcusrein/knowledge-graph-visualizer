@@ -2,10 +2,10 @@
 "use client";
 
 import { useState } from "react";
-// @ts-ignore
 import { Graph } from "@graphprotocol/grc-20";
 import { useAccount, useWalletClient } from "wagmi";
 import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import type { Op } from "@graphprotocol/grc-20";
 
 const Home = () => {
   const { address, isConnected } = useAccount();
@@ -19,6 +19,7 @@ const Home = () => {
   const [cid, setCid] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastOps, setLastOps] = useState<Op[] | null>(null);
 
   const { writeContractAsync: writeContributionTracker } = useScaffoldWriteContract("ContributionTracker");
 
@@ -32,6 +33,7 @@ const Home = () => {
     try {
       // 1. Build ops with GRC SDK
       const { ops } = Graph.createEntity({ name, description });
+      setLastOps(ops);
 
       // 2. Send ops to backend to publish to IPFS & store contribution record
       const uploadRes = await fetch("http://localhost:4000/api/upload", {
@@ -41,16 +43,19 @@ const Home = () => {
       });
       const uploadJson = await uploadRes.json();
       if (!uploadRes.ok) throw new Error(uploadJson.error || "Upload failed");
-      const { cid } = uploadJson.cid;
-      setCid(cid);
+      const cidRaw: string = uploadJson.cid;
+      setCid(cidRaw.replace(/^ipfs:\/\//, ""));
 
       // 3. If user provided spaceId, publish on-chain
       if (spaceId) {
-        const metaRes = await fetch(`https://api-testnet.grc-20.thegraph.com/space/${spaceId}/edit/calldata`, {
-          method: "POST",
-          body: JSON.stringify({ cid, network: "TESTNET" }),
-          headers: { "Content-Type": "application/json" },
-        });
+        const metaRes = await fetch(
+          `https://api-testnet.grc-20.thegraph.com/space/${spaceId}/edit/calldata`,
+          {
+            method: "POST",
+            body: JSON.stringify({ cid: cidRaw.replace(/^ipfs:\/\//, ""), network: "TESTNET" }),
+            headers: { "Content-Type": "application/json" },
+          },
+        );
         const { to, data } = await metaRes.json();
         const hash = await walletClient.sendTransaction({ to, data: data as `0x${string}` });
         setTxHash(hash as string);
@@ -95,21 +100,21 @@ const Home = () => {
           {loading ? "Publishing..." : "Publish to GRC-20"}
         </button>
         {cid && !contributionTxHash && (
-          <div className="alert alert-success whitespace-pre-wrap">
-            <div className="flex flex-col">
-              <p>
-                ✅ Edit published to IPFS:{" "}
+          <div className="alert alert-success shadow-lg rounded-lg flex flex-col space-y-6 p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex-1 space-y-1">
+                <p className="font-bold text-lg">✅ Edit published to IPFS</p>
                 <a
-                  href={`https://ipfs.io/ipfs/${cid}`}
+                  href={`https://gateway.ipfs.io/ipfs/${cid}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="link"
+                  className="link link-primary break-all text-sm md:text-base"
                 >
                   {cid}
                 </a>
-              </p>
+              </div>
               <button
-                className="btn btn-sm btn-primary mt-2 self-start"
+                className="btn btn-primary btn-sm md:btn-md"
                 onClick={async () => {
                   try {
                     await writeContributionTracker({ functionName: "reportContribution", args: [address, 1n] });
@@ -122,10 +127,18 @@ const Home = () => {
                 Add to On-Chain Leaderboard
               </button>
             </div>
+            {lastOps && (
+              <details className="bg-base-100 text-base-content rounded-lg p-4">
+                <summary className="font-semibold cursor-pointer">View raw ops JSON</summary>
+                <pre className="mt-2 bg-base-200 p-3 rounded-lg text-xs font-mono overflow-auto max-h-64">
+                  {JSON.stringify(lastOps, null, 2)}
+                </pre>
+              </details>
+            )}
           </div>
         )}
         {cid && contributionTxHash && (
-          <div className="alert alert-success whitespace-pre-wrap">✅ Contribution sent to leaderboard!</div>
+          <div className="alert alert-info">✅ Contribution sent to leaderboard!</div>
         )}
         {txHash && (
           <div className="alert alert-info">📜 On-chain tx sent: {txHash.slice(0, 10)}... (check Geo Explorer)</div>
