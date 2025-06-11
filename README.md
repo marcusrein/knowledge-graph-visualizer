@@ -1,3 +1,23 @@
+# 🛰 Geo Genesis + GRC-20 Starter Kit (based on Scaffold-ETH 2)
+
+This monorepo lets you **upload knowledge to The Graph's GRC-20 standard on the Geo Genesis testnet** and compete on a contribution leaderboard.
+
+Key pieces:
+
+* **Frontend** (Next.js – packages/nextjs)
+  * `/upload` page – paste GRC-20 `ops` array and publish
+  * `/leaderboard` page – view top contributors
+* **Backend** (Express – packages/backend)
+  * `POST /api/upload` – publishes edit to IPFS via `@graphprotocol/grc-20` and logs in SQLite
+  * `GET /api/leaderboard` – aggregates totals
+  * (Optional) reports points on-chain via the `ContributionTracker` contract
+* **Smart contracts** (Hardhat – packages/hardhat)
+  * `ContributionTracker.sol` – simple `reportContribution()` function
+  * Hardhat-Deploy script `01_deploy_contribution_tracker.ts`
+* **Custom chain config** – Geo Genesis (chainId **19411**) added to `scaffold.config.ts`
+
+---
+
 # 🏗 Scaffold-ETH 2
 
 <h4 align="center">

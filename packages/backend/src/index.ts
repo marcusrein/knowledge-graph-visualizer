@@ -6,6 +6,7 @@ import cors from "cors";
 import knex from "knex";
 import { Graph, Ipfs } from "@graphprotocol/grc-20";
 import path from "path";
+import { ethers } from "ethers";
 
 const app = express();
 app.use(cors());
@@ -34,13 +35,26 @@ async function ensureDb() {
 }
 ensureDb();
 
+// Optional on-chain ContributionTracker integration
+const trackerAddress = process.env.TRACKER_CONTRACT_ADDRESS;
+const privateKey = process.env.PRIVATE_KEY; // backend signer private key (dev only)
+const rpcUrl = process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL;
+
+let trackerContract: any = null;
+if (trackerAddress && privateKey && rpcUrl) {
+  const abi = [
+    "function reportContribution(address contributor,uint256 points) external",
+  ];
+  // Using any to accommodate ethers v5/v6 difference
+  const provider = new (ethers as any).JsonRpcProvider(rpcUrl);
+  const wallet = new ethers.Wallet(privateKey, provider);
+  trackerContract = new ethers.Contract(trackerAddress as string, abi, wallet);
+}
+
 // POST /api/upload
 app.post("/api/upload", async (req, res) => {
   try {
-    const { userAddress, edits } = req.body as {
-      userAddress: string;
-      edits: Array<unknown>; // expecting array of ops or instructions
-    };
+    const { userAddress, edits } = req.body as any;
 
     if (!userAddress || !Array.isArray(edits)) {
       return res.status(400).json({ error: "Invalid payload" });
@@ -61,6 +75,17 @@ app.post("/api/upload", async (req, res) => {
       triplesCount: edits.length,
       timestamp: new Date().toISOString(),
     });
+
+    // Optionally report on-chain
+    if (trackerContract) {
+      try {
+        // @ts-ignore – Address type widen for generic tx
+        const tx = await (trackerContract as any).reportContribution(userAddress, edits.length);
+        console.log("ContributionTracker tx", tx.hash);
+      } catch (err) {
+        console.warn("Tracker contract call failed", err);
+      }
+    }
 
     return res.json({ cid });
   } catch (error: any) {
