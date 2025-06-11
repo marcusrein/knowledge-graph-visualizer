@@ -1,20 +1,69 @@
 # 🛰 Geo Genesis + GRC-20 Starter Kit (based on Scaffold-ETH 2)
 
-This monorepo lets you **upload knowledge to The Graph's GRC-20 standard on the Geo Genesis testnet** and compete on a contribution leaderboard.
+This monorepo is a full-stack starter kit that lets you **upload knowledge to The Graph's GRC-20 standard on the Geo Genesis testnet** and compete on a fully on-chain contribution leaderboard.
 
-Key pieces:
+It provides a hands-on-template for developers looking to build applications using the GRC-20 SDK.
 
-* **Frontend** (Next.js – packages/nextjs)
-  * `/upload` page – paste GRC-20 `ops` array and publish
-  * `/leaderboard` page – view top contributors
-* **Backend** (Express – packages/backend)
-  * `POST /api/upload` – publishes edit to IPFS via `@graphprotocol/grc-20` and logs in SQLite
-  * `GET /api/leaderboard` – aggregates totals
-  * (Optional) reports points on-chain via the `ContributionTracker` contract
-* **Smart contracts** (Hardhat – packages/hardhat)
-  * `ContributionTracker.sol` – simple `reportContribution()` function
-  * Hardhat-Deploy script `01_deploy_contribution_tracker.ts`
-* **Custom chain config** – Geo Genesis (chainId **19411**) added to `scaffold.config.ts`
+## How it Works
+
+The main page (`/`) provides an interactive demo:
+1.  **Create Knowledge**: A user enters a name and description for a new knowledge "entity".
+2.  **Publish to IPFS**: The app uses the `@graphprotocol/grc-20` SDK to format the data, then sends it to a lightweight backend server which pins the content to IPFS.
+3.  **Log Contribution On-Chain**: After the data is on IPFS, the user is prompted to send a transaction to the `ContributionTracker` smart contract. This awards them 1 point for their contribution.
+4.  **View Leaderboard**: The `/leaderboard` page reads events directly from the `ContributionTracker` contract to display a real-time, on-chain leaderboard of top contributors.
+
+## Key Components
+
+*   **Frontend** (Next.js – `packages/nextjs`)
+    *   **`/` (Home Page)**: An interactive demo and tutorial for publishing knowledge.
+    *   **`/leaderboard`**: A fully on-chain leaderboard that reads contract events.
+*   **Backend** (Express – `packages/backend`)
+    *   **`POST /api/upload`**: A simple endpoint that takes GRC-20 `ops` and uses the SDK to publish them to IPFS.
+*   **Smart Contracts** (Hardhat – `packages/hardhat`)
+    *   **`ContributionTracker.sol`**: A simple contract to log contribution points for each user via a `reportContribution()` function and `ContributionReported` event.
+    *   **Hardhat-Deploy script**: Deploys `ContributionTracker` to the target network.
+*   **Custom Chain Config**: Includes the Geo Genesis testnet (chainId **19411**) in `packages/nextjs/scaffold.config.ts`.
+
+---
+
+## Quickstart
+
+To get started with this starter kit, follow the steps below:
+
+1.  **Clone and Install Dependencies**:
+    ```bash
+    git clone <repo-url>
+    cd <repo-name>
+    yarn install
+    ```
+
+2.  **Run the Local Blockchain**:
+    Open a terminal and run:
+    ```bash
+    yarn chain
+    ```
+    This starts a local Hardhat network.
+
+3.  **Deploy Smart Contracts**:
+    In a second terminal, deploy the `ContributionTracker` contract:
+    ```bash
+    yarn deploy
+    ```
+
+4.  **Start the Backend Server**:
+    In a third terminal, start the backend server for IPFS uploads:
+    ```bash
+    cd packages/backend
+    yarn dev
+    ```
+
+5.  **Start the Frontend App**:
+    In a fourth terminal, start the Next.js frontend:
+    ```bash
+    yarn start
+    ```
+
+Now, visit your app at `http://localhost:3000`. You can test the full flow of creating knowledge and seeing your address appear on the on-chain leaderboard.
 
 ---
 
