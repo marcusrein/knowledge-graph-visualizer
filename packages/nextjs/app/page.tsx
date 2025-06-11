@@ -96,20 +96,32 @@ const Home = () => {
         </button>
         {cid && !contributionTxHash && (
           <div className="alert alert-success whitespace-pre-wrap">
-            <p>✅ Edit published to IPFS: {cid}</p>
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={async () => {
-                try {
-                  await writeContributionTracker({ functionName: "reportContribution", args: [address, 1n] });
-                  setContributionTxHash("Success!");
-                } catch (e: any) {
-                  setError(e.message);
-                }
-              }}
-            >
-              Add to On-Chain Leaderboard
-            </button>
+            <div className="flex flex-col">
+              <p>
+                ✅ Edit published to IPFS:{" "}
+                <a
+                  href={`https://ipfs.io/ipfs/${cid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link"
+                >
+                  {cid}
+                </a>
+              </p>
+              <button
+                className="btn btn-sm btn-primary mt-2 self-start"
+                onClick={async () => {
+                  try {
+                    await writeContributionTracker({ functionName: "reportContribution", args: [address, 1n] });
+                    setContributionTxHash("Success!");
+                  } catch (e: any) {
+                    setError(e.message);
+                  }
+                }}
+              >
+                Add to On-Chain Leaderboard
+              </button>
+            </div>
           </div>
         )}
         {cid && contributionTxHash && (
