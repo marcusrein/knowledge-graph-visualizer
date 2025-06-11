@@ -41,7 +41,7 @@ const Home = () => {
       });
       const uploadJson = await uploadRes.json();
       if (!uploadRes.ok) throw new Error(uploadJson.error || "Upload failed");
-      const cid = uploadJson.cid as string;
+      const { cid } = uploadJson.cid;
       setCid(cid);
 
       // 3. If user provided spaceId, publish on-chain
