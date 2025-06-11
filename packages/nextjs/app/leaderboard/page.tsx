@@ -1,41 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import type { NextPage } from "next";
+import { useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
 
 interface LeaderboardRow {
   userAddress: string;
-  points: string | number;
+  points: bigint;
 }
 
 const LeaderboardPage: NextPage = () => {
-  const [rows, setRows] = useState<LeaderboardRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: events,
+    isLoading: isLoading,
+    error: error,
+  } = useScaffoldEventHistory({
+    contractName: "ContributionTracker",
+    eventName: "ContributionReported",
+    fromBlock: 0n,
+  });
 
-  useEffect(() => {
-    async function fetchLeaderboard() {
-      try {
-        const res = await fetch("http://localhost:4000/api/leaderboard");
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to fetch");
-        setRows(data);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
+  const leaderboardData = useMemo(() => {
+    if (!events) return [];
+    const points = new Map<string, bigint>();
+    for (const event of events) {
+      const { contributor, points: p } = event.args;
+      if (contributor && p) {
+        points.set(contributor, (points.get(contributor) || 0n) + p);
       }
     }
-
-    fetchLeaderboard();
-  }, []);
+    return Array.from(points.entries())
+      .map(([userAddress, points]) => ({ userAddress, points }))
+      .sort((a, b) => Number(b.points - a.points));
+  }, [events]);
 
   return (
     <div className="max-w-3xl mx-auto mt-8 p-4">
-      <h1 className="text-3xl font-bold mb-6">Leaderboard</h1>
-      {loading && <p>Loading...</p>}
-      {error && <p className="text-error">❌ {error}</p>}
-      {!loading && !error && (
+      <h1 className="text-3xl font-bold mb-6">On-Chain Leaderboard</h1>
+      {isLoading && <p>Loading...</p>}
+      {error && <p className="text-error">❌ {error.message}</p>}
+      {!isLoading && !error && (
         <table className="table w-full">
           <thead>
             <tr>
@@ -45,11 +49,11 @@ const LeaderboardPage: NextPage = () => {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => (
+            {leaderboardData.map((row, idx) => (
               <tr key={row.userAddress} className="hover">
                 <td>{idx + 1}</td>
                 <td>{row.userAddress}</td>
-                <td className="text-right">{row.points}</td>
+                <td className="text-right">{row.points.toString()}</td>
               </tr>
             ))}
           </tbody>

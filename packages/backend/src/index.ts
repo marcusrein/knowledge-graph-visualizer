@@ -53,21 +53,18 @@ if (trackerAddress && privateKey && rpcUrl) {
 
 // POST /api/upload
 app.post("/api/upload", async (req, res) => {
+  const { userAddress, edits } = req.body;
+
+  if (!userAddress || !edits) {
+    return res.status(400).json({ error: "Missing userAddress or edits" });
+  }
+
   try {
-    const { userAddress, edits } = req.body as any;
-
-    if (!userAddress || !Array.isArray(edits)) {
-      return res.status(400).json({ error: "Invalid payload" });
-    }
-
-    // For now, assume edits is already an array of ops in GRC-20 format
-    const { cid } = await Ipfs.publishEdit({
+    const cid = await Ipfs.publishEdit({
       name: `Upload from ${userAddress}`,
-      ops: edits as any,
+      ops: edits,
       author: userAddress,
     });
-
-    // TODO: push on-chain transaction here using Graph SDK if desired
 
     // Save contribution record
     await db("contributions").insert({
@@ -87,27 +84,10 @@ app.post("/api/upload", async (req, res) => {
       }
     }
 
-    return res.json({ cid });
-  } catch (error: any) {
-    console.error("Upload error", error);
-    return res.status(500).json({ error: error.message || "Internal error" });
-  }
-});
-
-// GET /api/leaderboard
-app.get("/api/leaderboard", async (_req, res) => {
-  try {
-    const rows = await db("contributions")
-      .select("userAddress")
-      .sum({ points: "triplesCount" })
-      .groupBy("userAddress")
-      .orderBy("points", "desc")
-      .limit(100);
-
-    return res.json(rows);
-  } catch (error: any) {
-    console.error("Leaderboard error", error);
-    return res.status(500).json({ error: error.message || "Internal error" });
+    res.json({ cid });
+  } catch (e: any) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
 });
 

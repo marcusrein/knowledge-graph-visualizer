@@ -5,6 +5,7 @@ import { useState } from "react";
 // @ts-ignore
 import { Graph } from "@graphprotocol/grc-20";
 import { useAccount, useWalletClient } from "wagmi";
+import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 // GRC-20 Knowledge Graph Quickstart
 
@@ -31,6 +32,7 @@ import { useAccount, useWalletClient } from "wagmi";
 const Home = () => {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const [contributionTxHash, setContributionTxHash] = useState<string | null>(null);
 
   const [spaceId, setSpaceId] = useState("");
   const [name, setName] = useState("");
@@ -40,11 +42,14 @@ const Home = () => {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const { writeContractAsync: writeContributionTracker } = useScaffoldWriteContract("ContributionTracker");
+
   const handleSubmit = async () => {
     if (!walletClient || !address) return;
     setError(null);
     setCid(null);
     setTxHash(null);
+    setContributionTxHash(null);
     setLoading(true);
     try {
       // 1. Build ops with GRC SDK
@@ -111,7 +116,27 @@ const Home = () => {
         <button className="btn btn-primary w-full" disabled={!isConnected || loading || !name} onClick={handleSubmit}>
           {loading ? "Publishing..." : "Publish to GRC-20"}
         </button>
-        {cid && <div className="alert alert-success whitespace-pre-wrap">✅ Edit published to IPFS: {cid}</div>}
+        {cid && !contributionTxHash && (
+          <div className="alert alert-success whitespace-pre-wrap">
+            <p>✅ Edit published to IPFS: {cid}</p>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={async () => {
+                try {
+                  await writeContributionTracker({ functionName: "reportContribution", args: [address, 1n] });
+                  setContributionTxHash("Success!");
+                } catch (e: any) {
+                  setError(e.message);
+                }
+              }}
+            >
+              Add to On-Chain Leaderboard
+            </button>
+          </div>
+        )}
+        {cid && contributionTxHash && (
+          <div className="alert alert-success whitespace-pre-wrap">✅ Contribution sent to leaderboard!</div>
+        )}
         {txHash && (
           <div className="alert alert-info">📜 On-chain tx sent: {txHash.slice(0, 10)}... (check Geo Explorer)</div>
         )}
