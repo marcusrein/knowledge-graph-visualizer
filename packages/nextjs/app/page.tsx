@@ -7,28 +7,6 @@ import { Graph } from "@graphprotocol/grc-20";
 import { useAccount, useWalletClient } from "wagmi";
 import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
-// GRC-20 Knowledge Graph Quickstart
-
 const Home = () => {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
