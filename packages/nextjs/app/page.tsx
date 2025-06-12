@@ -12,7 +12,8 @@ const Home = () => {
   const { data: walletClient } = useWalletClient();
   const [contributionTxHash, setContributionTxHash] = useState<string | null>(null);
 
-  const [spaceId, setSpaceId] = useState<string>("25omwWh6HYgeRQKCaSpVpa"); // Geo Genesis Public Square
+  // Start with no space selected so the user is prompted to create a personal space on first visit.
+  const [spaceId, setSpaceId] = useState<string>("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,17 +37,37 @@ const Home = () => {
     if (!address) return;
     setIsCreatingSpace(true);
     setError(null);
+
     try {
-      // @ts-ignore
-      const result = await Graph.createSpace({
+      console.time("create-space");
+      /* 👇 show full request payload in console so we can reproduce it with curl  */
+      const payload = {
         initialEditorAddress: address,
         spaceName: `Personal Space for ${address.slice(0, 6)}`,
         network: "TESTNET",
-      });
-      setSpaceId(result.id);
-      localStorage.setItem("personalSpaceId", result.id);
+      };
+      console.log("Graph.createSpace payload →", payload);
+
+      /* cast to any because SDK types lag behind */
+      const newSpaceId: string = await (Graph as any).createSpace(
+        payload as any,
+      );
+      console.timeEnd("create-space");
+
+      setSpaceId(newSpaceId);
+      localStorage.setItem("personalSpaceId", newSpaceId);
     } catch (e: any) {
-      setError(e.message || "Failed to create space.");
+      /* 🔍 dump everything we can get hold of */
+      console.error("createSpace failed", e);
+      if (e?.response) {
+        console.error("status", e.response.status);
+        console.error("body", await e.response.text?.());
+      }
+      setError(
+        e?.message ||
+          e?.response?.statusText ||
+          "Graph.createSpace returned 500 - see dev-console",
+      );
     } finally {
       setIsCreatingSpace(false);
     }
