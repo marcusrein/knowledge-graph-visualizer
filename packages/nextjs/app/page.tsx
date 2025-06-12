@@ -90,8 +90,22 @@ const Home = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAddress: address, edits: ops }),
       });
-      const uploadJson = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploadJson.error || "Upload failed");
+      let uploadJson: any = null;
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text();
+        console.error("Upload API error:", uploadRes.status, text);
+        setError(`Upload API error: ${uploadRes.status} - ${text}`);
+        setLoading(false);
+        return;
+      }
+      try {
+        uploadJson = await uploadRes.json();
+      } catch (err) {
+        console.error("Upload API returned non-JSON:", err);
+        setError("Upload API returned non-JSON response");
+        setLoading(false);
+        return;
+      }
       const cidWithPrefix: string = uploadJson.cid;
       setCid(cidWithPrefix.replace(/^ipfs:\/\//, ""));
 
@@ -109,10 +123,21 @@ const Home = () => {
           },
         );
         if (!metaRes.ok) {
-          const body = await metaRes.text();
-          throw new Error(`calldata fetch failed: ${metaRes.status} – ${body}`);
+          const text = await metaRes.text();
+          console.error("GRC-20 API error:", metaRes.status, text);
+          setError(`GRC-20 API error: ${metaRes.status} - ${text}`);
+          setLoading(false);
+          return;
         }
-        const json = await metaRes.json();
+        let json: any = null;
+        try {
+          json = await metaRes.json();
+        } catch (err) {
+          console.error("GRC-20 API returned non-JSON:", err);
+          setError("GRC-20 API returned non-JSON response");
+          setLoading(false);
+          return;
+        }
         const { to, data } = json;
         const hash = await walletClient.sendTransaction({ to, data: data as `0x${string}` });
         setTxHash(hash as string);

@@ -35,13 +35,20 @@ export async function publish({
   );
 
   if (!metaRes.ok) {
-    const body = await metaRes.text();
-    throw new Error(`calldata fetch failed: ${metaRes.status} – ${body}`);
+    const text = await metaRes.text();
+    console.error("GRC-20 API error:", metaRes.status, text);
+    throw new Error(`calldata fetch failed: ${metaRes.status} – ${text}`);
   }
 
-  const json: any = await metaRes.json();
-  const to: string = json.to as string;
-  const data: string = json.data as string;
+  let json: any = null;
+  try {
+    json = await metaRes.json();
+  } catch (err) {
+    console.error("GRC-20 API returned non-JSON:", err);
+    throw new Error("GRC-20 API returned non-JSON response");
+  }
+  const to = json.to as string;
+  const data = json.data as string;
 
   // 3. Send tx
   const txHash = await (walletClient as any).sendTransaction({ to: to as any, data: data as any });

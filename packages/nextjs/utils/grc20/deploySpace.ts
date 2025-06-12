@@ -23,8 +23,18 @@ export async function deploySpace({
         network,
       } as any);
       return spaceId;
-    } catch (err) {
+    } catch (err: any) {
       lastErr = err;
+      if (err?.response) {
+        try {
+          const text = await err.response.text?.();
+          console.error("GRC-20 createSpace API error:", err.response.status, text);
+        } catch {
+          console.error("GRC-20 createSpace API error (no text):", err);
+        }
+      } else {
+        console.error("GRC-20 createSpace error:", err);
+      }
       // brief delay before retrying
       await new Promise(res => setTimeout(res, 1500));
     }

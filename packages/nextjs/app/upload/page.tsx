@@ -57,8 +57,22 @@ const UploadPage: NextPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAddress: address, edits: ops }),
       });
-      const uploadJson = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploadJson.error || "Upload failed");
+      let uploadJson: any = null;
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text();
+        console.error("Upload API error:", uploadRes.status, text);
+        setError(`Upload API error: ${uploadRes.status} - ${text}`);
+        setLoading(false);
+        return;
+      }
+      try {
+        uploadJson = await uploadRes.json();
+      } catch (err) {
+        console.error("Upload API returned non-JSON:", err);
+        setError("Upload API returned non-JSON response");
+        setLoading(false);
+        return;
+      }
       const cid = uploadJson.cid as string;
       setCid(cid);
 
@@ -69,8 +83,23 @@ const UploadPage: NextPage = () => {
           body: JSON.stringify({ cid, network: "TESTNET" }),
           headers: { "Content-Type": "application/json" },
         });
-        const { to, data } = await metaRes.json();
-
+        if (!metaRes.ok) {
+          const text = await metaRes.text();
+          console.error("GRC-20 API error:", metaRes.status, text);
+          setError(`GRC-20 API error: ${metaRes.status} - ${text}`);
+          setLoading(false);
+          return;
+        }
+        let json: any = null;
+        try {
+          json = await metaRes.json();
+        } catch (err) {
+          console.error("GRC-20 API returned non-JSON:", err);
+          setError("GRC-20 API returned non-JSON response");
+          setLoading(false);
+          return;
+        }
+        const { to, data } = json;
         const hash = await walletClient.sendTransaction({ to, data: data as `0x${string}` });
         setTxHash(hash as string);
       }
