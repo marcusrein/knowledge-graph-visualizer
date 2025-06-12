@@ -7,16 +7,23 @@ import knex from "knex";
 import { Graph, Ipfs } from "@graphprotocol/grc-20";
 import path from "path";
 import { ethers } from "ethers";
+import fs from "fs";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
+// Ensure data directory exists (writeable even when compiled)
+const dataDir = path.join(process.cwd(), "packages/backend/data");
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
 // Simple SQLite connection using Knex
 const db = knex({
   client: "sqlite3",
   connection: {
-    filename: path.join(__dirname, "../data/leaderboard.db"),
+    filename: path.join(dataDir, "leaderboard.db"),
   },
   useNullAsDefault: true,
 });

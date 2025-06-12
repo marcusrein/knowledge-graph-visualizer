@@ -42,18 +42,12 @@ const Home = () => {
 
     try {
       console.time("create-space");
-      /* 👇 show full request payload in console so we can reproduce it with curl  */
-      const payload = {
-        initialEditorAddress: address,
-        spaceName: `Personal Space for ${address.slice(0, 6)}`,
-        network: "TESTNET",
-      };
-      console.log("Graph.createSpace payload →", payload);
+      const { deploySpace } = await import("../utils/grc20/deploySpace");
 
-      /* cast to any because SDK types lag behind */
-      const newSpaceId: string = await (Graph as any).createSpace(
-        payload as any,
-      );
+      const newSpaceId = await deploySpace({
+        spaceName: `Personal Space for ${address.slice(0, 6)}`,
+        initialEditorAddress: address,
+      });
       console.timeEnd("create-space");
 
       setSpaceId(newSpaceId);
@@ -114,7 +108,12 @@ const Home = () => {
             headers: { "Content-Type": "application/json" },
           },
         );
-        const { to, data } = await metaRes.json();
+        if (!metaRes.ok) {
+          const body = await metaRes.text();
+          throw new Error(`calldata fetch failed: ${metaRes.status} – ${body}`);
+        }
+        const json = await metaRes.json();
+        const { to, data } = json;
         const hash = await walletClient.sendTransaction({ to, data: data as `0x${string}` });
         setTxHash(hash as string);
       }
