@@ -52,12 +52,15 @@
     "verify": "yarn hardhat:verify"
   },
   "devDependencies": {
+    "effect": "latest",
     "husky": "~9.1.6",
-    "lint-staged": "~13.2.2",
-    "effect": "^2.0.0"
+    "lint-staged": "~13.2.2"
   },
   "packageManager": "yarn@3.2.3",
   "engines": {
     "node": ">=20.18.3"
+  },
+  "dependencies": {
+    "@graphprotocol/grc-20": "latest"
   }
 }

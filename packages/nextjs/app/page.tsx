@@ -24,7 +24,9 @@ const Home = () => {
   const [entityId, setEntityId] = useState<string | null>(null);
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
 
-  const { writeContractAsync: writeContributionTracker } = useScaffoldWriteContract("ContributionTracker");
+  const { writeContractAsync: writeContributionTracker } = useScaffoldWriteContract({
+    contractName: "ContributionTracker",
+  });
 
   useEffect(() => {
     const savedSpaceId = localStorage.getItem("personalSpaceId");
