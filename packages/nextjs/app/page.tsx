@@ -23,6 +23,8 @@ const Home = () => {
   const [lastOps, setLastOps] = useState<Op[] | null>(null);
   const [entityId, setEntityId] = useState<string | null>(null);
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
+  const [relatedTo, setRelatedTo] = useState<string | "">("");
+  const [entitiesList, setEntitiesList] = useState<Array<{entityId:string; name:string}>>([]);
 
   const { writeContractAsync: writeContributionTracker } = useScaffoldWriteContract({
     contractName: "ContributionTracker",
@@ -33,6 +35,18 @@ const Home = () => {
     if (savedSpaceId) {
       setSpaceId(savedSpaceId);
     }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:4000/api/entities");
+        if (res.ok) {
+          const json = await res.json();
+          setEntitiesList(json.map((r:any)=>({entityId:r.entityId,name:r.name||r.entityId.slice(0,6)})));
+        }
+      } catch {}
+    })();
   }, []);
 
   const handleCreateSpace = useCallback(async () => {
@@ -95,6 +109,7 @@ const Home = () => {
           name,
           description,
           spaceId,
+          relatedTo: relatedTo || undefined,
         }),
       });
       let uploadJson: any = null;
@@ -154,7 +169,7 @@ const Home = () => {
     } finally {
       setLoading(false);
     }
-  }, [address, description, name, spaceId, walletClient]);
+  }, [address, description, name, spaceId, walletClient, relatedTo]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -199,16 +214,28 @@ const Home = () => {
           <div className="flex flex-col gap-2">
             <input
               className="input input-bordered w-full"
-              placeholder="Entity Name"
+              placeholder="Knowledge Category"
               value={name}
               onChange={e => setName(e.target.value)}
             />
             <textarea
               className="textarea textarea-bordered w-full"
-              placeholder="Entity Description"
+              placeholder="Share your knowledge!"
               value={description}
               onChange={e => setDescription(e.target.value)}
             />
+            {entitiesList.length > 0 && (
+              <select
+                className="select select-bordered w-full"
+                value={relatedTo}
+                onChange={e=>setRelatedTo(e.target.value)}
+              >
+                <option value="">(Optional) Link to existing knowledge category</option>
+                {entitiesList.map(ent=> (
+                  <option key={ent.entityId} value={ent.entityId}>{ent.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <button className="btn btn-primary w-full" disabled={!isConnected || loading || !name} onClick={handleSubmit}>
             {loading ? "Publishing..." : "Publish to GRC-20"}

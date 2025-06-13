@@ -129,13 +129,13 @@ const UploadPage: NextPage = () => {
       />
       <input
         className="input input-bordered w-full"
-        placeholder="Entity Name"
+        placeholder="Knowledge Category"
         value={name}
         onChange={e => setName(e.target.value)}
       />
       <textarea
         className="textarea textarea-bordered w-full"
-        placeholder="Entity Description"
+        placeholder="Share your knowledge!"
         value={description}
         onChange={e => setDescription(e.target.value)}
       />

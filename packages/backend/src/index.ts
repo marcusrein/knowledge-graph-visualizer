@@ -49,9 +49,19 @@ async function ensureDb() {
       table.string("cid").notNullable();
       table.string("name");
       table.text("description");
+      table.string("relatedTo"); // optional relation target entityId
       table.string("userAddress").notNullable();
       table.datetime("timestamp").notNullable();
     });
+  }
+
+  // In case the table existed before, add missing relatedTo column
+  const hasRelated = await db.schema.hasColumn("entities", "relatedTo");
+  if (!hasRelated) {
+    await db.schema.alterTable("entities", table => {
+      table.string("relatedTo");
+    });
+    console.log("🔄 Added relatedTo column to entities table");
   }
 }
 ensureDb();
@@ -104,6 +114,7 @@ app.post("/api/upload", async (req, res) => {
         cid: cidString,
         name,
         description,
+        relatedTo: req.body.relatedTo ?? null,
         userAddress: userAddress.toLowerCase(),
         timestamp: new Date().toISOString(),
       });

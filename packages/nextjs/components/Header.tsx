@@ -27,6 +27,11 @@ export const menuLinks: HeaderMenuLink[] = [
   },
 
   {
+    label: "Knowledge Graph",
+    href: "/graph",
+  },
+
+  {
     label: "Leaderboard",
     href: "/leaderboard",
   },
