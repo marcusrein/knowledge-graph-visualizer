@@ -30,12 +30,26 @@ const db = knex({
 
 // Ensure leaderboard table exists
 async function ensureDb() {
-  const exists = await db.schema.hasTable("contributions");
-  if (!exists) {
-    await db.schema.createTable("contributions", (table) => {
+  const hasContrib = await db.schema.hasTable("contributions");
+  if (!hasContrib) {
+    await db.schema.createTable("contributions", table => {
       table.increments("id").primary();
       table.string("userAddress").notNullable();
       table.integer("triplesCount").notNullable();
+      table.datetime("timestamp").notNullable();
+    });
+  }
+
+  const hasEntities = await db.schema.hasTable("entities");
+  if (!hasEntities) {
+    await db.schema.createTable("entities", table => {
+      table.increments("id").primary();
+      table.string("entityId").notNullable();
+      table.string("spaceId").notNullable();
+      table.string("cid").notNullable();
+      table.string("name");
+      table.text("description");
+      table.string("userAddress").notNullable();
       table.datetime("timestamp").notNullable();
     });
   }
@@ -45,7 +59,7 @@ ensureDb();
 // Optional on-chain ContributionTracker integration
 const trackerAddress = process.env.TRACKER_CONTRACT_ADDRESS;
 const privateKey = process.env.PRIVATE_KEY; // backend signer private key (dev only)
-const rpcUrl = process.env.NEXT_PUBLIC_GEOGENESIS_RPC_URL || "https://rpc-geo-genesis-h0q2s21xx8.t.conduit.xyz";
+const rpcUrl = process.env.SEPOLIA_RPC_URL || "https://eth-sepolia.g.alchemy.com/v2/oKxs-03sij-U_N0iOlrSsZFr29-IqbuF";
 
 let trackerContract: any = null;
 if (trackerAddress && privateKey && rpcUrl) {
@@ -60,7 +74,7 @@ if (trackerAddress && privateKey && rpcUrl) {
 
 // POST /api/upload
 app.post("/api/upload", async (req, res) => {
-  const { userAddress, edits } = req.body;
+  const { userAddress, edits, entityId, name, description, spaceId } = req.body;
 
   if (!userAddress || !edits) {
     return res.status(400).json({ error: "Missing userAddress or edits" });
@@ -82,6 +96,19 @@ app.post("/api/upload", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
+    // Save entity record if provided
+    if (entityId && spaceId) {
+      await db("entities").insert({
+        entityId,
+        spaceId,
+        cid: cidString,
+        name,
+        description,
+        userAddress: userAddress.toLowerCase(),
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     // Optionally report on-chain
     if (trackerContract) {
       try {
@@ -97,6 +124,17 @@ app.post("/api/upload", async (req, res) => {
   } catch (e: any) {
     console.error(e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// GET recent entities
+app.get("/api/entities", async (_req, res) => {
+  try {
+    const rows = await db("entities").orderBy("timestamp", "desc").limit(100);
+    res.json(rows);
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 

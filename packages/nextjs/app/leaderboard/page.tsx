@@ -4,11 +4,6 @@ import { useMemo } from "react";
 import type { NextPage } from "next";
 import { useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
 
-interface LeaderboardRow {
-  userAddress: string;
-  points: bigint;
-}
-
 const LeaderboardPage: NextPage = () => {
   const {
     data: events,

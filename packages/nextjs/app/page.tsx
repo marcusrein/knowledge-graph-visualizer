@@ -88,7 +88,14 @@ const Home = () => {
       const uploadRes = await fetch("http://localhost:4000/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAddress: address, edits: ops }),
+        body: JSON.stringify({
+          userAddress: address,
+          edits: ops,
+          entityId: newEntityId,
+          name,
+          description,
+          spaceId,
+        }),
       });
       let uploadJson: any = null;
       if (!uploadRes.ok) {
@@ -221,16 +228,8 @@ const Home = () => {
                   </a>
                 </div>
                 <div className="flex items-center flex-wrap gap-2">
-                  {entityId && spaceId && (
-                    <a
-                      href={`https://www.geobrowser.io/space/${spaceId}/${entityId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary btn-sm md:btn-md"
-                    >
-                      View on Geo Browser
-                    </a>
-                  )}
+                  {/* Geo Browser link disabled until service stabilizes */}
+                  
                   <button
                     className="btn btn-primary btn-sm md:btn-md"
                     onClick={async () => {
@@ -245,6 +244,9 @@ const Home = () => {
                     Add to On-Chain Leaderboard
                   </button>
                 </div>
+                {entityId && (
+                  <span className="badge badge-outline text-xs">ID: {entityId.slice(0, 8)}…</span>
+                )}
               </div>
               {lastOps && (
                 <details className="bg-base-100 text-base-content rounded-lg p-4">

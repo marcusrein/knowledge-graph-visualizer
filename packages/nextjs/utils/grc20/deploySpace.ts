@@ -17,12 +17,12 @@ export async function deploySpace({
   let lastErr: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const spaceId: string = await (Graph as any).createSpace({
-        spaceName,
-        initialEditorAddress,
+      const res: { id: string } = await (Graph as any).createSpace({
+        name: spaceName,
+        editorAddress: initialEditorAddress,
         network,
       } as any);
-      return spaceId;
+      return res.id;
     } catch (err: any) {
       lastErr = err;
       if (err?.response) {

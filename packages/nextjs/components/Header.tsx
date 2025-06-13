@@ -22,6 +22,11 @@ export const menuLinks: HeaderMenuLink[] = [
   },
 
   {
+    label: "Knowledge Feed",
+    href: "/feed",
+  },
+
+  {
     label: "Leaderboard",
     href: "/leaderboard",
   },

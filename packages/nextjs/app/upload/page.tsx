@@ -55,7 +55,12 @@ const UploadPage: NextPage = () => {
       const uploadRes = await fetch("http://localhost:4000/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAddress: address, edits: ops }),
+        body: JSON.stringify({
+          userAddress: address,
+          edits: ops,
+          name,
+          description,
+        }),
       });
       let uploadJson: any = null;
       if (!uploadRes.ok) {

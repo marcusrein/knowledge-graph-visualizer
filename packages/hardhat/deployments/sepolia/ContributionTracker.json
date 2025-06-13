@@ -1,0 +1,167 @@
+{
+  "address": "0x346a2E973DeE1dD609b21B6504EF2164F3329881",
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "contributor",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "points",
+          "type": "uint256"
+        }
+      ],
+      "name": "ContributionReported",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "contributor",
+          "type": "address"
+        }
+      ],
+      "name": "getPoints",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "totalPoints",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "points",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "contributor",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "contribPoints",
+          "type": "uint256"
+        }
+      ],
+      "name": "reportContribution",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0xf76baf495d1978b4f677e25b1199c3042738ce88a7f1ab69487573a0bb1f12b1",
+  "receipt": {
+    "to": null,
+    "from": "0x84808316ffEe8b470bB1d1195e85740903Fc9Eb4",
+    "contractAddress": "0x346a2E973DeE1dD609b21B6504EF2164F3329881",
+    "transactionIndex": 144,
+    "gasUsed": "250238",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockHash": "0xa3222feae32d2d15bdc72301b5067354d40e20b01b4bec8b8ccfc1c79515d23d",
+    "transactionHash": "0xf76baf495d1978b4f677e25b1199c3042738ce88a7f1ab69487573a0bb1f12b1",
+    "logs": [],
+    "blockNumber": 8540205,
+    "cumulativeGasUsed": "11636370",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [],
+  "numDeployments": 1,
+  "solcInputHash": "f6f63f6c5de25bba1ba3a2664ca6bc0b",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.23+commit.f704f362\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"contributor\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"points\",\"type\":\"uint256\"}],\"name\":\"ContributionReported\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contributor\",\"type\":\"address\"}],\"name\":\"getPoints\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"totalPoints\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"points\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contributor\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"contribPoints\",\"type\":\"uint256\"}],\"name\":\"reportContribution\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{\"getPoints(address)\":{\"params\":{\"contributor\":\"Address of the contributor\"},\"returns\":{\"totalPoints\":\"Current accumulated points\"}},\"reportContribution(address,uint256)\":{\"params\":{\"contribPoints\":\"Number of triples contributed (or arbitrary points)\",\"contributor\":\"Address of the contributor\"}}},\"title\":\"ContributionTracker\",\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{\"getPoints(address)\":{\"notice\":\"Get current points for a contributor\"},\"reportContribution(address,uint256)\":{\"notice\":\"Report a contribution for a user\"}},\"notice\":\"Simple contract to record knowledge graph contribution points per address\",\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/ContributionTracker.sol\":\"ContributionTracker\"},\"evmVersion\":\"paris\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":false,\"runs\":200},\"remappings\":[]},\"sources\":{\"contracts/ContributionTracker.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.23;\\n\\n/// @title ContributionTracker\\n/// @notice Simple contract to record knowledge graph contribution points per address\\ncontract ContributionTracker {\\n    mapping(address => uint256) public points;\\n\\n    event ContributionReported(address indexed contributor, uint256 points);\\n\\n    /// @notice Report a contribution for a user\\n    /// @param contributor Address of the contributor\\n    /// @param contribPoints Number of triples contributed (or arbitrary points)\\n    function reportContribution(address contributor, uint256 contribPoints) external {\\n        points[contributor] += contribPoints;\\n        emit ContributionReported(contributor, contribPoints);\\n    }\\n\\n    /// @notice Get current points for a contributor\\n    /// @param contributor Address of the contributor\\n    /// @return totalPoints Current accumulated points\\n    function getPoints(address contributor) external view returns (uint256 totalPoints) {\\n        return points[contributor];\\n    }\\n} \",\"keccak256\":\"0xb4eb7012aca4e7f5d50d482a49dbc037f0423b3b86c3f74fc99a76b239120729\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x608060405234801561001057600080fd5b50610392806100206000396000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c8063358b816614610046578063ab06bea314610076578063ee204abb14610092575b600080fd5b610060600480360381019061005b919061022c565b6100c2565b60405161006d9190610272565b60405180910390f35b610090600480360381019061008b91906102b9565b6100da565b005b6100ac60048036038101906100a7919061022c565b610181565b6040516100b99190610272565b60405180910390f35b60006020528060005260406000206000915090505481565b806000808473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060008282546101289190610328565b925050819055508173ffffffffffffffffffffffffffffffffffffffff167f8b7761c806276fa0dd460e3bc244c5a95f234ec6964498080b8d709c2c1915fe826040516101759190610272565b60405180910390a25050565b60008060008373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001908152602001600020549050919050565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b60006101f9826101ce565b9050919050565b610209816101ee565b811461021457600080fd5b50565b60008135905061022681610200565b92915050565b600060208284031215610242576102416101c9565b5b600061025084828501610217565b91505092915050565b6000819050919050565b61026c81610259565b82525050565b60006020820190506102876000830184610263565b92915050565b61029681610259565b81146102a157600080fd5b50565b6000813590506102b38161028d565b92915050565b600080604083850312156102d0576102cf6101c9565b5b60006102de85828601610217565b92505060206102ef858286016102a4565b9150509250929050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b600061033382610259565b915061033e83610259565b9250828201905080821115610356576103556102f9565b5b9291505056fea2646970667358221220c7b0afddca1efc3c44db69abb5b39747bfebe0da56f7bb7ab6277c13f020a82a64736f6c63430008170033",
+  "deployedBytecode": "0x608060405234801561001057600080fd5b50600436106100415760003560e01c8063358b816614610046578063ab06bea314610076578063ee204abb14610092575b600080fd5b610060600480360381019061005b919061022c565b6100c2565b60405161006d9190610272565b60405180910390f35b610090600480360381019061008b91906102b9565b6100da565b005b6100ac60048036038101906100a7919061022c565b610181565b6040516100b99190610272565b60405180910390f35b60006020528060005260406000206000915090505481565b806000808473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002060008282546101289190610328565b925050819055508173ffffffffffffffffffffffffffffffffffffffff167f8b7761c806276fa0dd460e3bc244c5a95f234ec6964498080b8d709c2c1915fe826040516101759190610272565b60405180910390a25050565b60008060008373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001908152602001600020549050919050565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b60006101f9826101ce565b9050919050565b610209816101ee565b811461021457600080fd5b50565b60008135905061022681610200565b92915050565b600060208284031215610242576102416101c9565b5b600061025084828501610217565b91505092915050565b6000819050919050565b61026c81610259565b82525050565b60006020820190506102876000830184610263565b92915050565b61029681610259565b81146102a157600080fd5b50565b6000813590506102b38161028d565b92915050565b600080604083850312156102d0576102cf6101c9565b5b60006102de85828601610217565b92505060206102ef858286016102a4565b9150509250929050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b600061033382610259565b915061033e83610259565b9250828201905080821115610356576103556102f9565b5b9291505056fea2646970667358221220c7b0afddca1efc3c44db69abb5b39747bfebe0da56f7bb7ab6277c13f020a82a64736f6c63430008170033",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {
+      "getPoints(address)": {
+        "params": {
+          "contributor": "Address of the contributor"
+        },
+        "returns": {
+          "totalPoints": "Current accumulated points"
+        }
+      },
+      "reportContribution(address,uint256)": {
+        "params": {
+          "contribPoints": "Number of triples contributed (or arbitrary points)",
+          "contributor": "Address of the contributor"
+        }
+      }
+    },
+    "title": "ContributionTracker",
+    "version": 1
+  },
+  "userdoc": {
+    "kind": "user",
+    "methods": {
+      "getPoints(address)": {
+        "notice": "Get current points for a contributor"
+      },
+      "reportContribution(address,uint256)": {
+        "notice": "Report a contribution for a user"
+      }
+    },
+    "notice": "Simple contract to record knowledge graph contribution points per address",
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 6,
+        "contract": "contracts/ContributionTracker.sol:ContributionTracker",
+        "label": "points",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_mapping(t_address,t_uint256)"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_mapping(t_address,t_uint256)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => uint256)",
+        "numberOfBytes": "32",
+        "value": "t_uint256"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}
