@@ -92,17 +92,16 @@ const GraphPage: NextPage = () => {
 
         const tempNodes: Node[] = [];
         const tempEdges: Edge[] = [];
-        const rootX = 200;
-        const childX = 500;
+        const xSpacing = 250;
 
         roots.forEach((root, rootIdx) => {
-          const y = rootIdx * 200 + 100;
+          const x = rootIdx * xSpacing + 100;
           // Root entity node
           tempNodes.push({
             id: root.entityId,
             type: "entity",
             data: { label: root.name || root.entityId.slice(0, 6) },
-            position: { x: rootX, y },
+            position: { x, y: 100 },
             draggable: true,
           });
 
@@ -120,12 +119,12 @@ const GraphPage: NextPage = () => {
           }
 
           children.forEach((child, childIdx) => {
-            const cy = y + childIdx * 120;
+            const childY = 200 + childIdx * 80;
             tempNodes.push({
               id: child.entityId,
               type: "value",
               data: { label: child.name || child.entityId.slice(0, 6) },
-              position: { x: childX, y: cy },
+              position: { x, y: childY },
               draggable: true,
             });
             tempEdges.push({
