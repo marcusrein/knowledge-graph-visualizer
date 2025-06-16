@@ -25,6 +25,7 @@ const Home = () => {
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [relatedTo, setRelatedTo] = useState<string | "">("");
   const [entitiesList, setEntitiesList] = useState<Array<{entityId:string; name:string}>>([]);
+  const [stats, setStats] = useState<{totalTriples:number; edits:number} | null>(null);
 
   const { writeContractAsync: writeContributionTracker } = useScaffoldWriteContract({
     contractName: "ContributionTracker",
@@ -54,6 +55,14 @@ const Home = () => {
     setIsCreatingSpace(true);
     setError(null);
 
+    // If we already resolved a space for this wallet in localStorage, just use it.
+    const cached = localStorage.getItem("personalSpaceId");
+    if (cached) {
+      setSpaceId(cached);
+      setIsCreatingSpace(false);
+      return;
+    }
+
     try {
       console.time("create-space");
       const { deploySpace } = await import("../utils/grc20/deploySpace");
@@ -67,16 +76,25 @@ const Home = () => {
       setSpaceId(newSpaceId);
       localStorage.setItem("personalSpaceId", newSpaceId);
     } catch (e: any) {
-      /* 🔍 dump everything we can get hold of */
+      /* 🔍 If the space already exists, the API typically returns a 409 or a message that contains the existing id.
+         Attempt to detect and recover so users don't accidentally create multiple spaces. */
+      try {
+        const bodyText = await e?.response?.text?.();
+        const idMatch = bodyText?.match(/([a-zA-Z0-9]{32,})/); // crude id pattern matcher
+        if (idMatch) {
+          const existingId = idMatch[1];
+          setSpaceId(existingId);
+          localStorage.setItem("personalSpaceId", existingId);
+          setError(null);
+          return;
+        }
+      } catch {}
+
       console.error("createSpace failed", e);
-      if (e?.response) {
-        console.error("status", e.response.status);
-        console.error("body", await e.response.text?.());
-      }
       setError(
         e?.message ||
           e?.response?.statusText ||
-          "Graph.createSpace returned 500 - see dev-console",
+          "Graph.createSpace returned an error – see dev-console",
       );
     } finally {
       setIsCreatingSpace(false);
@@ -94,7 +112,8 @@ const Home = () => {
     setLoading(true);
     try {
       // 1. Build ops with GRC SDK
-      const { id: newEntityId, ops } = Graph.createEntity({ name, description });
+      const entityName = name || (relatedTo ? `Contribution to ${relatedTo.slice(0, 6)}` : "Untitled");
+      const { id: newEntityId, ops } = Graph.createEntity({ name: entityName, description });
       setLastOps(ops);
       setEntityId(newEntityId);
 
@@ -175,7 +194,7 @@ const Home = () => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
-        if (isConnected && !loading && name) {
+        if (isConnected && !loading && (name || relatedTo !== "")) {
           handleSubmit();
         }
       }
@@ -186,7 +205,23 @@ const Home = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isConnected, loading, name, handleSubmit]);
+  }, [isConnected, loading, name, relatedTo, handleSubmit]);
+
+  useEffect(() => {
+    if (!address) {
+      setStats(null);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`http://localhost:4000/api/contributions?user=${address}`);
+        if (res.ok) {
+          const json = await res.json();
+          setStats(json);
+        }
+      } catch {}
+    })();
+  }, [address, contributionTxHash, cid]);
 
   return (
     <div className="max-w-2xl mx-auto mt-10 p-4 space-y-6">
@@ -211,33 +246,45 @@ const Home = () => {
           <div className="text-center text-sm text-base-content/80">
             Publishing to your space: <code className="bg-neutral p-1 rounded-md text-accent">{spaceId}</code>
           </div>
-          <div className="flex flex-col gap-2">
+          {entitiesList.length > 0 && (
+            <select
+              className="select select-bordered w-full"
+              value={relatedTo}
+              onChange={e => {
+                setRelatedTo(e.target.value);
+                // If contributing to existing entity, clear the name field to signal a contribution flow.
+                if (e.target.value) {
+                  setName("");
+                }
+              }}
+            >
+              <option value="">(Optional) Contribute to an existing knowledge category</option>
+              {entitiesList.map(ent => (
+                <option key={ent.entityId} value={ent.entityId}>
+                  {ent.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {relatedTo === "" && (
             <input
               className="input input-bordered w-full"
               placeholder="Knowledge Category"
               value={name}
               onChange={e => setName(e.target.value)}
             />
-            <textarea
-              className="textarea textarea-bordered w-full"
-              placeholder="Share your knowledge!"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-            />
-            {entitiesList.length > 0 && (
-              <select
-                className="select select-bordered w-full"
-                value={relatedTo}
-                onChange={e=>setRelatedTo(e.target.value)}
-              >
-                <option value="">(Optional) Link to existing knowledge category</option>
-                {entitiesList.map(ent=> (
-                  <option key={ent.entityId} value={ent.entityId}>{ent.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
-          <button className="btn btn-primary w-full" disabled={!isConnected || loading || !name} onClick={handleSubmit}>
+          )}
+          <textarea
+            className="textarea textarea-bordered w-full"
+            placeholder={relatedTo ? "Add your knowledge to the selected category…" : "Share your knowledge!"}
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+          />
+          <button
+            className="btn btn-primary w-full"
+            disabled={!isConnected || loading || (!name && relatedTo === "")}
+            onClick={handleSubmit}
+          >
             {loading ? "Publishing..." : "Publish to GRC-20"}
           </button>
           {cid && !contributionTxHash && (
@@ -290,6 +337,11 @@ const Home = () => {
           )}
           {txHash && (
             <div className="alert alert-info">📜 On-chain tx sent: {txHash.slice(0, 10)}... (check Geo Explorer)</div>
+          )}
+          {stats && (
+            <div className="alert alert-info shadow-md">
+              📊 You have published <b>{stats.edits}</b> edits totaling <b>{stats.totalTriples}</b> triples.
+            </div>
           )}
           {error && <div className="alert alert-error">❌ {error}</div>}
         </div>

@@ -149,6 +149,30 @@ app.get("/api/entities", async (_req, res) => {
   }
 });
 
+// GET /api/contributions?user=0x...
+app.get("/api/contributions", async (req, res) => {
+  const userRaw = (req.query.user as string | undefined) ?? "";
+  const user = userRaw.toLowerCase();
+  if (!user) {
+    return res.status(400).json({ error: "Missing user parameter" });
+  }
+
+  try {
+    const [{ totalTriples = 0 }] = await db("contributions")
+      .where("userAddress", user)
+      .sum("triplesCount as totalTriples");
+
+    const [{ edits = 0 }] = await db("contributions")
+      .where("userAddress", user)
+      .count("id as edits");
+
+    res.json({ totalTriples: Number(totalTriples), edits: Number(edits) });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Backend API listening on http://localhost:${PORT}`);
