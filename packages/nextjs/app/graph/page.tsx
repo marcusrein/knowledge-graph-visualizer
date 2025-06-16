@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType } from "reactflow";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { Address } from "~~/components/scaffold-eth";
+import { Edit } from "@graphprotocol/grc-20/proto";
 
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
@@ -74,6 +75,8 @@ const GraphPage: NextPage = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedNode, setSelectedNode] = useState<any | null>(null);
+  const [decodedData, setDecodedData] = useState<any>(null);
+  const [isDecoding, setIsDecoding] = useState(false);
 
   const onNodesChange = useCallback((changes: any) => {
     setNodes((nds) => applyNodeChanges(changes, nds));
@@ -85,6 +88,32 @@ const GraphPage: NextPage = () => {
 
   const onNodeClick = (_: any, node: any) => {
     setSelectedNode(node);
+  };
+
+  const handleDecodeCID = async (cid: string) => {
+    setIsDecoding(true);
+    setDecodedData(null);
+    
+    try {
+      // Strip ipfs:// prefix if present
+      const cleanCid = cid.replace(/^ipfs:\/\//, "");
+      
+      // Fetch the binary data from IPFS
+      const response = await fetch(`https://ipfs.io/ipfs/${cleanCid}`);
+      if (!response.ok) throw new Error(`Failed to fetch IPFS data: ${response.status}`);
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      // Decode the binary data
+      const decoded = Edit.fromBinary(uint8Array);
+      setDecodedData(decoded);
+    } catch (err: any) {
+      console.error("Failed to decode IPFS data:", err);
+      setDecodedData({ error: err.message });
+    } finally {
+      setIsDecoding(false);
+    }
   };
 
   useEffect(() => {
@@ -222,14 +251,12 @@ const GraphPage: NextPage = () => {
                 {selectedNode.data.cid && (
                   <div>
                     <p className="font-semibold">CID</p>
-                    <a
-                      href={`https://gateway.ipfs.io/ipfs/${selectedNode.data.cid.replace(/^ipfs:\/\//, "")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => handleDecodeCID(selectedNode.data.cid)}
                       className="link link-primary text-sm break-all"
                     >
                       {selectedNode.data.cid.replace(/^ipfs:\/\//, "")}
-                    </a>
+                    </button>
                   </div>
                 )}
               </div>
@@ -250,6 +277,39 @@ const GraphPage: NextPage = () => {
                       {JSON.stringify(selectedNode.data.ops, null, 2)}
                     </pre>
                   </details>
+                </div>
+              )}
+
+              {isDecoding && (
+                <div className="flex items-center justify-center py-4">
+                  <span className="loading loading-spinner loading-md"></span>
+                  <span className="ml-2">Decoding IPFS data...</span>
+                </div>
+              )}
+
+              {decodedData && (
+                <div className="space-y-4">
+                  {decodedData.error ? (
+                    <div className="alert alert-error">
+                      <span>❌ Failed to decode: {decodedData.error}</span>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="bg-base-200 p-4 rounded-lg">
+                        <h4 className="font-semibold mb-2">Edit Metadata</h4>
+                        <p><strong>Name:</strong> {decodedData.name || "—"}</p>
+                        <p><strong>Author:</strong> {decodedData.author || "—"}</p>
+                        <p><strong>ID:</strong> {decodedData.id ? Array.from(decodedData.id as Uint8Array).map((b: number) => b.toString(16).padStart(2, '0')).join('') : "—"}</p>
+                      </div>
+                      
+                      <div className="bg-base-200 p-4 rounded-lg">
+                        <h4 className="font-semibold mb-2">Operations ({decodedData.ops?.length || 0})</h4>
+                        <pre className="bg-base-300 p-3 rounded-lg text-xs font-mono overflow-x-auto max-h-64">
+                          {JSON.stringify(decodedData.ops, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
