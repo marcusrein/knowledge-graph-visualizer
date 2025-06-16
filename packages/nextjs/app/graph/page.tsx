@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, memo, useCallback } from "react";
 import type { NextPage } from "next";
 import { nanoid } from "nanoid";
-import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge } from "reactflow";
+import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge, EdgeProps } from "reactflow";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { Address } from "~~/components/scaffold-eth";
 import { Edit } from "@graphprotocol/grc-20/proto";
@@ -39,8 +39,9 @@ const EntityNode = memo(({ data }: any) => {
   return (
     <div className="bg-blue-900 text-white rounded shadow px-4 py-2 text-sm font-semibold border border-blue-300 min-w-[150px]">
       {data.label}
-      <Handle id="a" type="target" position={Position.Top} className="!bg-blue-300" />
-      <Handle id="b" type="source" position={Position.Bottom} className="!bg-blue-300" />
+      <Handle id="target-top" type="target" position={Position.Top} className="!bg-blue-300" style={{ top: 0 }} />
+      <Handle id="source-top" type="source" position={Position.Top} className="!bg-blue-300" style={{ top: 0 }} />
+      <Handle id="b" type="source" position={Position.Bottom} className="!bg-blue-300" style={{ bottom: 0 }} />
     </div>
   );
 });
@@ -51,8 +52,9 @@ const ValueNode = memo(({ data }: any) => {
     <div className="bg-blue-200 text-blue-900 rounded shadow px-3 py-1 text-xs border border-blue-400 flex items-center gap-2 min-w-[120px]">
       <BlockieAvatar address={data.user} size={18} />
       <span>{data.label}</span>
-      <Handle id="a" type="target" position={Position.Top} className="!bg-blue-400" />
-      <Handle id="b" type="source" position={Position.Bottom} className="!bg-blue-400" />
+      <Handle id="target-top" type="target" position={Position.Top} className="!bg-blue-400" style={{ top: 0 }} />
+      <Handle id="source-top" type="source" position={Position.Top} className="!bg-blue-400" style={{ top: 0 }} />
+      <Handle id="target-bottom" type="target" position={Position.Bottom} className="!bg-blue-400" style={{ bottom: 0 }} />
     </div>
   );
 });
@@ -66,7 +68,7 @@ const nodeTypes = {
 
 // Default edge options (defined once, outside component)
 const defaultEdgeOptions = {
-  type: 'smoothstep',
+  type: 'bezier',
   animated: true,
   style: { stroke: '#94a3b8', strokeWidth: 2 },
   markerEnd: {
@@ -89,6 +91,27 @@ const RELATION_TYPES = [
   { id: 'defines', label: 'Defines', description: 'Provides a definition or explanation of' },
   { id: 'implements', label: 'Implements', description: 'Shows practical application of' },
 ] as const;
+
+// Custom edge component to render an arch curve between top handles
+const ArchEdge = ({ id, sourceX, sourceY, targetX, targetY, style, markerEnd, label, labelStyle }: EdgeProps) => {
+  const dx = Math.abs(targetX - sourceX);
+  // arch height is 40% of horizontal distance, clamped between 60 and 200px
+  const archHeight = Math.max(60, Math.min(200, dx * 0.4));
+  const midY = Math.min(sourceY, targetY) - archHeight;
+  const path = `M${sourceX},${sourceY} C${sourceX},${midY} ${targetX},${midY} ${targetX},${targetY}`;
+  return (
+    <>
+      <path id={id} className="reactflow__edge-path" d={path} style={style} markerEnd={markerEnd} />
+      {label && (
+        <text>
+          <textPath href={`#${id}`} style={labelStyle} startOffset="50%" textAnchor="middle">
+            {label}
+          </textPath>
+        </text>
+      )}
+    </>
+  );
+};
 
 const GraphPage: NextPage = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -153,64 +176,63 @@ const GraphPage: NextPage = () => {
     setError(null);
 
     try {
-      // 1. Create properties for the relationship if they don't exist
-      const { id: relTypePropertyId } = Graph.createProperty({
-        name: 'Knowledge Relationship Type',
-        type: 'TEXT'
-      });
-
-      const { id: relDetailsPropertyId } = Graph.createProperty({
+      // 1. Create/ensure properties for storing relation metadata
+      const { id: relDetailsPropertyId, ops: relDetailsPropertyOps } = Graph.createProperty({
         name: 'Knowledge Relationship Details',
-        type: 'TEXT'
+        dataType: 'TEXT',
       });
 
-      const { id: relTimestampPropertyId } = Graph.createProperty({
+      const { id: relTimestampPropertyId, ops: relTimestampPropertyOps } = Graph.createProperty({
         name: 'Knowledge Relationship Timestamp',
-        type: 'TIME'
+        dataType: 'TIME',
       });
 
-      // 2. Create the relationship entity with structured data
+      // 2. Create (or reuse) a Type entity representing the selected relationship kind
       const selectedType = RELATION_TYPES.find(t => t.id === selectedRelationType);
-      const entityName = `${selectedType?.label}: ${linkSource.data.label} → ${linkTarget.data.label}`;
-      
-      const { id: newEntityId, ops } = Graph.createEntity({
-        name: entityName,
-        description: customRelationDetails || relationshipDescription,
-        values: [
-          { 
-            property: relTypePropertyId,
-            value: selectedType?.label || 'Unknown'
-          },
+      if (!selectedType) throw new Error('Invalid relation type');
+
+      const { id: relationTypeId, ops: relationTypeOps } = Graph.createType({
+        name: selectedType.label,
+      });
+
+      // 3. Build the relation (rich relation with its own entity)
+      const entityName = `${selectedType.label}: ${linkSource.data.label} → ${linkTarget.data.label}`;
+
+      const { id: relationId, ops: relationOps } = Graph.createRelation({
+        fromEntity: linkSource.id,
+        toEntity: linkTarget.id,
+        type: relationTypeId,
+        position: new Date().toISOString(),
+        entityName,
+        entityDescription: customRelationDetails || relationshipDescription,
+        entityValues: [
           {
             property: relDetailsPropertyId,
-            value: customRelationDetails || relationshipDescription
+            value: customRelationDetails || relationshipDescription,
           },
           {
             property: relTimestampPropertyId,
-            value: Graph.serializeDate(new Date())
-          }
+            value: Graph.serializeDate(new Date()),
+          },
         ],
-        relations: [
-          {
-            fromEntity: linkSource.id,
-            toEntity: linkTarget.id,
-            type: selectedRelationType,
-            position: new Date().toISOString()
-          }
-        ]
       });
 
-      // Combine all ops
-      const allOps = [...ops];
+      // Combine all ops (create property/type + relation)
+      const allOps = [
+        ...relDetailsPropertyOps,
+        ...relTimestampPropertyOps,
+        ...relationTypeOps,
+        ...relationOps,
+      ];
 
-      // 3. Send ops to backend
+      // 4. Send ops to backend
       const uploadRes = await fetch("http://localhost:4000/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userAddress,
           edits: allOps,
-          entityId: newEntityId,
+          entityId: relationId,
           name: entityName,
           description: customRelationDetails || relationshipDescription,
           spaceId,
@@ -229,7 +251,7 @@ const GraphPage: NextPage = () => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // 4. Publish on-chain
+      // 5. Publish on-chain
       const metaRes = await fetch(`https://api-testnet.grc-20.thegraph.com/space/${spaceId}/edit/calldata`, {
         method: "POST",
         body: JSON.stringify({ cid: cidWithPrefix, network: "TESTNET" }),
@@ -244,12 +266,12 @@ const GraphPage: NextPage = () => {
       const { to, data } = json;
       await walletClient.sendTransaction({ to, data: data as `0x${string}` });
 
-      // 5. Update UI
+      // 6. Update UI
       const newEdge = {
-        id: newEntityId,
+        id: relationId,
         source: linkSource.id,
         target: linkTarget.id,
-        type: 'smoothstep',
+        type: 'arch',
         animated: false,
         style: { stroke: '#f59e0b', strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b' },
@@ -382,8 +404,8 @@ const GraphPage: NextPage = () => {
               source: root.entityId,
               target: child.entityId,
               sourceHandle: "b",
-              targetHandle: "a",
-              type: 'smoothstep',
+              targetHandle: "target-top",
+              type: 'bezier',
             });
           });
         });
@@ -399,6 +421,7 @@ const GraphPage: NextPage = () => {
   return (
     <div style={{ height: "90vh", width: "100%" }}>
       <ReactFlow
+        edgeTypes={{ arch: ArchEdge }}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -407,6 +430,10 @@ const GraphPage: NextPage = () => {
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         onConnect={onConnect}
+        isValidConnection={(connection) =>
+          connection.sourceHandle === 'source-top' &&
+          connection.targetHandle === 'target-top'
+        }
         fitView
       >
         <Background />
