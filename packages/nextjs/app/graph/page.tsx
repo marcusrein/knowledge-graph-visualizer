@@ -20,9 +20,14 @@ import "reactflow/dist/style.css";
 
 type EntityRow = {
   entityId: string;
+  spaceId?: string;
   name?: string;
   description?: string;
   relatedTo?: string | null;
+  userAddress: string;
+  cid: string;
+  timestamp: string;
+  opsJson?: string;
 };
 
 // Custom node components (moved outside component)
@@ -108,7 +113,14 @@ const GraphPage: NextPage = () => {
           tempNodes.push({
             id: root.entityId,
             type: "entity",
-            data: { label: root.name || root.entityId.slice(0, 6) },
+            data: { 
+              label: root.name || root.entityId.slice(0, 6),
+              description: root.description,
+              user: root.userAddress,
+              cid: root.cid,
+              timestamp: root.timestamp,
+              ops: root.opsJson ? JSON.parse(root.opsJson) : undefined
+            },
             position: { x, y: 100 },
             draggable: true,
           });
@@ -123,6 +135,10 @@ const GraphPage: NextPage = () => {
               name: root.description.slice(0, 24),
               description: root.description,
               relatedTo: root.entityId,
+              userAddress: root.userAddress,
+              cid: root.cid,
+              timestamp: root.timestamp,
+              opsJson: root.opsJson
             } as EntityRow);
           }
 
@@ -131,7 +147,14 @@ const GraphPage: NextPage = () => {
             tempNodes.push({
               id: child.entityId,
               type: "value",
-              data: { label: child.name || child.entityId.slice(0, 6) },
+              data: { 
+                label: child.name || child.entityId.slice(0, 6),
+                description: child.description,
+                user: child.userAddress,
+                cid: child.cid,
+                timestamp: child.timestamp,
+                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined
+              },
               position: { x, y: childY },
               draggable: true,
             });
@@ -173,27 +196,62 @@ const GraphPage: NextPage = () => {
       {selectedNode && (
         <div className="modal modal-open">
           <div className="modal-box max-w-3xl">
-            <h3 className="font-bold text-lg mb-4">Node Details</h3>
-            <div className="space-y-2">
-              <p><b>Label:</b> {selectedNode.data.label}</p>
-              {selectedNode.data.description && (
-                <p><b>Description:</b> {selectedNode.data.description}</p>
-              )}
-              {selectedNode.data.cid && (
-                <p><b>CID:</b> <a href={`https://ipfs.io/ipfs/${selectedNode.data.cid.replace(/^ipfs:\/\//,'')}`} className="link" target="_blank">{selectedNode.data.cid}</a></p>
-              )}
-              {selectedNode.data.user && (
-                <p><b>Author:</b> <Address address={selectedNode.data.user} size="sm" onlyEnsOrAddress /></p>
-              )}
-              {selectedNode.data.ops && (
-                <details className="bg-base-200 p-2 rounded">
-                  <summary className="cursor-pointer">Raw Ops JSON</summary>
-                  <pre className="max-h-64 overflow-y-auto text-xs mt-2">{JSON.stringify(selectedNode.data.ops, null, 2)}</pre>
-                </details>
-              )}
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg">Node Details</h3>
+              <button className="btn btn-sm btn-circle" onClick={() => setSelectedNode(null)}>✕</button>
             </div>
-            <div className="modal-action">
-              <button className="btn" onClick={() => setSelectedNode(null)}>Close</button>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="font-semibold">Name</p>
+                  <p>{selectedNode.data.label}</p>
+                </div>
+                <div>
+                  <p className="font-semibold">Created</p>
+                  <p>{selectedNode.data.timestamp ? new Date(selectedNode.data.timestamp).toLocaleString() : "—"}</p>
+                </div>
+                <div>
+                  <p className="font-semibold">Author</p>
+                  {selectedNode.data.user && (
+                    <div className="flex items-center gap-2">
+                      <BlockieAvatar address={selectedNode.data.user} size={24} />
+                      <Address address={selectedNode.data.user} size="sm" onlyEnsOrAddress />
+                    </div>
+                  )}
+                </div>
+                {selectedNode.data.cid && (
+                  <div>
+                    <p className="font-semibold">CID</p>
+                    <a
+                      href={`https://gateway.ipfs.io/ipfs/${selectedNode.data.cid.replace(/^ipfs:\/\//, "")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="link link-primary text-sm break-all"
+                    >
+                      {selectedNode.data.cid.replace(/^ipfs:\/\//, "")}
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {selectedNode.data.description && (
+                <div>
+                  <p className="font-semibold">Description</p>
+                  <p className="bg-base-200 p-3 rounded-lg">{selectedNode.data.description}</p>
+                </div>
+              )}
+
+              {selectedNode.data.ops && (
+                <div>
+                  <p className="font-semibold">Operations</p>
+                  <details className="bg-base-200 p-3 rounded-lg">
+                    <summary className="cursor-pointer">View Raw Ops JSON</summary>
+                    <pre className="mt-2 bg-base-300 p-3 rounded-lg text-xs font-mono overflow-x-auto max-h-64">
+                      {JSON.stringify(selectedNode.data.ops, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              )}
             </div>
           </div>
           <div className="modal-backdrop" onClick={() => setSelectedNode(null)}></div>
