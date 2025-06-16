@@ -14,6 +14,8 @@ interface EntityRow {
   userAddress: string;
   timestamp: string;
   opsJson?: string;
+  relatedTo?: string;
+  parentName?: string;
 }
 
 const FeedPage: NextPage = () => {
@@ -93,7 +95,7 @@ const FeedPage: NextPage = () => {
             <tr>
               <th className="text-left">When</th>
               <th className="text-left">Author</th>
-              <th className="text-left">Name</th>
+              <th className="text-left">Knowledge Category</th>
               <th className="text-left">Description</th>
               <th className="text-left">CID</th>
               <th className="text-left">Details</th>
@@ -106,7 +108,7 @@ const FeedPage: NextPage = () => {
                 <td>
                   <Address address={row.userAddress} size="sm" onlyEnsOrAddress disableAddressLink />
                 </td>
-                <td>{row.name ?? "—"}</td>
+                <td>{row.relatedTo ? row.parentName || "—" : row.name}</td>
                 <td className="max-w-[200px] truncate">{row.description ?? "—"}</td>
                 <td>
                   <button

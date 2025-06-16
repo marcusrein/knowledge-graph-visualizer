@@ -149,13 +149,39 @@ app.post("/api/upload", async (req, res) => {
 });
 
 // GET recent entities
-app.get("/api/entities", async (_req, res) => {
+app.get("/api/entities", async (req, res) => {
   try {
-    const rows = await db("entities").orderBy("timestamp", "desc").limit(100);
-    res.json(rows);
-  } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    const entities = await db("entities")
+      .select("*")
+      .orderBy("timestamp", "desc");
+
+    // Fetch all unique parent entity IDs
+    const parentIds = entities
+      .filter(e => e.relatedTo)
+      .map(e => e.relatedTo);
+
+    // Get parent entity names
+    const parents = parentIds.length > 0
+      ? await db("entities")
+          .select("entityId", "name")
+          .whereIn("entityId", parentIds)
+      : [];
+
+    // Create a lookup map for parent names
+    const parentNameMap = Object.fromEntries(
+      parents.map(p => [p.entityId, p.name])
+    );
+
+    // Enhance response with parent names
+    const enhancedEntities = entities.map(entity => ({
+      ...entity,
+      parentName: entity.relatedTo ? parentNameMap[entity.relatedTo] : null
+    }));
+
+    res.json(enhancedEntities);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Failed to fetch entities" });
   }
 });
 
