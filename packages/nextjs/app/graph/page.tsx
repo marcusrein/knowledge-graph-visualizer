@@ -37,10 +37,10 @@ type EntityRow = {
 // Custom node components (moved outside component)
 const EntityNode = memo(({ data }: any) => {
   return (
-    <div className="bg-blue-900 text-white rounded shadow px-4 py-2 text-sm font-semibold border border-blue-300">
+    <div className="bg-blue-900 text-white rounded shadow px-4 py-2 text-sm font-semibold border border-blue-300 min-w-[150px]">
       {data.label}
-      <Handle id="a" type="target" position={Position.Top} />
-      <Handle id="b" type="source" position={Position.Bottom} />
+      <Handle id="a" type="target" position={Position.Top} className="!bg-blue-300" />
+      <Handle id="b" type="source" position={Position.Bottom} className="!bg-blue-300" />
     </div>
   );
 });
@@ -48,10 +48,11 @@ EntityNode.displayName = "EntityNode";
 
 const ValueNode = memo(({ data }: any) => {
   return (
-    <div className="bg-blue-200 text-blue-900 rounded shadow px-3 py-1 text-xs border border-blue-400 flex items-center gap-2">
+    <div className="bg-blue-200 text-blue-900 rounded shadow px-3 py-1 text-xs border border-blue-400 flex items-center gap-2 min-w-[120px]">
       <BlockieAvatar address={data.user} size={18} />
       <span>{data.label}</span>
-      <Handle id="a" type="target" position={Position.Top} />
+      <Handle id="a" type="target" position={Position.Top} className="!bg-blue-400" />
+      <Handle id="b" type="source" position={Position.Bottom} className="!bg-blue-400" />
     </div>
   );
 });
@@ -67,12 +68,27 @@ const nodeTypes = {
 const defaultEdgeOptions = {
   type: 'smoothstep',
   animated: true,
-  style: { stroke: '#94a3b8' },
+  style: { stroke: '#94a3b8', strokeWidth: 2 },
   markerEnd: {
     type: MarkerType.ArrowClosed,
     color: '#94a3b8',
   },
+  labelStyle: { fill: '#94a3b8', fontSize: 12 },
+  labelBgStyle: { fill: '#1e293b', fillOpacity: 0.7 },
+  labelBgPadding: [4, 4] as [number, number],
 };
+
+// Add these constants near the top after imports
+const RELATION_TYPES = [
+  { id: 'prerequisite', label: 'Is a prerequisite for', description: 'Knowledge that must be understood first' },
+  { id: 'builds-upon', label: 'Builds upon', description: 'Extends or enhances the previous knowledge' },
+  { id: 'contradicts', label: 'Contradicts', description: 'Presents conflicting information or perspective' },
+  { id: 'supports', label: 'Provides evidence for', description: 'Offers data or reasoning that supports' },
+  { id: 'example', label: 'Is an example of', description: 'Demonstrates or illustrates the concept' },
+  { id: 'related', label: 'Is related to', description: 'Has a general connection to' },
+  { id: 'defines', label: 'Defines', description: 'Provides a definition or explanation of' },
+  { id: 'implements', label: 'Implements', description: 'Shows practical application of' },
+] as const;
 
 const GraphPage: NextPage = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -90,6 +106,10 @@ const GraphPage: NextPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [spaceId, setSpaceId] = useState<string | null>(null);
+
+  // Add new state variables
+  const [selectedRelationType, setSelectedRelationType] = useState<string>('');
+  const [customRelationDetails, setCustomRelationDetails] = useState('');
 
   useEffect(() => {
     if (error) {
@@ -127,28 +147,77 @@ const GraphPage: NextPage = () => {
   );
 
   const handleCreateRelationship = useCallback(async () => {
-    if (!linkSource || !linkTarget || !relationshipDescription || !userAddress || !walletClient || !spaceId) return;
+    if (!linkSource || !linkTarget || !selectedRelationType || !userAddress || !walletClient || !spaceId) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Use the GRC-20 SDK to create an entity representing the relationship.
-      const entityName = `Relation: ${linkSource.data.label} → ${linkTarget.data.label}`;
-      const { id: newEntityId, ops } = Graph.createEntity({
-        name: entityName,
-        description: relationshipDescription,
-        values: [
-          { property: 'from' as any, value: linkSource.id },
-          { property: 'to' as any, value: linkTarget.id },
-        ],
+      // 1. Create properties for the relationship if they don't exist
+      const { id: relTypePropertyId } = Graph.createProperty({
+        name: 'Knowledge Relationship Type',
+        type: 'TEXT'
       });
 
-      // 2. Send ops to backend
+      const { id: relDetailsPropertyId } = Graph.createProperty({
+        name: 'Knowledge Relationship Details',
+        type: 'TEXT'
+      });
+
+      const { id: relTimestampPropertyId } = Graph.createProperty({
+        name: 'Knowledge Relationship Timestamp',
+        type: 'TIME'
+      });
+
+      // 2. Create the relationship entity with structured data
+      const selectedType = RELATION_TYPES.find(t => t.id === selectedRelationType);
+      const entityName = `${selectedType?.label}: ${linkSource.data.label} → ${linkTarget.data.label}`;
+      
+      const { id: newEntityId, ops } = Graph.createEntity({
+        name: entityName,
+        description: customRelationDetails || relationshipDescription,
+        values: [
+          { 
+            property: relTypePropertyId,
+            value: selectedType?.label || 'Unknown'
+          },
+          {
+            property: relDetailsPropertyId,
+            value: customRelationDetails || relationshipDescription
+          },
+          {
+            property: relTimestampPropertyId,
+            value: Graph.serializeDate(new Date())
+          }
+        ],
+        relations: [
+          {
+            fromEntity: linkSource.id,
+            toEntity: linkTarget.id,
+            type: selectedRelationType,
+            position: new Date().toISOString()
+          }
+        ]
+      });
+
+      // Combine all ops
+      const allOps = [...ops];
+
+      // 3. Send ops to backend
       const uploadRes = await fetch("http://localhost:4000/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAddress, edits: ops, entityId: newEntityId, name: entityName, description: relationshipDescription, spaceId }),
+        body: JSON.stringify({
+          userAddress,
+          edits: allOps,
+          entityId: newEntityId,
+          name: entityName,
+          description: customRelationDetails || relationshipDescription,
+          spaceId,
+          relationType: selectedType?.id,
+          fromEntity: linkSource.id,
+          toEntity: linkTarget.id
+        }),
       });
 
       if (!uploadRes.ok) {
@@ -160,7 +229,7 @@ const GraphPage: NextPage = () => {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // 3. Publish on-chain
+      // 4. Publish on-chain
       const metaRes = await fetch(`https://api-testnet.grc-20.thegraph.com/space/${spaceId}/edit/calldata`, {
         method: "POST",
         body: JSON.stringify({ cid: cidWithPrefix, network: "TESTNET" }),
@@ -175,8 +244,21 @@ const GraphPage: NextPage = () => {
       const { to, data } = json;
       await walletClient.sendTransaction({ to, data: data as `0x${string}` });
 
-      // 4. Update UI
-      const newEdge = { id: newEntityId, source: linkSource.id, target: linkTarget.id, type: 'smoothstep', animated: false, style: { stroke: '#f59e0b', strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b' }, label: relationshipDescription };
+      // 5. Update UI
+      const newEdge = {
+        id: newEntityId,
+        source: linkSource.id,
+        target: linkTarget.id,
+        type: 'smoothstep',
+        animated: false,
+        style: { stroke: '#f59e0b', strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b' },
+        label: selectedType?.label,
+        data: {
+          type: selectedType?.id,
+          details: customRelationDetails || relationshipDescription
+        }
+      };
       setEdges(eds => addEdge(newEdge, eds));
     } catch (e: any) {
       setError(e.message);
@@ -185,10 +267,12 @@ const GraphPage: NextPage = () => {
       setIsLinking(false);
       setLinkSource(null);
       setLinkTarget(null);
-      setRelationshipDescription("");
+      setSelectedRelationType('');
+      setRelationshipDescription('');
+      setCustomRelationDetails('');
       setLoading(false);
     }
-  }, [linkSource, linkTarget, relationshipDescription, userAddress, walletClient, spaceId]);
+  }, [linkSource, linkTarget, selectedRelationType, relationshipDescription, customRelationDetails, userAddress, walletClient, spaceId]);
 
   const handleDecodeCID = async (cid: string) => {
     setIsDecoding(true);
@@ -427,32 +511,74 @@ const GraphPage: NextPage = () => {
       {isLinking && linkSource && linkTarget && (
         <div className="modal modal-open">
           <div className="modal-box max-w-lg">
-            <h3 className="font-bold text-lg mb-4">Create a new relationship</h3>
+            <h3 className="font-bold text-lg mb-4">Create Knowledge Relationship</h3>
             <div className="space-y-4">
-              <div className="flex justify-between items-center bg-base-200 p-3 rounded-lg">
-                <div className="text-center">
-                  <p className="font-semibold">{linkSource.data.label}</p>
-                  <p className="text-xs text-base-content/70">Source</p>
-                </div>
-                <div className="text-accent font-bold text-2xl">→</div>
-                <div className="text-center">
-                  <p className="font-semibold">{linkTarget.data.label}</p>
-                  <p className="text-xs text-base-content/70">Target</p>
+              <div className="flex flex-col gap-4 bg-base-200 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-blue-900 rounded-full"></div>
+                    <div>
+                      <p className="font-semibold">{linkSource.data.label}</p>
+                      <p className="text-xs text-base-content/70">Source Entity</p>
+                    </div>
+                  </div>
+                  <div className="text-accent">→</div>
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <p className="font-semibold">{linkTarget.data.label}</p>
+                      <p className="text-xs text-base-content/70">Target Entity</p>
+                    </div>
+                    <div className="w-3 h-3 bg-blue-900 rounded-full"></div>
+                  </div>
                 </div>
               </div>
-              <textarea
-                className="textarea textarea-bordered w-full"
-                placeholder={`Describe the relationship... \n(e.g. "is an example of", "is inspired by")`}
-                value={relationshipDescription}
-                onChange={e => setRelationshipDescription(e.target.value)}
-              />
+              
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-semibold">Relationship Type</span>
+                </label>
+                <select 
+                  className="select select-bordered w-full"
+                  value={selectedRelationType}
+                  onChange={e => setSelectedRelationType(e.target.value)}
+                >
+                  <option value="">Select a relationship type...</option>
+                  {RELATION_TYPES.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+                {selectedRelationType && (
+                  <label className="label">
+                    <span className="label-text-alt">
+                      {RELATION_TYPES.find(t => t.id === selectedRelationType)?.description}
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-semibold">Additional Details</span>
+                </label>
+                <textarea
+                  className="textarea textarea-bordered w-full h-24"
+                  placeholder="Add any additional context or details about this relationship..."
+                  value={customRelationDetails}
+                  onChange={e => setCustomRelationDetails(e.target.value)}
+                />
+              </div>
             </div>
             <div className="modal-action">
               <button
-                className="btn"
+                className="btn btn-ghost"
                 onClick={() => {
                   setIsLinking(false);
-                  setRelationshipDescription("");
+                  setLinkSource(null);
+                  setLinkTarget(null);
+                  setSelectedRelationType('');
+                  setCustomRelationDetails('');
                 }}
               >
                 Cancel
@@ -460,9 +586,16 @@ const GraphPage: NextPage = () => {
               <button
                 className="btn btn-primary"
                 onClick={handleCreateRelationship}
-                disabled={!relationshipDescription || loading}
+                disabled={!selectedRelationType || loading}
               >
-                {loading ? "Creating..." : "Create"}
+                {loading ? (
+                  <>
+                    <span className="loading loading-spinner loading-sm"></span>
+                    Creating...
+                  </>
+                ) : (
+                  "Create Relationship"
+                )}
               </button>
             </div>
           </div>
@@ -470,7 +603,10 @@ const GraphPage: NextPage = () => {
             className="modal-backdrop"
             onClick={() => {
               setIsLinking(false);
-              setRelationshipDescription("");
+              setLinkSource(null);
+              setLinkTarget(null);
+              setSelectedRelationType('');
+              setCustomRelationDetails('');
             }}
           ></div>
         </div>
