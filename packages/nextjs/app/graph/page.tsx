@@ -4,10 +4,13 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, memo, useCallback } from "react";
 import type { NextPage } from "next";
 import { nanoid } from "nanoid";
-import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType } from "reactflow";
+import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge } from "reactflow";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { Address } from "~~/components/scaffold-eth";
 import { Edit } from "@graphprotocol/grc-20/proto";
+import { useAccount, useWalletClient } from "wagmi";
+import toast from "react-hot-toast";
+import { Graph } from "@graphprotocol/grc-20";
 
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
@@ -77,6 +80,30 @@ const GraphPage: NextPage = () => {
   const [selectedNode, setSelectedNode] = useState<any | null>(null);
   const [decodedData, setDecodedData] = useState<any>(null);
   const [isDecoding, setIsDecoding] = useState(false);
+  const [isLinking, setIsLinking] = useState(false);
+  const [linkSource, setLinkSource] = useState<any | null>(null);
+  const [linkTarget, setLinkTarget] = useState<any | null>(null);
+  const [relationshipDescription, setRelationshipDescription] = useState("");
+  const { address: userAddress } = useAccount();
+
+  const { data: walletClient } = useWalletClient();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [spaceId, setSpaceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
+  // Retrieve personalSpaceId from localStorage on client
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('personalSpaceId');
+      setSpaceId(saved);
+    }
+  }, []);
 
   const onNodesChange = useCallback((changes: any) => {
     setNodes((nds) => applyNodeChanges(changes, nds));
@@ -89,6 +116,79 @@ const GraphPage: NextPage = () => {
   const onNodeClick = (_: any, node: any) => {
     setSelectedNode(node);
   };
+
+  const onConnect = useCallback(
+    (params: any) => {
+      setLinkSource(nodes.find(n => n.id === params.source));
+      setLinkTarget(nodes.find(n => n.id === params.target));
+      setIsLinking(true);
+    },
+    [nodes],
+  );
+
+  const handleCreateRelationship = useCallback(async () => {
+    if (!linkSource || !linkTarget || !relationshipDescription || !userAddress || !walletClient || !spaceId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 1. Use the GRC-20 SDK to create an entity representing the relationship.
+      const entityName = `Relation: ${linkSource.data.label} → ${linkTarget.data.label}`;
+      const { id: newEntityId, ops } = Graph.createEntity({
+        name: entityName,
+        description: relationshipDescription,
+        values: [
+          { property: 'from' as any, value: linkSource.id },
+          { property: 'to' as any, value: linkTarget.id },
+        ],
+      });
+
+      // 2. Send ops to backend
+      const uploadRes = await fetch("http://localhost:4000/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userAddress, edits: ops, entityId: newEntityId, name: entityName, description: relationshipDescription, spaceId }),
+      });
+
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text();
+        throw new Error(`Upload API error: ${uploadRes.status} - ${text}`);
+      }
+      const uploadJson = await uploadRes.json();
+      const cidWithPrefix: string = uploadJson.cid;
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // 3. Publish on-chain
+      const metaRes = await fetch(`https://api-testnet.grc-20.thegraph.com/space/${spaceId}/edit/calldata`, {
+        method: "POST",
+        body: JSON.stringify({ cid: cidWithPrefix, network: "TESTNET" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!metaRes.ok) {
+        const text = await metaRes.text();
+        throw new Error(`GRC-20 API error: ${metaRes.status} - ${text}`);
+      }
+      const json = await metaRes.json();
+      const { to, data } = json;
+      await walletClient.sendTransaction({ to, data: data as `0x${string}` });
+
+      // 4. Update UI
+      const newEdge = { id: newEntityId, source: linkSource.id, target: linkTarget.id, type: 'smoothstep', animated: false, style: { stroke: '#f59e0b', strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b' }, label: relationshipDescription };
+      setEdges(eds => addEdge(newEdge, eds));
+    } catch (e: any) {
+      setError(e.message);
+      console.error("Failed to create relationship", e);
+    } finally {
+      setIsLinking(false);
+      setLinkSource(null);
+      setLinkTarget(null);
+      setRelationshipDescription("");
+      setLoading(false);
+    }
+  }, [linkSource, linkTarget, relationshipDescription, userAddress, walletClient, spaceId]);
 
   const handleDecodeCID = async (cid: string) => {
     setIsDecoding(true);
@@ -222,6 +322,7 @@ const GraphPage: NextPage = () => {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onConnect={onConnect}
         fitView
       >
         <Background />
@@ -320,6 +421,58 @@ const GraphPage: NextPage = () => {
             </div>
           </div>
           <div className="modal-backdrop" onClick={() => setSelectedNode(null)}></div>
+        </div>
+      )}
+
+      {isLinking && linkSource && linkTarget && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-lg">
+            <h3 className="font-bold text-lg mb-4">Create a new relationship</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center bg-base-200 p-3 rounded-lg">
+                <div className="text-center">
+                  <p className="font-semibold">{linkSource.data.label}</p>
+                  <p className="text-xs text-base-content/70">Source</p>
+                </div>
+                <div className="text-accent font-bold text-2xl">→</div>
+                <div className="text-center">
+                  <p className="font-semibold">{linkTarget.data.label}</p>
+                  <p className="text-xs text-base-content/70">Target</p>
+                </div>
+              </div>
+              <textarea
+                className="textarea textarea-bordered w-full"
+                placeholder={`Describe the relationship... \n(e.g. "is an example of", "is inspired by")`}
+                value={relationshipDescription}
+                onChange={e => setRelationshipDescription(e.target.value)}
+              />
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn"
+                onClick={() => {
+                  setIsLinking(false);
+                  setRelationshipDescription("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleCreateRelationship}
+                disabled={!relationshipDescription || loading}
+              >
+                {loading ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setIsLinking(false);
+              setRelationshipDescription("");
+            }}
+          ></div>
         </div>
       )}
     </div>
