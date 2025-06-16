@@ -123,20 +123,11 @@ const GraphPage: NextPage = () => {
         if (!res.ok) return;
         const json = (await res.json()) as EntityRow[];
 
-        // Group roots (no relatedTo) and children
-        const roots = json.filter(r => !r.relatedTo);
-        const childrenMap: Record<string, EntityRow[]> = {};
-        json.filter(r => r.relatedTo).forEach(r => {
-          const parent = r.relatedTo as string;
-          if (!childrenMap[parent]) childrenMap[parent] = [];
-          childrenMap[parent].push(r);
-        });
-
         const tempNodes: Node[] = [];
         const tempEdges: Edge[] = [];
         const xSpacing = 250;
 
-        roots.forEach((root, rootIdx) => {
+        json.forEach((root, rootIdx) => {
           const x = rootIdx * xSpacing + 100;
           // Root entity node
           tempNodes.push({
@@ -154,35 +145,22 @@ const GraphPage: NextPage = () => {
             draggable: true,
           });
 
-          const children = [...(childrenMap[root.entityId] || [])];
-
-          // if root has a description, add it as a value node
-          if (root.description) {
-            const descId = `${root.entityId}-desc`;
-            children.unshift({
-              entityId: descId,
-              name: root.description.slice(0, 24),
-              description: root.description,
-              relatedTo: root.entityId,
-              userAddress: root.userAddress,
-              cid: root.cid,
-              timestamp: root.timestamp,
-              opsJson: root.opsJson
-            } as EntityRow);
-          }
-
-          children.forEach((child, childIdx) => {
-            const childY = 200 + childIdx * 80;
+          // Get all contributions to this entity
+          const contributions = json.filter(r => r.relatedTo === root.entityId);
+          
+          // Add each contribution as a child node
+          contributions.forEach((contribution, idx) => {
+            const childY = 200 + idx * 80;
             tempNodes.push({
-              id: child.entityId,
+              id: contribution.entityId,
               type: "value",
               data: { 
-                label: child.name || child.entityId.slice(0, 6),
-                description: child.description,
-                user: child.userAddress,
-                cid: child.cid,
-                timestamp: child.timestamp,
-                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined
+                label: contribution.description || contribution.name || contribution.entityId.slice(0, 6),
+                description: contribution.description,
+                user: contribution.userAddress,
+                cid: contribution.cid,
+                timestamp: contribution.timestamp,
+                ops: contribution.opsJson ? JSON.parse(contribution.opsJson) : undefined
               },
               position: { x, y: childY },
               draggable: true,
@@ -190,7 +168,7 @@ const GraphPage: NextPage = () => {
             tempEdges.push({
               id: nanoid(6),
               source: root.entityId,
-              target: child.entityId,
+              target: contribution.entityId,
               sourceHandle: "b",
               targetHandle: "a",
               type: 'smoothstep',
