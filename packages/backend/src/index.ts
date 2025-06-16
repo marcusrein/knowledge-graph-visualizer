@@ -50,6 +50,7 @@ async function ensureDb() {
       table.string("name");
       table.text("description");
       table.string("relatedTo"); // optional relation target entityId
+      table.text("opsJson");
       table.string("userAddress").notNullable();
       table.datetime("timestamp").notNullable();
     });
@@ -62,6 +63,14 @@ async function ensureDb() {
       table.string("relatedTo");
     });
     console.log("🔄 Added relatedTo column to entities table");
+  }
+
+  const hasOpsJson = await db.schema.hasColumn("entities", "opsJson");
+  if (!hasOpsJson) {
+    await db.schema.alterTable("entities", table => {
+      table.text("opsJson");
+    });
+    console.log("🔄 Added opsJson column to entities table");
   }
 }
 ensureDb();
@@ -115,6 +124,7 @@ app.post("/api/upload", async (req, res) => {
         name,
         description,
         relatedTo: req.body.relatedTo ?? null,
+        opsJson: JSON.stringify(edits),
         userAddress: userAddress.toLowerCase(),
         timestamp: new Date().toISOString(),
       });
@@ -166,7 +176,7 @@ app.get("/api/contributions", async (req, res) => {
       .where("userAddress", user)
       .count("id as edits");
 
-    res.json({ totalTriples: Number(totalTriples), edits: Number(edits) });
+    res.json({ totalValues: Number(totalTriples), edits: Number(edits) });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });

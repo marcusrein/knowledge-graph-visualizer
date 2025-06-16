@@ -25,7 +25,7 @@ const Home = () => {
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [relatedTo, setRelatedTo] = useState<string | "">("");
   const [entitiesList, setEntitiesList] = useState<Array<{entityId:string; name:string}>>([]);
-  const [stats, setStats] = useState<{totalTriples:number; edits:number} | null>(null);
+  const [stats, setStats] = useState<{totalValues:number; edits:number} | null>(null);
 
   const { writeContractAsync: writeContributionTracker } = useScaffoldWriteContract({
     contractName: "ContributionTracker",
@@ -217,7 +217,7 @@ const Home = () => {
         const res = await fetch(`http://localhost:4000/api/contributions?user=${address}`);
         if (res.ok) {
           const json = await res.json();
-          setStats(json);
+          setStats({edits: json.edits, totalValues: json.totalValues});
         }
       } catch {}
     })();
@@ -340,7 +340,7 @@ const Home = () => {
           )}
           {stats && (
             <div className="alert alert-info shadow-md">
-              📊 You have published <b>{stats.edits}</b> edits totaling <b>{stats.totalTriples}</b> triples.
+              📊 You have published <b>{stats.edits}</b> edits totaling <b>{stats.totalValues}</b> values.
             </div>
           )}
           {error && <div className="alert alert-error">❌ {error}</div>}
