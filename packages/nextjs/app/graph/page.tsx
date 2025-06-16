@@ -5,6 +5,8 @@ import { useEffect, useState, memo, useCallback } from "react";
 import type { NextPage } from "next";
 import { nanoid } from "nanoid";
 import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType } from "reactflow";
+import { BlockieAvatar } from "~~/components/scaffold-eth";
+import { Address } from "~~/components/scaffold-eth";
 
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
@@ -37,8 +39,9 @@ EntityNode.displayName = "EntityNode";
 
 const ValueNode = memo(({ data }: any) => {
   return (
-    <div className="bg-blue-200 text-blue-900 rounded shadow px-3 py-1 text-xs border border-blue-400">
-      {data.label}
+    <div className="bg-blue-200 text-blue-900 rounded shadow px-3 py-1 text-xs border border-blue-400 flex items-center gap-2">
+      <BlockieAvatar address={data.user} size={18} />
+      <span>{data.label}</span>
       <Handle id="a" type="target" position={Position.Top} />
     </div>
   );
@@ -65,6 +68,7 @@ const defaultEdgeOptions = {
 const GraphPage: NextPage = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const [selectedNode, setSelectedNode] = useState<any | null>(null);
 
   const onNodesChange = useCallback((changes: any) => {
     setNodes((nds) => applyNodeChanges(changes, nds));
@@ -73,6 +77,10 @@ const GraphPage: NextPage = () => {
   const onEdgesChange = useCallback((changes: any) => {
     setEdges((eds) => applyEdgeChanges(changes, eds));
   }, []);
+
+  const onNodeClick = (_: any, node: any) => {
+    setSelectedNode(node);
+  };
 
   useEffect(() => {
     (async () => {
@@ -155,11 +163,42 @@ const GraphPage: NextPage = () => {
         defaultEdgeOptions={defaultEdgeOptions}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
         fitView
       >
         <Background />
         <Controls />
       </ReactFlow>
+
+      {selectedNode && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-3xl">
+            <h3 className="font-bold text-lg mb-4">Node Details</h3>
+            <div className="space-y-2">
+              <p><b>Label:</b> {selectedNode.data.label}</p>
+              {selectedNode.data.description && (
+                <p><b>Description:</b> {selectedNode.data.description}</p>
+              )}
+              {selectedNode.data.cid && (
+                <p><b>CID:</b> <a href={`https://ipfs.io/ipfs/${selectedNode.data.cid.replace(/^ipfs:\/\//,'')}`} className="link" target="_blank">{selectedNode.data.cid}</a></p>
+              )}
+              {selectedNode.data.user && (
+                <p><b>Author:</b> <Address address={selectedNode.data.user} size="sm" onlyEnsOrAddress /></p>
+              )}
+              {selectedNode.data.ops && (
+                <details className="bg-base-200 p-2 rounded">
+                  <summary className="cursor-pointer">Raw Ops JSON</summary>
+                  <pre className="max-h-64 overflow-y-auto text-xs mt-2">{JSON.stringify(selectedNode.data.ops, null, 2)}</pre>
+                </details>
+              )}
+            </div>
+            <div className="modal-action">
+              <button className="btn" onClick={() => setSelectedNode(null)}>Close</button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setSelectedNode(null)}></div>
+        </div>
+      )}
     </div>
   );
 };

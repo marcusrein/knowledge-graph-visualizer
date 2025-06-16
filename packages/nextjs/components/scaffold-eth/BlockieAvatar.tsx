@@ -9,9 +9,9 @@ export const BlockieAvatar: AvatarComponent = ({ address, ensImage, size }) => (
   // eslint-disable-next-line @next/next/no-img-element
   <img
     className="rounded-full"
-    src={ensImage || blo(address as `0x${string}`)}
+    src={ensImage || (address ? blo(address as `0x${string}`) : '')}
     width={size}
     height={size}
-    alt={`${address} avatar`}
+    alt={`${address || ''} avatar`}
   />
 );
