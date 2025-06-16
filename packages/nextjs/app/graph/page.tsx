@@ -123,11 +123,20 @@ const GraphPage: NextPage = () => {
         if (!res.ok) return;
         const json = (await res.json()) as EntityRow[];
 
+        // Group roots (no relatedTo) and children
+        const roots = json.filter(r => !r.relatedTo);
+        const childrenMap: Record<string, EntityRow[]> = {};
+        json.filter(r => r.relatedTo).forEach(r => {
+          const parent = r.relatedTo as string;
+          if (!childrenMap[parent]) childrenMap[parent] = [];
+          childrenMap[parent].push(r);
+        });
+
         const tempNodes: Node[] = [];
         const tempEdges: Edge[] = [];
         const xSpacing = 250;
 
-        json.forEach((root, rootIdx) => {
+        roots.forEach((root, rootIdx) => {
           const x = rootIdx * xSpacing + 100;
           // Root entity node
           tempNodes.push({
@@ -145,22 +154,40 @@ const GraphPage: NextPage = () => {
             draggable: true,
           });
 
-          // Get all contributions to this entity
-          const contributions = json.filter(r => r.relatedTo === root.entityId);
-          
-          // Add each contribution as a child node
-          contributions.forEach((contribution, idx) => {
-            const childY = 200 + idx * 80;
+          const children = [...(childrenMap[root.entityId] || [])];
+
+          // if root has a description, add it as a value node
+          if (root.description) {
+            const descId = `${root.entityId}-desc`;
+            children.unshift({
+              entityId: descId,
+              name: root.description.slice(0, 24),
+              description: root.description,
+              relatedTo: root.entityId,
+              userAddress: root.userAddress,
+              cid: root.cid,
+              timestamp: root.timestamp,
+              opsJson: root.opsJson
+            } as EntityRow);
+          }
+
+          children.forEach((child, childIdx) => {
+            const childY = 200 + childIdx * 80;
+            const childLabel = child.name
+              ? child.name
+              : child.description
+                ? child.description.slice(0, 24)
+                : child.entityId.slice(0, 6);
             tempNodes.push({
-              id: contribution.entityId,
+              id: child.entityId,
               type: "value",
               data: { 
-                label: contribution.description || contribution.name || contribution.entityId.slice(0, 6),
-                description: contribution.description,
-                user: contribution.userAddress,
-                cid: contribution.cid,
-                timestamp: contribution.timestamp,
-                ops: contribution.opsJson ? JSON.parse(contribution.opsJson) : undefined
+                label: childLabel,
+                description: child.description,
+                user: child.userAddress,
+                cid: child.cid,
+                timestamp: child.timestamp,
+                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined
               },
               position: { x, y: childY },
               draggable: true,
@@ -168,7 +195,7 @@ const GraphPage: NextPage = () => {
             tempEdges.push({
               id: nanoid(6),
               source: root.entityId,
-              target: contribution.entityId,
+              target: child.entityId,
               sourceHandle: "b",
               targetHandle: "a",
               type: 'smoothstep',
@@ -203,14 +230,13 @@ const GraphPage: NextPage = () => {
       {selectedNode && (
         <div className="modal modal-open">
           <div className="modal-box max-w-3xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg">Node Details</h3>
+            <div className="flex justify-end items-center mb-4">
               <button className="btn btn-sm btn-circle" onClick={() => setSelectedNode(null)}>✕</button>
             </div>
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="font-semibold">Name</p>
+                  <p className="font-semibold">Knowledge Category</p>
                   <p>{selectedNode.data.label}</p>
                 </div>
                 <div>
@@ -241,7 +267,7 @@ const GraphPage: NextPage = () => {
 
               {selectedNode.data.description && (
                 <div>
-                  <p className="font-semibold">Description</p>
+                  <p className="font-semibold">Knowledge</p>
                   <p className="bg-base-200 p-3 rounded-lg">{selectedNode.data.description}</p>
                 </div>
               )}
