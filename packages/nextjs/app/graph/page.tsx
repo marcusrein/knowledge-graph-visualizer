@@ -181,13 +181,14 @@ const GraphPage: NextPage = () => {
             tempNodes.push({
               id: child.entityId,
               type: "value",
-              data: { 
+              data: {
                 label: childLabel,
+                knowledgeCategoryName: root.name,
                 description: child.description,
                 user: child.userAddress,
                 cid: child.cid,
                 timestamp: child.timestamp,
-                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined
+                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
               },
               position: { x, y: childY },
               draggable: true,
@@ -237,7 +238,7 @@ const GraphPage: NextPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <p className="font-semibold">Knowledge Category</p>
-                  <p>{selectedNode.data.label}</p>
+                  <p>{selectedNode.data.knowledgeCategoryName || selectedNode.data.label}</p>
                 </div>
                 <div>
                   <p className="font-semibold">Created</p>
