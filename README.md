@@ -65,6 +65,24 @@ To get started with this starter kit, follow the steps below:
 
 Now, visit your app at `http://localhost:3000`. You can test the full flow of creating knowledge and seeing your address appear on the on-chain leaderboard.
 
+## Resetting / Cleaning Local Data
+
+Need a fresh start for a demo or testing? The repository ships with a helper script that wipes the local SQLite database **and nothing else**:
+
+```bash
+# Stop the backend if it's running first
+yarn reset           # removes packages/backend/data/leaderboard.db
+```
+
+To fully reset the app, also clear the UI's cached space id in your browser console and reload the page:
+
+```js
+localStorage.removeItem('personalSpaceId');
+location.reload();
+```
+
+The backend will recreate an empty database automatically on the next boot, and the UI will guide you through creating a brand-new personal space.
+
 ---
 
 # 🏗 Scaffold-ETH 2
