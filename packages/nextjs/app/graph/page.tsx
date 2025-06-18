@@ -361,11 +361,14 @@ const GraphPage: NextPage = () => {
           });
           const aggregatedDescription = descriptionObjects.map(d => d.description).join("\n\n");
 
+          const isRelationship = r.relationType || (r as any).fromEntity;
+          const relationTypeInfo = isRelationship ? RELATION_TYPES.find(t => t.id === r.relationType) : undefined;
+
           return {
             id: r.entityId,
             type: "avatar",
             data: {
-              label: truncate(r.name || r.entityId.slice(0, 8), 30),
+              label: relationTypeInfo?.label ?? truncate(r.name || r.entityId.slice(0, 8), 30),
               description: aggregatedDescription,
               descriptionObjects,
               user: r.userAddress,
@@ -394,12 +397,10 @@ const GraphPage: NextPage = () => {
                   o.type === "CREATE_RELATION" && (o.relation?.id === r.entityId || o.relation?.entity === r.entityId),
               );
               if (relOp) {
-                const selectedType = RELATION_TYPES.find(t => t.id === r.relationType);
                 tempEdges.push({
                   id: `${relOp.relation.fromEntity}->${r.entityId}`,
                   source: relOp.relation.fromEntity,
                   target: r.entityId,
-                  label: selectedType?.label,
                   style: { stroke: "#f59e0b", strokeWidth: 2 },
                   markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
                 });
@@ -413,12 +414,10 @@ const GraphPage: NextPage = () => {
               }
             } catch {}
           } else if (r.relationType || (r as any).fromEntity) {
-            const selectedType = RELATION_TYPES.find(t => t.id === r.relationType);
             tempEdges.push({
               id: `${(r as any).fromEntity}->${r.entityId}`,
               source: (r as any).fromEntity,
               target: r.entityId,
-              label: selectedType?.label,
               style: { stroke: "#f59e0b", strokeWidth: 2 },
               markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
             });
@@ -501,10 +500,19 @@ const GraphPage: NextPage = () => {
                 )}
               </div>
 
-              {selectedNode.data.description && (
+              {selectedNode.data.descriptionObjects && selectedNode.data.descriptionObjects.length > 0 && (
                 <div>
                   <p className="font-semibold">Knowledge</p>
-                  <p className="bg-base-200 p-3 rounded-lg">{selectedNode.data.description}</p>
+                  <div className="bg-base-200 p-3 rounded-lg space-y-2">
+                    {selectedNode.data.descriptionObjects.map(
+                      (descObj: { userAddress: string; description: string }, index: number) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <BlockieAvatar address={descObj.userAddress} size={24} />
+                          <span>{descObj.description}</span>
+                        </div>
+                      ),
+                    )}
+                  </div>
                 </div>
               )}
 
