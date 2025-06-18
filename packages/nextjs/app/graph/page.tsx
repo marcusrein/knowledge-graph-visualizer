@@ -11,6 +11,7 @@ import { Edit } from "@graphprotocol/grc-20/proto";
 import { useAccount, useWalletClient } from "wagmi";
 import toast from "react-hot-toast";
 import { Graph } from "@graphprotocol/grc-20";
+import CustomConnectionLine from "./_components/CustomConnectionLine";
 
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
@@ -654,7 +655,7 @@ const GraphPage: NextPage = () => {
           fitView
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypesMemo}
-          connectionLineStyle={{ stroke: "#f59e0b", strokeWidth: 2 }}
+          connectionLineComponent={CustomConnectionLine}
           defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" } }}
         >
           <Background />
