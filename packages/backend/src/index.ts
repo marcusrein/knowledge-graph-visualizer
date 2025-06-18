@@ -72,6 +72,14 @@ async function ensureDb() {
     });
     console.log("🔄 Added opsJson column to entities table");
   }
+
+  const hasRelationType = await db.schema.hasColumn("entities", "relationType");
+  if (!hasRelationType) {
+    await db.schema.alterTable("entities", table => {
+      table.string("relationType");
+    });
+    console.log("🔄 Added relationType column to entities table");
+  }
 }
 ensureDb();
 
@@ -93,7 +101,7 @@ if (trackerAddress && privateKey && rpcUrl) {
 
 // POST /api/upload
 app.post("/api/upload", async (req, res) => {
-  const { userAddress, edits, entityId, name, description, spaceId } = req.body;
+  const { userAddress, edits, entityId, name, description, spaceId, relationType } = req.body;
 
   if (!userAddress || !edits) {
     return res.status(400).json({ error: "Missing userAddress or edits" });
@@ -127,6 +135,7 @@ app.post("/api/upload", async (req, res) => {
         opsJson: JSON.stringify(edits),
         userAddress: userAddress.toLowerCase(),
         timestamp: new Date().toISOString(),
+        relationType,
       });
     }
 

@@ -133,7 +133,7 @@ const GraphPage: NextPage = () => {
       });
 
       // 3. Build the relation (rich relation with its own entity)
-      const entityName = `${selectedType.label}: ${linkSource.data.label} → ${linkTarget.data.label}`;
+      const entityName = `${linkSource.data.label} → ${linkTarget.data.label}`;
 
       const { id: relationId, ops: relationOps } = Graph.createRelation({
         fromEntity: linkSource.id,
@@ -197,20 +197,26 @@ const GraphPage: NextPage = () => {
       await walletClient.sendTransaction({ to, data: data as `0x${string}` });
 
       // 6. Update UI
-      const newEdge = {
-        id: relationId,
-        source: linkSource.id,
-        target: linkTarget.id,
-        animated: false,
-        style: { stroke: '#f59e0b', strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b' },
-        label: selectedType?.label,
-        data: {
-          type: selectedType?.id,
-          details: customRelationDetails || relationshipDescription
-        }
-      };
-      setEdges(eds => addEdge(newEdge, eds));
+      setEdges(eds => {
+        const fromEdge = {
+          id: `${relationId}-from`,
+          source: linkSource.id,
+          target: relationId,
+          animated: false,
+          style: { stroke: "#f59e0b", strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
+          label: selectedType?.label,
+        };
+        const toEdge = {
+          id: `${relationId}-to`,
+          source: relationId,
+          target: linkTarget.id,
+          animated: false,
+          style: { stroke: "#f59e0b", strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
+        };
+        return addEdge(toEdge, addEdge(fromEdge, eds));
+      });
 
       // 7. Add a visual node for the relationship itself so it can be distinguished & positioned below the linked entities
       const midX = (linkSource.position.x + linkTarget.position.x) / 2;
@@ -220,7 +226,7 @@ const GraphPage: NextPage = () => {
         {
           id: relationId,
           data: {
-            label: selectedType?.label,
+            label: entityName,
             description: customRelationDetails || relationshipDescription,
             isRelation: true,
           },
@@ -312,48 +318,38 @@ const GraphPage: NextPage = () => {
           childrenMap[parentId].push(r);
         });
 
-        // --- Layout Roots (Top and Bottom) ---
+        // --- Layout Top-Level Roots ---
         const allRoots = normalEntityRows.filter(r => !r.relatedTo);
         const topLevelRoots = allRoots.filter(r => !targetEntityIds.has(r.entityId));
         const bottomLevelRoots = allRoots.filter(r => targetEntityIds.has(r.entityId));
 
         const xSpacing = 400;
         const yTop = 100;
-        const yBottom = 800;
 
-        const layoutRoots = (roots: EntityRow[], y: number) => {
-          roots.forEach((root, idx) => {
-            const x = idx * xSpacing + 100;
-            const node: Node = {
-              id: root.entityId,
-              data: {
-                label: root.name || root.entityId.slice(0, 6),
-                description: root.description,
-                user: root.userAddress,
-                cid: root.cid,
-                timestamp: root.timestamp,
-                ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
-              },
-              position: { x, y },
-              draggable: true,
-              style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
-            };
-            tempNodes.push(node);
-            nodePosMap[root.entityId] = node.position;
-          });
-        };
+        topLevelRoots.forEach((root, idx) => {
+          const x = idx * xSpacing + 100;
+          const rootPos = { x, y: yTop };
+          const rootNode: Node = {
+            id: root.entityId,
+            data: {
+              label: root.name || root.entityId.slice(0, 6),
+              description: root.description,
+              user: root.userAddress,
+              cid: root.cid,
+              timestamp: root.timestamp,
+              ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
+            },
+            position: rootPos,
+            draggable: true,
+            style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
+          };
+          tempNodes.push(rootNode);
+          nodePosMap[root.entityId] = rootPos;
 
-        layoutRoots(topLevelRoots, yTop);
-        layoutRoots(bottomLevelRoots, yBottom);
-
-        // --- Layout Value Nodes for all roots ---
-        allRoots.forEach(root => {
-          const rootPos = nodePosMap[root.entityId];
           const valueChildren = childrenMap[root.entityId] || [];
           if (root.description) {
             const descId = `${root.entityId}-desc`;
-            const alreadyExists = valueChildren.some(c => c.description === root.description);
-            if (!alreadyExists) {
+            if (!valueChildren.some(c => c.description === root.description)) {
               valueChildren.unshift({
                 entityId: descId,
                 name: root.description.slice(0, 24),
@@ -415,10 +411,15 @@ const GraphPage: NextPage = () => {
 
           relations.forEach((relRow, relIdx) => {
             const xPos = xStart + relIdx * relationSpacing;
+            let nodeLabel = relRow.name || relRow.entityId.slice(0, 6);
+            if (nodeLabel.includes(": ")) {
+              nodeLabel = nodeLabel.split(": ")[1];
+            }
+
             const relNode: Node = {
               id: relRow.entityId,
               data: {
-                label: relRow.name || relRow.entityId.slice(0, 6),
+                label: nodeLabel,
                 description: relRow.description,
                 isRelation: true,
                 ops: JSON.parse(relRow.opsJson as string),
@@ -490,6 +491,89 @@ const GraphPage: NextPage = () => {
                 source: relRow.entityId,
                 target: child.entityId,
               });
+            });
+          });
+        });
+
+        // --- Layout Bottom-Level Roots ---
+        const yBottom = 800;
+        const relationsByTarget = relationEntityRows.reduce((acc, r) => {
+          const relOp = relationOpsMap[r.entityId];
+          const to = relOp.relation.toEntity;
+          if (!acc[to]) acc[to] = [];
+          acc[to].push(r);
+          return acc;
+        }, {} as Record<string, EntityRow[]>);
+
+        bottomLevelRoots.forEach((root, idx) => {
+          const relationsTargetingRoot = relationsByTarget[root.entityId] || [];
+          const relNodePositions = relationsTargetingRoot.map(relRow => nodePosMap[relRow.entityId]).filter(Boolean);
+
+          let x;
+          if (relNodePositions.length > 0) {
+            x = relNodePositions.reduce((sum, pos) => sum + pos.x, 0) / relNodePositions.length;
+          } else {
+            x = idx * xSpacing + 100; // Fallback
+          }
+
+          const rootPos = { x, y: yBottom };
+          const rootNode: Node = {
+            id: root.entityId,
+            data: {
+              label: root.name || root.entityId.slice(0, 6),
+              description: root.description,
+              user: root.userAddress,
+              cid: root.cid,
+              timestamp: root.timestamp,
+              ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
+            },
+            position: rootPos,
+            draggable: true,
+            style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
+          };
+          tempNodes.push(rootNode);
+          nodePosMap[root.entityId] = rootPos;
+
+          const valueChildren = childrenMap[root.entityId] || [];
+          if (root.description) {
+            const descId = `${root.entityId}-desc`;
+            if (!valueChildren.some(c => c.description === root.description)) {
+              valueChildren.unshift({
+                entityId: descId,
+                name: root.description.slice(0, 24),
+                description: root.description,
+                relatedTo: root.entityId,
+                userAddress: root.userAddress,
+                cid: root.cid,
+                timestamp: root.timestamp,
+                opsJson: root.opsJson,
+              } as EntityRow);
+            }
+          }
+
+          valueChildren.forEach((child, childIdx) => {
+            const childY = rootPos.y + 100 + childIdx * 80;
+            const childLabel = child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6);
+            const childNode: Node = {
+              id: child.entityId,
+              data: {
+                label: childLabel,
+                knowledgeCategoryName: root.name,
+                description: child.description,
+                user: child.userAddress,
+                cid: child.cid,
+                timestamp: child.timestamp,
+                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
+              },
+              position: { x: rootPos.x, y: childY },
+              draggable: true,
+            };
+            tempNodes.push(childNode);
+            nodePosMap[child.entityId] = childNode.position;
+            tempEdges.push({
+              id: nanoid(6),
+              source: root.entityId,
+              target: child.entityId,
             });
           });
         });
