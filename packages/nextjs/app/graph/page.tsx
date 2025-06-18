@@ -1,10 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState, memo, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { NextPage } from "next";
 import { nanoid } from "nanoid";
-import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge } from "reactflow";
+import { applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge } from "reactflow";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { Address } from "~~/components/scaffold-eth";
 import { Edit } from "@graphprotocol/grc-20/proto";
@@ -15,10 +15,10 @@ import { Graph } from "@graphprotocol/grc-20";
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
 });
+const ReactFlowProvider = dynamic(() => import("reactflow").then(mod => mod.ReactFlowProvider), { ssr: false });
 const Background = dynamic(() => import("reactflow").then(mod => mod.Background), { ssr: false });
 const Controls = dynamic(() => import("reactflow").then(mod => mod.Controls), { ssr: false });
-const Handle = dynamic(() => import("reactflow").then(mod => mod.Handle), { ssr: false });
-// We avoid using Handle directly for static graph – default hidden handles suffice.
+// We rely on default node handles; no custom Handle import needed
 
 import "reactflow/dist/style.css";
 
@@ -32,51 +32,6 @@ type EntityRow = {
   cid: string;
   timestamp: string;
   opsJson?: string;
-};
-
-// Custom node components (moved outside component)
-const EntityNode = memo(({ data }: any) => {
-  return (
-    <div className="bg-blue-900 text-white rounded shadow px-4 py-2 text-sm font-semibold border border-blue-300 min-w-[150px]">
-      {data.label}
-      <Handle id="target-top" type="target" position={Position.Top} className="!bg-blue-300" style={{ top: 0 }} />
-      <Handle id="source-top" type="source" position={Position.Top} className="!bg-blue-300" style={{ top: 0 }} />
-      <Handle id="b" type="source" position={Position.Bottom} className="!bg-blue-300" style={{ bottom: 0 }} />
-    </div>
-  );
-});
-EntityNode.displayName = "EntityNode";
-
-const ValueNode = memo(({ data }: any) => {
-  return (
-    <div className="bg-blue-200 text-blue-900 rounded shadow px-3 py-1 text-xs border border-blue-400 flex items-center gap-2 min-w-[120px]">
-      <BlockieAvatar address={data.user} size={18} />
-      <span>{data.label}</span>
-      <Handle id="target-top" type="target" position={Position.Top} className="!bg-blue-400" style={{ top: 0 }} />
-      <Handle id="source-top" type="source" position={Position.Top} className="!bg-blue-400" style={{ top: 0 }} />
-      <Handle id="target-bottom" type="target" position={Position.Bottom} className="!bg-blue-400" style={{ bottom: 0 }} />
-    </div>
-  );
-});
-ValueNode.displayName = "ValueNode";
-
-// Node types (defined once, outside component)
-const nodeTypes = {
-  entity: EntityNode,
-  value: ValueNode,
-};
-
-// Default edge options (defined once, outside component)
-const defaultEdgeOptions = {
-  animated: true,
-  style: { stroke: "#94a3b8", strokeWidth: 2 },
-  markerEnd: {
-    type: MarkerType.ArrowClosed,
-    color: '#94a3b8',
-  },
-  labelStyle: { fill: '#94a3b8', fontSize: 12 },
-  labelBgStyle: { fill: '#1e293b', fillOpacity: 0.7 },
-  labelBgPadding: [4, 4] as [number, number],
 };
 
 // Add these constants near the top after imports
@@ -324,7 +279,6 @@ const GraphPage: NextPage = () => {
           // Root entity node
           tempNodes.push({
             id: root.entityId,
-            type: "entity",
             data: { 
               label: root.name || root.entityId.slice(0, 6),
               description: root.description,
@@ -363,7 +317,6 @@ const GraphPage: NextPage = () => {
                 : child.entityId.slice(0, 6);
             tempNodes.push({
               id: child.entityId,
-              type: "value",
               data: {
                 label: childLabel,
                 knowledgeCategoryName: root.name,
@@ -380,8 +333,6 @@ const GraphPage: NextPage = () => {
               id: nanoid(6),
               source: root.entityId,
               target: child.entityId,
-              sourceHandle: "b",
-              targetHandle: "target-top",
             });
           });
         });
@@ -396,24 +347,21 @@ const GraphPage: NextPage = () => {
 
   return (
     <div style={{ height: "90vh", width: "100%" }}>
+      <ReactFlowProvider>
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        nodeTypes={nodeTypes}
-        defaultEdgeOptions={defaultEdgeOptions}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         onConnect={onConnect}
-        isValidConnection={(connection) =>
-          connection.sourceHandle === 'source-top' &&
-          connection.targetHandle === 'target-top'
-        }
+        isValidConnection={(connection) => connection.source !== connection.target}
         fitView
       >
         <Background />
         <Controls />
       </ReactFlow>
+      </ReactFlowProvider>
 
       {selectedNode && (
         <div className="modal modal-open">
