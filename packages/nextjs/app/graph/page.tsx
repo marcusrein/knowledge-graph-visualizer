@@ -165,13 +165,13 @@ const AvatarNode = ({ id, data }: { id: string; data: any }) => {
                 </div>
               ))}
 
-            {!data.isRelationship && !isAdding && (
+            {!isAdding && (
               <button onClick={handleAddClick} className="btn btn-primary btn-xs mt-2 w-full">
                 Add Knowledge
               </button>
             )}
 
-            {!data.isRelationship && isAdding && (
+            {isAdding && (
               <div className="mt-2 space-y-2">
                 <textarea
                   className="textarea textarea-bordered w-full"
