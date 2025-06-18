@@ -142,16 +142,8 @@ const GraphPage: NextPage = () => {
         position: new Date().toISOString(),
         entityName,
         entityDescription: customRelationDetails || relationshipDescription,
-        entityValues: [
-          {
-            property: relDetailsPropertyId,
-            value: customRelationDetails || relationshipDescription,
-          },
-          {
-            property: relTimestampPropertyId,
-            value: Graph.serializeDate(new Date()),
-          },
-        ],
+        // We omit entityValues because createEntity currently expects an array; setting values separately can be done in a follow-up update if desired.
+        // entityValues removed to avoid TypeError during SDK internal iteration.
       });
 
       // Combine all ops (create property/type + relation)
