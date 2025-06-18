@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import type { NextPage } from "next";
 import { nanoid } from "nanoid";
-import { applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge, Handle, Position } from "reactflow";
+import { applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, Handle, Position } from "reactflow";
 import type { Connection } from "reactflow";
 import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
 import { Edit } from "@graphprotocol/grc-20/proto";
@@ -12,6 +12,8 @@ import { useAccount, useWalletClient } from "wagmi";
 import toast from "react-hot-toast";
 import { Graph } from "@graphprotocol/grc-20";
 import CustomConnectionLine from "./_components/CustomConnectionLine";
+import { waitForTransactionReceipt } from "wagmi/actions";
+import { wagmiConfig } from "~~/services/web3/wagmiConfig";
 
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
@@ -207,7 +209,6 @@ const GraphPage: NextPage = () => {
           relationType: selectedType?.id,
           fromEntity: linkSource.id,
           toEntity: linkTarget.id,
-          relatedTo: linkSource.id,
         }),
       });
 
@@ -233,50 +234,24 @@ const GraphPage: NextPage = () => {
       }
       const json = await metaRes.json();
       const { to, data } = json;
-      await walletClient.sendTransaction({ to, data: data as `0x${string}` });
 
-      // 6. Update UI
-      setEdges(eds => {
-        const fromEdge = {
-          id: `${relationId}-from`,
-          source: linkSource.id,
-          target: relationId,
-          animated: false,
-          style: { stroke: "#f59e0b", strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
-          label: selectedType?.label,
-        };
-        const toEdge = {
-          id: `${relationId}-to`,
-          source: relationId,
-          target: linkTarget.id,
-          animated: false,
-          style: { stroke: "#f59e0b", strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
-        };
-        return addEdge(toEdge, addEdge(fromEdge, eds));
+      const txPromise = async () => {
+        const hash = await walletClient.sendTransaction({ to, data: data as `0x${string}` });
+        const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
+        if (receipt.status === "reverted") {
+          throw new Error("Transaction reverted");
+        }
+      };
+
+      await toast.promise(txPromise(), {
+        loading: "Submitting transaction...",
+        success: "Transaction successful! Refreshing...",
+        error: (err: Error) => `Error: ${err.message}`,
       });
 
-      // 7. Add a visual node for the relationship itself so it can be distinguished & positioned below the linked entities
-      const midX = (linkSource.position.x + linkTarget.position.x) / 2;
-      const belowY = Math.max(linkSource.position.y, linkTarget.position.y) + 120;
-      setNodes(ns => [
-        ...ns,
-        {
-          id: relationId,
-          type: "avatar",
-          data: {
-            label: entityName,
-            description: customRelationDetails || relationshipDescription,
-            isRelation: true,
-            user: userAddress,
-            style: { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" },
-            isConnectable: false,
-          },
-          position: { x: midX, y: belowY },
-          draggable: true,
-        },
-      ]);
+      // Give a moment for the user to see the toast.
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      window.location.reload();
     } catch (e: any) {
       setError(e.message);
       console.error("Failed to create relationship", e);
@@ -445,8 +420,8 @@ const GraphPage: NextPage = () => {
           return acc;
         }, {} as Record<string, EntityRow[]>);
 
-        const relationSpacing = 250;
-        const yRelations = 500;
+        const relationSpacing = 220;
+        const yRelations = 600;
 
         Object.entries(relationsBySource).forEach(([sourceId, relations]) => {
           const sourcePos = nodePosMap[sourceId];
@@ -547,7 +522,7 @@ const GraphPage: NextPage = () => {
         });
 
         // --- Layout Bottom-Level Roots ---
-        const yBottom = 850;
+        const yBottom = 1200;
         const relationsByTarget = relationEntityRows.reduce((acc, r) => {
           const relOp = relationOpsMap[r.entityId];
           const to = relOp.relation.toEntity;
