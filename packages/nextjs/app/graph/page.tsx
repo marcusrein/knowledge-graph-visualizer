@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import type { NextPage } from "next";
-import { nanoid } from "nanoid";
 import { applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, Handle, Position } from "reactflow";
 import type { Connection } from "reactflow";
 import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
@@ -14,6 +13,7 @@ import { Graph } from "@graphprotocol/grc-20";
 import CustomConnectionLine from "./_components/CustomConnectionLine";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { wagmiConfig } from "~~/services/web3/wagmiConfig";
+import { getLayoutedElements } from "~~/utils/grc20/layout";
 
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
@@ -76,16 +76,36 @@ const AvatarNode = ({ data }: { data: any }) => {
   // If not connectable, hide handles. But they must exist for edges to attach.
   const handleStyle: React.CSSProperties = data.isConnectable ? {} : { visibility: "hidden" };
 
-  return (
+  const nodeContent = (
     <div style={mergedStyle}>
       <Handle type="target" position={Position.Top} style={handleStyle} />
       {data.user && <BlockieAvatar address={data.user} size={24} />}
-      <span style={{ color: data.style?.color || "inherit", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      <span
+        style={{ color: data.style?.color || "inherit", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+      >
         {data.label}
       </span>
       <Handle type="source" position={Position.Bottom} style={handleStyle} />
     </div>
   );
+
+  if (data.descriptionObjects && data.descriptionObjects.length > 0) {
+    return (
+      <div className="custom-tooltip-container">
+        {nodeContent}
+        <div className="custom-tooltip-content">
+          {data.descriptionObjects.map((descObj: { userAddress: string; description: string }, index: number) => (
+            <div key={index} className="flex items-center gap-2 mb-2 last:mb-0">
+              <BlockieAvatar address={descObj.userAddress} size={24} />
+              <span>{descObj.description}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return nodeContent;
 };
 
 const nodeTypes = {
@@ -317,378 +337,105 @@ const GraphPage: NextPage = () => {
         if (!res.ok) return;
         const json = (await res.json()) as EntityRow[];
 
-        const tempNodes: Node[] = [];
+        const childrenMap: Record<string, EntityRow[]> = json
+          .filter(r => r.relatedTo)
+          .reduce((acc, r) => {
+            const parentId = r.relatedTo as string;
+            if (!acc[parentId]) acc[parentId] = [];
+            acc[parentId].push(r);
+            return acc;
+          }, {} as Record<string, EntityRow[]>);
+
+        const mainEntities = json.filter(r => !r.relatedTo);
+
+        const tempNodes: Node[] = mainEntities.map(r => {
+          const childValues = childrenMap[r.entityId] || [];
+          const descriptionObjects: { description: string; userAddress: string }[] = [];
+          if (r.description) {
+            descriptionObjects.push({ description: r.description, userAddress: r.userAddress });
+          }
+          childValues.forEach(c => {
+            if (c.description) {
+              descriptionObjects.push({ description: c.description, userAddress: c.userAddress });
+            }
+          });
+          const aggregatedDescription = descriptionObjects.map(d => d.description).join("\n\n");
+
+          return {
+            id: r.entityId,
+            type: "avatar",
+            data: {
+              label: truncate(r.name || r.entityId.slice(0, 8), 30),
+              description: aggregatedDescription,
+              descriptionObjects,
+              user: r.userAddress,
+              cid: r.cid,
+              timestamp: r.timestamp,
+              ops: r.opsJson ? JSON.parse(r.opsJson) : undefined,
+              isConnectable: !r.relationType && !(r as any).fromEntity,
+              style:
+                r.relationType || (r as any).fromEntity
+                  ? { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" } // Green
+                  : { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" }, // Blue
+            },
+            position: { x: 0, y: 0 },
+            draggable: true,
+          };
+        });
+
         const tempEdges: Edge[] = [];
-        const nodePosMap: Record<string, { x: number; y: number }> = {};
-
-        // --- Partition entities and identify relation targets ---
-        const relationEntityRows: EntityRow[] = [];
-        const normalEntityRows: EntityRow[] = [];
-        const relationOpsMap: Record<string, any> = {};
-        const targetEntityIds = new Set<string>();
-
-        json.forEach(r => {
-          const isExplicitRelationRow = (r as any).relationType || (r as any).fromEntity;
-
-          let relOp: any | undefined;
+        mainEntities.forEach(r => {
+          // If it's a relationship, create the from/to edges
           if (r.opsJson) {
             try {
               const ops = JSON.parse(r.opsJson);
-              relOp = ops.find(
+              const relOp = ops.find(
                 (o: any) =>
                   o.type === "CREATE_RELATION" && (o.relation?.id === r.entityId || o.relation?.entity === r.entityId),
               );
-            } catch {
-              /* JSON parse error – ignore */
-            }
-          }
-
-          if (relOp) {
-            relationEntityRows.push(r);
-            relationOpsMap[r.entityId] = relOp;
-            if (relOp.relation?.toEntity) {
-              targetEntityIds.add(relOp.relation.toEntity);
-            }
-            return;
-          }
-
-          if (isExplicitRelationRow) {
-            // build a synthetic relOp from row data so downstream code can reuse the same logic
-            const fakeRelOp = {
-              relation: {
-                id: r.entityId,
-                entity: r.entityId,
-                fromEntity: (r as any).fromEntity,
-                toEntity: (r as any).toEntity,
-                type: (r as any).relationType,
-              },
-            };
-            relationEntityRows.push(r);
-            relationOpsMap[r.entityId] = fakeRelOp;
-            if ((r as any).toEntity) {
-              targetEntityIds.add((r as any).toEntity);
-            }
-            return;
-          }
-
-          normalEntityRows.push(r);
-        });
-
-        // --- Build children map ---
-        const childrenMap: Record<string, EntityRow[]> = {};
-        json.filter(r => r.relatedTo).forEach(r => {
-          const parentId = r.relatedTo as string;
-          if (!childrenMap[parentId]) childrenMap[parentId] = [];
-          childrenMap[parentId].push(r);
-        });
-
-        // --- Layout Top-Level & Bottom-Level Roots FIRST ---
-        const allRoots = normalEntityRows.filter(r => !r.relatedTo);
-        const topLevelRoots = allRoots.filter(r => !targetEntityIds.has(r.entityId));
-        const bottomLevelRoots = allRoots.filter(r => targetEntityIds.has(r.entityId));
-
-        const xSpacing = 400;
-        const yTop = 100;
-
-        topLevelRoots.forEach((root, idx) => {
-          const x = idx * xSpacing + 100;
-          const rootPos = { x, y: yTop };
-          const rootNode: Node = {
-            id: root.entityId,
-            type: "avatar",
-            data: {
-              label: truncate(root.name || root.entityId.slice(0, 6), 30),
-              description: root.description,
-              user: root.userAddress,
-              cid: root.cid,
-              timestamp: root.timestamp,
-              ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
-              style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
-              isConnectable: true,
-            },
-            position: rootPos,
-            draggable: true,
-          };
-          tempNodes.push(rootNode);
-          nodePosMap[root.entityId] = rootPos;
-
-          const valueChildren = childrenMap[root.entityId] || [];
-          if (root.description) {
-            const descId = `${root.entityId}-desc`;
-            if (!valueChildren.some(c => c.description === root.description)) {
-              valueChildren.unshift({
-                entityId: descId,
-                name: root.description.slice(0, 24),
-                description: root.description,
-                relatedTo: root.entityId,
-                userAddress: root.userAddress,
-                cid: root.cid,
-                timestamp: root.timestamp,
-                opsJson: root.opsJson,
-              } as EntityRow);
-            }
-          }
-
-          valueChildren.forEach((child, childIdx) => {
-            const horizontalOffset = (childIdx - (valueChildren.length - 1) / 2) * 140;
-            const childY = rootPos.y + 100;
-            const childNode: Node = {
-              id: child.entityId,
-              type: "avatar",
-              data: {
-                label: truncate(child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6), 30),
-                knowledgeCategoryName: root.name,
-                description: child.description,
-                user: child.userAddress,
-                cid: child.cid,
-                timestamp: child.timestamp,
-                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
-                style: { background: "#ffffff", color: "#000000" },
-                isConnectable: false,
-              },
-              position: { x: rootPos.x + horizontalOffset, y: childY },
-              draggable: true,
-            };
-            tempNodes.push(childNode);
-            nodePosMap[child.entityId] = childNode.position;
+              if (relOp) {
+                const selectedType = RELATION_TYPES.find(t => t.id === r.relationType);
+                tempEdges.push({
+                  id: `${relOp.relation.fromEntity}->${r.entityId}`,
+                  source: relOp.relation.fromEntity,
+                  target: r.entityId,
+                  label: selectedType?.label,
+                  style: { stroke: "#f59e0b", strokeWidth: 2 },
+                  markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
+                });
+                tempEdges.push({
+                  id: `${r.entityId}->${relOp.relation.toEntity}`,
+                  source: r.entityId,
+                  target: relOp.relation.toEntity,
+                  style: { stroke: "#f59e0b", strokeWidth: 2 },
+                  markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
+                });
+              }
+            } catch {}
+          } else if (r.relationType || (r as any).fromEntity) {
+            const selectedType = RELATION_TYPES.find(t => t.id === r.relationType);
             tempEdges.push({
-              id: nanoid(6),
-              source: root.entityId,
-              target: child.entityId,
-            });
-          });
-        });
-
-        // --- Spacing logic for bottom roots ---
-        const yBottom = 1200;
-        const relationsByTarget = relationEntityRows.reduce((acc, r) => {
-          const relOp = relationOpsMap[r.entityId];
-          const to = relOp.relation.toEntity;
-          if (!acc[to]) acc[to] = [];
-          acc[to].push(r);
-          return acc;
-        }, {} as Record<string, EntityRow[]>);
-        // 1. Calculate ideal initial X for each root
-        const bottomRootsWithX = bottomLevelRoots.map((root, idx) => {
-          const relationsTargetingRoot = relationsByTarget[root.entityId] || [];
-          const relNodePositions = relationsTargetingRoot.map(relRow => nodePosMap[relRow.entityId]).filter(Boolean);
-
-          let x;
-          if (relNodePositions.length > 0) {
-            x = relNodePositions.reduce((sum, pos) => sum + pos.x, 0) / relNodePositions.length;
-          } else {
-            x = idx * xSpacing + 100; // Fallback
-          }
-          return { root, x };
-        });
-
-        // 2. Sort by ideal X to place them left-to-right
-        bottomRootsWithX.sort((a, b) => a.x - b.x);
-
-        // 3. Place nodes, ensuring minimum spacing
-        const minSpacing = 350;
-        let lastPlacedX = -Infinity;
-
-        bottomRootsWithX.forEach(({ root }, idx) => {
-          let x = bottomRootsWithX[idx].x;
-
-          if (idx > 0) {
-            const minAllowedX = lastPlacedX + minSpacing;
-            if (x < minAllowedX) {
-              x = minAllowedX;
-            }
-          }
-          lastPlacedX = x;
-
-          const rootPos = { x, y: yBottom };
-          const rootNode: Node = {
-            id: root.entityId,
-            type: "avatar",
-            data: {
-              label: truncate(root.name || root.entityId.slice(0, 6), 30),
-              description: root.description,
-              user: root.userAddress,
-              cid: root.cid,
-              timestamp: root.timestamp,
-              ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
-              style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
-              isConnectable: true,
-            },
-            position: rootPos,
-            draggable: true,
-          };
-          tempNodes.push(rootNode);
-          nodePosMap[root.entityId] = rootPos;
-
-          const valueChildren = childrenMap[root.entityId] || [];
-          if (root.description) {
-            const descId = `${root.entityId}-desc`;
-            if (!valueChildren.some(c => c.description === root.description)) {
-              valueChildren.unshift({
-                entityId: descId,
-                name: root.description.slice(0, 24),
-                description: root.description,
-                relatedTo: root.entityId,
-                userAddress: root.userAddress,
-                cid: root.cid,
-                timestamp: root.timestamp,
-                opsJson: root.opsJson,
-              } as EntityRow);
-            }
-          }
-
-          valueChildren.forEach((child, childIdx) => {
-            const horizontalOffset = (childIdx - (valueChildren.length - 1) / 2) * 140;
-            const childY = rootPos.y + 100;
-            const childNode: Node = {
-              id: child.entityId,
-              type: "avatar",
-              data: {
-                label: truncate(child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6), 30),
-                knowledgeCategoryName: root.name,
-                description: child.description,
-                user: child.userAddress,
-                cid: child.cid,
-                timestamp: child.timestamp,
-                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
-                style: { background: "#ffffff", color: "#000000" },
-                isConnectable: false,
-              },
-              position: { x: rootPos.x + horizontalOffset, y: childY },
-              draggable: true,
-            };
-            tempNodes.push(childNode);
-            nodePosMap[child.entityId] = childNode.position;
-            tempEdges.push({
-              id: nanoid(6),
-              source: root.entityId,
-              target: child.entityId,
-            });
-          });
-        });
-
-        // --- Layout Relation Nodes SECOND ---
-        const relationsBySource = relationEntityRows.reduce((acc, r) => {
-          const relOp = relationOpsMap[r.entityId];
-          const from = relOp.relation.fromEntity;
-          if (!acc[from]) acc[from] = [];
-          acc[from].push(r);
-          return acc;
-        }, {} as Record<string, EntityRow[]>);
-
-        const relationSpacing = 220;
-        const yRelations = 600;
-
-        Object.entries(relationsBySource).forEach(([sourceId, relations]) => {
-          const sourcePos = nodePosMap[sourceId];
-          if (!sourcePos) return;
-
-          const total = relations.length;
-          const xStart = sourcePos.x - ((total - 1) / 2) * relationSpacing;
-
-          relations.forEach((relRow, relIdx) => {
-            const xPos = xStart + relIdx * relationSpacing;
-            let nodeLabel = relRow.name || relRow.entityId.slice(0, 6);
-            if (nodeLabel.includes(": ")) {
-              nodeLabel = nodeLabel.split(": ")[1];
-            }
-
-            const relNode: Node = {
-              id: relRow.entityId,
-              type: "avatar",
-              data: {
-                label: truncate(nodeLabel, 20),
-                description: relRow.description,
-                isRelation: true,
-                user: relRow.userAddress,
-                ops: JSON.parse(relRow.opsJson as string),
-                style: { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" },
-                isConnectable: false,
-              },
-              position: { x: xPos, y: yRelations },
-              draggable: true,
-            };
-            tempNodes.push(relNode);
-            nodePosMap[relRow.entityId] = relNode.position;
-
-            const relOp = relationOpsMap[relRow.entityId];
-            const selectedType = RELATION_TYPES.find(t => t.id === (relRow as any).relationType);
-
-            tempEdges.push({
-              id: `${relRow.entityId}-from`,
-              source: relOp.relation.fromEntity,
-              target: relRow.entityId,
+              id: `${(r as any).fromEntity}->${r.entityId}`,
+              source: (r as any).fromEntity,
+              target: r.entityId,
               label: selectedType?.label,
               style: { stroke: "#f59e0b", strokeWidth: 2 },
               markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
             });
             tempEdges.push({
-              id: `${relRow.entityId}-to`,
-              source: relRow.entityId,
-              target: relOp.relation.toEntity,
+              id: `${r.entityId}->${(r as any).toEntity}`,
+              source: r.entityId,
+              target: (r as any).toEntity,
               style: { stroke: "#f59e0b", strokeWidth: 2 },
               markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
             });
-
-            // Move target entity below this relation for a clear hierarchy
-            const targetId = relOp.relation.toEntity;
-            const targetNode = tempNodes.find(n => n.id === targetId);
-            if (targetNode) {
-              const newTargetY = yRelations + 180; // place 180px below relation
-              targetNode.position = { x: xPos, y: newTargetY };
-              nodePosMap[targetId] = targetNode.position;
-            }
-
-            const relChildren = childrenMap[relRow.entityId] || [];
-            if (relRow.description) {
-              const descId = `${relRow.entityId}-desc`;
-              if (!relChildren.some(c => c.description === relRow.description)) {
-                relChildren.unshift({
-                  entityId: descId,
-                  name: relRow.description.slice(0, 24),
-                  description: relRow.description,
-                  relatedTo: relRow.entityId,
-                  userAddress: relRow.userAddress,
-                  cid: relRow.cid,
-                  timestamp: relRow.timestamp,
-                  opsJson: relRow.opsJson,
-                } as EntityRow);
-              }
-            }
-
-            relChildren.forEach((child, childIdx) => {
-              const horizontalOffset = (childIdx - (relChildren.length - 1) / 2) * 140;
-              const childY = yRelations + 80 + childIdx * 80;
-              const childNode: Node = {
-                id: child.entityId,
-                type: "avatar",
-                data: {
-                  label: truncate(child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6), 30),
-                  knowledgeCategoryName: relRow.name,
-                  description: child.description,
-                  user: child.userAddress,
-                  cid: child.cid,
-                  timestamp: child.timestamp,
-                  ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
-                  style: { background: "#ffffff", color: "#000000" },
-                  isConnectable: false,
-                },
-                position: { x: xPos + horizontalOffset, y: childY },
-                draggable: true,
-              };
-              tempNodes.push(childNode);
-              nodePosMap[child.entityId] = childNode.position;
-              tempEdges.push({
-                id: nanoid(6),
-                source: relRow.entityId,
-                target: child.entityId,
-              });
-            });
-          });
+          }
         });
 
-        setNodes(tempNodes);
-        setEdges(tempEdges);
+        const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(tempNodes, tempEdges);
+
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
       } catch {
         /* noop */
       }

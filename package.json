@@ -54,6 +54,7 @@
     "fresh-start": "ts-node --transpile-only scripts/fresh-start.ts"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.52",
     "effect": "latest",
     "husky": "~9.1.6",
     "lint-staged": "~13.2.2"
@@ -63,6 +64,7 @@
     "node": ">=20.18.3"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.5",
     "@graphprotocol/grc-20": "latest"
   }
 }
