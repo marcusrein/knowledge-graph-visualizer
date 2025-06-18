@@ -226,9 +226,9 @@ const GraphPage: NextPage = () => {
   const [spaceId, setSpaceId] = useState<string | null>(null);
 
   // Add new state variables
-  const [selectedRelationType, setSelectedRelationType] = useState<string>("");
+  const [selectedRelationType, setSelectedRelationType] = useState("");
   const [customRelationDetails, setCustomRelationDetails] = useState("");
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   // Memoize nodeTypes and edgeTypes so they are stable across renders
   const edgeTypesMemo = useMemo(() => ({}), []);
 
@@ -563,6 +563,14 @@ const GraphPage: NextPage = () => {
         >
           <Background />
           <Controls />
+          <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10 }}>
+            <button 
+              className="btn btn-accent btn-md px-6 py-3 text-lg font-semibold" 
+              onClick={() => setIsModalOpen(true)}
+            >
+              Add New Knowledge Category
+            </button>
+          </div>
         </ReactFlow>
       </ReactFlowProvider>
 
@@ -868,16 +876,9 @@ const GraphPage: NextPage = () => {
         </div>
       )}
 
-      <button
-        className="btn btn-primary fixed bottom-4 right-4 z-50 shadow-lg"
-        onClick={() => setIsCreateModalOpen(true)}
-      >
-        ➕ Add New Knowledge
-      </button>
-
       <AddEntityModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
         spaceId={spaceId}
         userAddress={userAddress}
         walletClient={walletClient}
