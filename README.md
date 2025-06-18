@@ -67,7 +67,11 @@ Now, visit your app at `http://localhost:3000`. You can test the full flow of cr
 
 ## Resetting / Cleaning Local Data
 
-Need a fresh start for a demo or testing? The repository ships with a helper script that wipes the local SQLite database **and nothing else**:
+Need a fresh start for a demo or testing? The repository ships with helper scripts for different levels of reset:
+
+### Option 1: Quick Local Reset (keeps existing space)
+
+Wipes the local SQLite database **and nothing else**:
 
 ```bash
 # Stop the backend if it's running first
@@ -81,7 +85,30 @@ localStorage.removeItem('personalSpaceId');
 location.reload();
 ```
 
-The backend will recreate an empty database automatically on the next boot, and the UI will guide you through creating a brand-new personal space.
+The backend will recreate an empty database automatically on the next boot, and you'll continue using your existing personal space.
+
+### Option 2: Complete Fresh Start (new space + clean local data)
+
+For a completely clean slate with a brand-new personal space on The Graph:
+
+```bash
+yarn fresh-start 0xYourWalletAddress [Optional Space Name] [TESTNET|MAINNET]
+```
+
+This script will:
+1. Delete the local SQLite database
+2. Create a new personal space on Geo Genesis 
+3. Write the new space ID to `.env.local` for future reference
+4. Output the new space ID to console
+
+Example usage:
+```bash
+yarn fresh-start 0x1234567890123456789012345678901234567890
+yarn fresh-start 0x1234567890123456789012345678901234567890 "My Demo Space"
+yarn fresh-start 0x1234567890123456789012345678901234567890 "Production Space" MAINNET
+```
+
+After running either script, restart your backend and frontend to see the changes take effect.
 
 ---
 
