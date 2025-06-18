@@ -4,10 +4,9 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import type { NextPage } from "next";
 import { nanoid } from "nanoid";
-import { applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge } from "reactflow";
+import { applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge, Handle, Position } from "reactflow";
 import type { Connection } from "reactflow";
-import { BlockieAvatar } from "~~/components/scaffold-eth";
-import { Address } from "~~/components/scaffold-eth";
+import { Address, BlockieAvatar } from "~~/components/scaffold-eth";
 import { Edit } from "@graphprotocol/grc-20/proto";
 import { useAccount, useWalletClient } from "wagmi";
 import toast from "react-hot-toast";
@@ -47,6 +46,46 @@ const RELATION_TYPES = [
   { id: 'implements', label: 'Implements', description: 'Shows practical application of' },
 ] as const;
 
+const truncate = (str: string, length: number) => {
+  if (!str) return str;
+  if (str.length <= length) return str;
+  return str.slice(0, length) + "...";
+};
+
+const AvatarNode = ({ data }: { data: any }) => {
+  const baseStyle = {
+    padding: "10px 15px",
+    borderRadius: 8,
+    border: "1px solid #ddd",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    minWidth: 180,
+    maxWidth: 250,
+    justifyContent: "center",
+  };
+
+  const mergedStyle = { ...baseStyle, ...data.style };
+
+  // If not connectable, hide handles. But they must exist for edges to attach.
+  const handleStyle: React.CSSProperties = data.isConnectable ? {} : { visibility: "hidden" };
+
+  return (
+    <div style={mergedStyle}>
+      <Handle type="target" position={Position.Top} style={handleStyle} />
+      {data.user && <BlockieAvatar address={data.user} size={24} />}
+      <span style={{ color: data.style?.color || "inherit", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {data.label}
+      </span>
+      <Handle type="source" position={Position.Bottom} style={handleStyle} />
+    </div>
+  );
+};
+
+const nodeTypes = {
+  avatar: AvatarNode,
+};
+
 const GraphPage: NextPage = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -68,7 +107,6 @@ const GraphPage: NextPage = () => {
   const [selectedRelationType, setSelectedRelationType] = useState<string>('');
   const [customRelationDetails, setCustomRelationDetails] = useState('');
   // Memoize nodeTypes and edgeTypes so they are stable across renders
-  const nodeTypesMemo = useMemo(() => ({}), []);
   const edgeTypesMemo = useMemo(() => ({}), []);
 
   useEffect(() => {
@@ -225,14 +263,17 @@ const GraphPage: NextPage = () => {
         ...ns,
         {
           id: relationId,
+          type: "avatar",
           data: {
             label: entityName,
             description: customRelationDetails || relationshipDescription,
             isRelation: true,
+            user: userAddress,
+            style: { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" },
+            isConnectable: false,
           },
           position: { x: midX, y: belowY },
           draggable: true,
-          style: { background: '#0f766e', color: '#ffffff', border: '1px solid #065f46' },
         },
       ]);
     } catch (e: any) {
@@ -323,7 +364,7 @@ const GraphPage: NextPage = () => {
         const topLevelRoots = allRoots.filter(r => !targetEntityIds.has(r.entityId));
         const bottomLevelRoots = allRoots.filter(r => targetEntityIds.has(r.entityId));
 
-        const xSpacing = 400;
+        const xSpacing = 450;
         const yTop = 100;
 
         topLevelRoots.forEach((root, idx) => {
@@ -331,17 +372,19 @@ const GraphPage: NextPage = () => {
           const rootPos = { x, y: yTop };
           const rootNode: Node = {
             id: root.entityId,
+            type: "avatar",
             data: {
-              label: root.name || root.entityId.slice(0, 6),
+              label: truncate(root.name || root.entityId.slice(0, 6), 30),
               description: root.description,
               user: root.userAddress,
               cid: root.cid,
               timestamp: root.timestamp,
               ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
+              style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
+              isConnectable: true,
             },
             position: rootPos,
             draggable: true,
-            style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
           };
           tempNodes.push(rootNode);
           nodePosMap[root.entityId] = rootPos;
@@ -365,17 +408,19 @@ const GraphPage: NextPage = () => {
 
           valueChildren.forEach((child, childIdx) => {
             const childY = rootPos.y + 100 + childIdx * 80;
-            const childLabel = child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6);
             const childNode: Node = {
               id: child.entityId,
+              type: "avatar",
               data: {
-                label: childLabel,
+                label: truncate(child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6), 30),
                 knowledgeCategoryName: root.name,
                 description: child.description,
                 user: child.userAddress,
                 cid: child.cid,
                 timestamp: child.timestamp,
                 ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
+                style: { background: "#ffffff", color: "#000000" },
+                isConnectable: false,
               },
               position: { x: rootPos.x, y: childY },
               draggable: true,
@@ -399,8 +444,8 @@ const GraphPage: NextPage = () => {
           return acc;
         }, {} as Record<string, EntityRow[]>);
 
-        const relationSpacing = 220;
-        const yRelations = 450;
+        const relationSpacing = 250;
+        const yRelations = 500;
 
         Object.entries(relationsBySource).forEach(([sourceId, relations]) => {
           const sourcePos = nodePosMap[sourceId];
@@ -418,15 +463,18 @@ const GraphPage: NextPage = () => {
 
             const relNode: Node = {
               id: relRow.entityId,
+              type: "avatar",
               data: {
-                label: nodeLabel,
+                label: truncate(nodeLabel, 20),
                 description: relRow.description,
                 isRelation: true,
+                user: relRow.userAddress,
                 ops: JSON.parse(relRow.opsJson as string),
+                style: { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" },
+                isConnectable: false,
               },
               position: { x: xPos, y: yRelations },
               draggable: true,
-              style: { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" },
             };
             tempNodes.push(relNode);
             nodePosMap[relRow.entityId] = relNode.position;
@@ -469,17 +517,19 @@ const GraphPage: NextPage = () => {
 
             relChildren.forEach((child, childIdx) => {
               const childY = yRelations + 80 + childIdx * 80;
-              const childLabel = child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6);
               const childNode: Node = {
                 id: child.entityId,
+                type: "avatar",
                 data: {
-                  label: childLabel,
+                  label: truncate(child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6), 30),
                   knowledgeCategoryName: relRow.name,
                   description: child.description,
                   user: child.userAddress,
                   cid: child.cid,
                   timestamp: child.timestamp,
                   ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
+                  style: { background: "#ffffff", color: "#000000" },
+                  isConnectable: false,
                 },
                 position: { x: xPos, y: childY },
                 draggable: true,
@@ -496,7 +546,7 @@ const GraphPage: NextPage = () => {
         });
 
         // --- Layout Bottom-Level Roots ---
-        const yBottom = 800;
+        const yBottom = 850;
         const relationsByTarget = relationEntityRows.reduce((acc, r) => {
           const relOp = relationOpsMap[r.entityId];
           const to = relOp.relation.toEntity;
@@ -519,17 +569,19 @@ const GraphPage: NextPage = () => {
           const rootPos = { x, y: yBottom };
           const rootNode: Node = {
             id: root.entityId,
+            type: "avatar",
             data: {
-              label: root.name || root.entityId.slice(0, 6),
+              label: truncate(root.name || root.entityId.slice(0, 6), 30),
               description: root.description,
               user: root.userAddress,
               cid: root.cid,
               timestamp: root.timestamp,
               ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
+              style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
+              isConnectable: true,
             },
             position: rootPos,
             draggable: true,
-            style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
           };
           tempNodes.push(rootNode);
           nodePosMap[root.entityId] = rootPos;
@@ -553,17 +605,19 @@ const GraphPage: NextPage = () => {
 
           valueChildren.forEach((child, childIdx) => {
             const childY = rootPos.y + 100 + childIdx * 80;
-            const childLabel = child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6);
             const childNode: Node = {
               id: child.entityId,
+              type: "avatar",
               data: {
-                label: childLabel,
+                label: truncate(child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6), 30),
                 knowledgeCategoryName: root.name,
                 description: child.description,
                 user: child.userAddress,
                 cid: child.cid,
                 timestamp: child.timestamp,
                 ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
+                style: { background: "#ffffff", color: "#000000" },
+                isConnectable: false,
               },
               position: { x: rootPos.x, y: childY },
               draggable: true,
@@ -598,8 +652,10 @@ const GraphPage: NextPage = () => {
           onConnect={onConnect}
           isValidConnection={useCallback((connection: Connection) => connection.source !== connection.target, [])}
           fitView
-          nodeTypes={nodeTypesMemo}
+          nodeTypes={nodeTypes}
           edgeTypes={edgeTypesMemo}
+          connectionLineStyle={{ stroke: "#f59e0b", strokeWidth: 2 }}
+          defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" } }}
         >
           <Background />
           <Controls />
@@ -626,8 +682,7 @@ const GraphPage: NextPage = () => {
                   <p className="font-semibold">Author</p>
                   {selectedNode.data.user && (
                     <div className="flex items-center gap-2">
-                      <BlockieAvatar address={selectedNode.data.user} size={24} />
-                      <Address address={selectedNode.data.user} size="sm" onlyEnsOrAddress />
+                      <Address address={selectedNode.data.user} size="sm" />
                     </div>
                   )}
                 </div>
