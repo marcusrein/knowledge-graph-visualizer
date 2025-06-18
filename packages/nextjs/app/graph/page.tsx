@@ -376,8 +376,9 @@ const GraphPage: NextPage = () => {
               timestamp: r.timestamp,
               ops: r.opsJson ? JSON.parse(r.opsJson) : undefined,
               isConnectable: !r.relationType && !(r as any).fromEntity,
+              isRelationship: isRelationship,
               style:
-                r.relationType || (r as any).fromEntity
+                isRelationship
                   ? { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" } // Green
                   : { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" }, // Blue
             },
@@ -463,108 +464,203 @@ const GraphPage: NextPage = () => {
         </ReactFlow>
       </ReactFlowProvider>
 
-      {selectedNode && (
-        <div className="modal modal-open">
-          <div className="modal-box max-w-3xl">
-            <div className="flex justify-end items-center mb-4">
-              <button className="btn btn-sm btn-circle" onClick={() => setSelectedNode(null)}>✕</button>
-            </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="font-semibold">Knowledge Category</p>
-                  <p>{selectedNode.data.knowledgeCategoryName || selectedNode.data.label}</p>
-                </div>
-                <div>
-                  <p className="font-semibold">Created</p>
-                  <p>{selectedNode.data.timestamp ? new Date(selectedNode.data.timestamp).toLocaleString() : "—"}</p>
-                </div>
-                <div>
-                  <p className="font-semibold">Author</p>
-                  {selectedNode.data.user && (
-                    <div className="flex items-center gap-2">
-                      <Address address={selectedNode.data.user} size="sm" />
-                    </div>
-                  )}
-                </div>
-                {selectedNode.data.cid && (
-                  <div>
-                    <p className="font-semibold">CID</p>
-                    <button
-                      onClick={() => handleDecodeCID(selectedNode.data.cid)}
-                      className="link link-primary text-sm break-all"
-                    >
-                      {selectedNode.data.cid.replace(/^ipfs:\/\//, "")}
-                    </button>
-                  </div>
-                )}
-              </div>
+      {selectedNode &&
+        (() => {
+          const isRelationship = selectedNode.data.isRelationship;
+          const incomingEdge = isRelationship ? edges.find(edge => edge.target === selectedNode.id) : null;
+          const outgoingEdge = isRelationship ? edges.find(edge => edge.source === selectedNode.id) : null;
+          const sourceNode = incomingEdge ? nodes.find(node => node.id === incomingEdge.source) : null;
+          const targetNode = outgoingEdge ? nodes.find(node => node.id === outgoingEdge.target) : null;
 
-              {selectedNode.data.descriptionObjects && selectedNode.data.descriptionObjects.length > 0 && (
-                <div>
-                  <p className="font-semibold">Knowledge</p>
-                  <div className="bg-base-200 p-3 rounded-lg space-y-2">
-                    {selectedNode.data.descriptionObjects.map(
-                      (descObj: { userAddress: string; description: string }, index: number) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <BlockieAvatar address={descObj.userAddress} size={24} />
-                          <span>{descObj.description}</span>
-                        </div>
-                      ),
-                    )}
-                  </div>
+          return (
+            <div className="modal modal-open">
+              <div className="modal-box max-w-3xl">
+                <div className="flex justify-end items-center mb-4">
+                  <button className="btn btn-sm btn-circle" onClick={() => setSelectedNode(null)}>
+                    ✕
+                  </button>
                 </div>
-              )}
-
-              {selectedNode.data.ops && (
-                <div>
-                  <p className="font-semibold">Operations</p>
-                  <details className="bg-base-200 p-3 rounded-lg">
-                    <summary className="cursor-pointer">View Raw Ops JSON</summary>
-                    <pre className="mt-2 bg-base-300 p-3 rounded-lg text-xs font-mono overflow-x-auto max-h-64">
-                      {JSON.stringify(selectedNode.data.ops, null, 2)}
-                    </pre>
-                  </details>
-                </div>
-              )}
-
-              {isDecoding && (
-                <div className="flex items-center justify-center py-4">
-                  <span className="loading loading-spinner loading-md"></span>
-                  <span className="ml-2">Decoding IPFS data...</span>
-                </div>
-              )}
-
-              {decodedData && (
                 <div className="space-y-4">
-                  {decodedData.error ? (
-                    <div className="alert alert-error">
-                      <span>❌ Failed to decode: {decodedData.error}</span>
-                    </div>
+                  {isRelationship ? (
+                    <>
+                      <h3 className="font-bold text-xl">Relationship Details</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="font-semibold">Type</p>
+                          <p>{selectedNode.data.label}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold">Created</p>
+                          <p>
+                            {selectedNode.data.timestamp ? new Date(selectedNode.data.timestamp).toLocaleString() : "—"}
+                          </p>
+                        </div>
+                        {sourceNode && (
+                          <div>
+                            <p className="font-semibold">From</p>
+                            <p className="flex items-center gap-2">
+                              <BlockieAvatar address={sourceNode.data.user} size={16} />
+                              {sourceNode.data.label}
+                            </p>
+                          </div>
+                        )}
+                        {targetNode && (
+                          <div>
+                            <p className="font-semibold">To</p>
+                            <p className="flex items-center gap-2">
+                              <BlockieAvatar address={targetNode.data.user} size={16} />
+                              {targetNode.data.label}
+                            </p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-semibold">Author</p>
+                          {selectedNode.data.user && (
+                            <div className="flex items-center gap-2">
+                              <Address address={selectedNode.data.user} size="sm" />
+                            </div>
+                          )}
+                        </div>
+                        {selectedNode.data.cid && (
+                          <div>
+                            <p className="font-semibold">CID</p>
+                            <button
+                              onClick={() => handleDecodeCID(selectedNode.data.cid)}
+                              className="link link-primary text-sm break-all"
+                            >
+                              {selectedNode.data.cid.replace(/^ipfs:\/\//, "")}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {selectedNode.data.descriptionObjects && selectedNode.data.descriptionObjects.length > 0 && (
+                        <div>
+                          <p className="font-semibold">Additional Details</p>
+                          <div className="bg-base-200 p-3 rounded-lg space-y-2">
+                            {selectedNode.data.descriptionObjects.map(
+                              (descObj: { userAddress: string; description: string }, index: number) => (
+                                <div key={index} className="flex items-center gap-2">
+                                  <BlockieAvatar address={descObj.userAddress} size={24} />
+                                  <span>{descObj.description}</span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="font-semibold">Knowledge Category</p>
+                          <p>{selectedNode.data.knowledgeCategoryName || selectedNode.data.label}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold">Created</p>
+                          <p>
+                            {selectedNode.data.timestamp ? new Date(selectedNode.data.timestamp).toLocaleString() : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-semibold">Author</p>
+                          {selectedNode.data.user && (
+                            <div className="flex items-center gap-2">
+                              <Address address={selectedNode.data.user} size="sm" />
+                            </div>
+                          )}
+                        </div>
+                        {selectedNode.data.cid && (
+                          <div>
+                            <p className="font-semibold">CID</p>
+                            <button
+                              onClick={() => handleDecodeCID(selectedNode.data.cid)}
+                              className="link link-primary text-sm break-all"
+                            >
+                              {selectedNode.data.cid.replace(/^ipfs:\/\//, "")}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {selectedNode.data.descriptionObjects && selectedNode.data.descriptionObjects.length > 0 && (
+                        <div>
+                          <p className="font-semibold">Knowledge</p>
+                          <div className="bg-base-200 p-3 rounded-lg space-y-2">
+                            {selectedNode.data.descriptionObjects.map(
+                              (descObj: { userAddress: string; description: string }, index: number) => (
+                                <div key={index} className="flex items-center gap-2">
+                                  <BlockieAvatar address={descObj.userAddress} size={24} />
+                                  <span>{descObj.description}</span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedNode.data.ops && (
                     <div>
-                      <div className="bg-base-200 p-4 rounded-lg">
-                        <h4 className="font-semibold mb-2">Edit Metadata</h4>
-                        <p><strong>Name:</strong> {decodedData.name || "—"}</p>
-                        <p><strong>Author:</strong> {decodedData.author || "—"}</p>
-                        <p><strong>ID:</strong> {decodedData.id ? Array.from(decodedData.id as Uint8Array).map((b: number) => b.toString(16).padStart(2, '0')).join('') : "—"}</p>
-                      </div>
-                      
-                      <div className="bg-base-200 p-4 rounded-lg">
-                        <h4 className="font-semibold mb-2">Operations ({decodedData.ops?.length || 0})</h4>
-                        <pre className="bg-base-300 p-3 rounded-lg text-xs font-mono overflow-x-auto max-h-64">
-                          {JSON.stringify(decodedData.ops, null, 2)}
+                      <p className="font-semibold">Operations</p>
+                      <details className="bg-base-200 p-3 rounded-lg">
+                        <summary className="cursor-pointer">View Raw Ops JSON</summary>
+                        <pre className="mt-2 bg-base-300 p-3 rounded-lg text-xs font-mono overflow-x-auto max-h-64">
+                          {JSON.stringify(selectedNode.data.ops, null, 2)}
                         </pre>
-                      </div>
+                      </details>
+                    </div>
+                  )}
+
+                  {isDecoding && (
+                    <div className="flex items-center justify-center py-4">
+                      <span className="loading loading-spinner loading-md"></span>
+                      <span className="ml-2">Decoding IPFS data...</span>
+                    </div>
+                  )}
+
+                  {decodedData && (
+                    <div className="space-y-4">
+                      {decodedData.error ? (
+                        <div className="alert alert-error">
+                          <span>❌ Failed to decode: {decodedData.error}</span>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="bg-base-200 p-4 rounded-lg">
+                            <h4 className="font-semibold mb-2">Edit Metadata</h4>
+                            <p>
+                              <strong>Name:</strong> {decodedData.name || "—"}
+                            </p>
+                            <p>
+                              <strong>Author:</strong> {decodedData.author || "—"}
+                            </p>
+                            <p>
+                              <strong>ID:</strong>{" "}
+                              {decodedData.id
+                                ? Array.from(decodedData.id as Uint8Array)
+                                    .map((b: number) => b.toString(16).padStart(2, "0"))
+                                    .join("")
+                                : "—"}
+                            </p>
+                          </div>
+
+                          <div className="bg-base-200 p-4 rounded-lg">
+                            <h4 className="font-semibold mb-2">Operations ({decodedData.ops?.length || 0})</h4>
+                            <pre className="bg-base-300 p-3 rounded-lg text-xs font-mono overflow-x-auto max-h-64">
+                              {JSON.stringify(decodedData.ops, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
+              </div>
+              <div className="modal-backdrop" onClick={() => setSelectedNode(null)}></div>
             </div>
-          </div>
-          <div className="modal-backdrop" onClick={() => setSelectedNode(null)}></div>
-        </div>
-      )}
+          );
+        })()}
 
       {isLinking && linkSource && linkTarget && (
         <div className="modal modal-open">
