@@ -14,6 +14,7 @@ import CustomConnectionLine from "./_components/CustomConnectionLine";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { wagmiConfig } from "~~/services/web3/wagmiConfig";
 import { getLayoutedElements } from "~~/utils/grc20/layout";
+import { addKnowledge } from "~~/utils/grc20/addKnowledge";
 
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
@@ -58,7 +59,7 @@ const truncate = (str: string, length: number) => {
   return str.slice(0, length) + "...";
 };
 
-const AvatarNode = ({ data }: { data: any }) => {
+const AvatarNode = ({ id, data }: { id: string; data: any }) => {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const hideTooltipTimer = useRef<NodeJS.Timeout | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -103,7 +104,7 @@ const AvatarNode = ({ data }: { data: any }) => {
 
     setIsSubmitting(true);
     try {
-      await data.handleAddNewKnowledge(data.id, inputValue);
+      await data.handleAddNewKnowledge(id, inputValue);
       // Success, form will disappear on reload
     } catch (error) {
       // Error is handled in the main component, just reset state here
@@ -227,6 +228,19 @@ const GraphPage: NextPage = () => {
   const [customRelationDetails, setCustomRelationDetails] = useState("");
   // Memoize nodeTypes and edgeTypes so they are stable across renders
   const edgeTypesMemo = useMemo(() => ({}), []);
+
+  const handleAddNewKnowledge = async (nodeId: string, knowledgeValue: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      await addKnowledge({ nodeId, knowledgeValue, userAddress: userAddress!, walletClient, spaceId: spaceId! });
+    } catch (e: any) {
+      setError(e.message);
+      toast.error(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (error) {
@@ -414,86 +428,6 @@ const GraphPage: NextPage = () => {
     }
   };
 
-  const handleAddNewKnowledge = useCallback(
-    async (nodeId: string, knowledgeValue: string) => {
-      if (!nodeId || !knowledgeValue || !userAddress || !walletClient || !spaceId) {
-        throw new Error("Missing required data for adding knowledge.");
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        // 1. Generate ops to create the new knowledge value as a separate entity
-        const { id: newEntityId, ops } = Graph.createEntity({
-          description: knowledgeValue,
-        });
-
-        // 2. Send ops and metadata to backend to be stored and pinned
-        const uploadRes = await fetch("http://localhost:4000/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userAddress,
-            edits: ops,
-            entityId: newEntityId,
-            description: knowledgeValue,
-            spaceId,
-            relatedTo: nodeId, // This links the new knowledge to its parent entity
-          }),
-        });
-
-        if (!uploadRes.ok) {
-          const text = await uploadRes.text();
-          throw new Error(`Upload API error: ${uploadRes.status} - ${text}`);
-        }
-        const uploadJson = await uploadRes.json();
-        const cidWithPrefix: string = uploadJson.cid;
-
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // 3. Publish the edit on-chain
-        const metaRes = await fetch(`https://api-testnet.grc-20.thegraph.com/space/${spaceId}/edit/calldata`, {
-          method: "POST",
-          body: JSON.stringify({ cid: cidWithPrefix, network: "TESTNET" }),
-          headers: { "Content-Type": "application/json" },
-        });
-
-        if (!metaRes.ok) {
-          const text = await metaRes.text();
-          throw new Error(`GRC-20 API error: ${metaRes.status} - ${text}`);
-        }
-        const json = await metaRes.json();
-        const { to, data } = json;
-
-        const txPromise = async () => {
-          const hash = await walletClient.sendTransaction({ to, data: data as `0x${string}` });
-          const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
-          if (receipt.status === "reverted") {
-            throw new Error("Transaction reverted");
-          }
-        };
-
-        await toast.promise(txPromise(), {
-          loading: "Submitting transaction...",
-          success: "Transaction successful! Refreshing...",
-          error: (err: Error) => `Error: ${err.message}`,
-        });
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        window.location.reload();
-      } catch (e: any) {
-        setError(e.message);
-        console.error("Failed to add knowledge", e);
-        // Re-throw the error so the calling component knows about it
-        throw e;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [userAddress, walletClient, spaceId],
-  );
-
   useEffect(() => {
     (async () => {
       try {
@@ -541,7 +475,7 @@ const GraphPage: NextPage = () => {
               ops: r.opsJson ? JSON.parse(r.opsJson) : undefined,
               isConnectable: !isRelationship,
               isRelationship: isRelationship,
-              handleAddNewKnowledge,
+              handleAddNewKnowledge: handleAddNewKnowledge,
               style:
                 isRelationship
                   ? { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" } // Green

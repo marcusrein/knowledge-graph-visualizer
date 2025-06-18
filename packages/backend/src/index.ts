@@ -125,6 +125,7 @@ app.post("/api/upload", async (req, res) => {
 
     // Save entity record if provided
     if (entityId && spaceId) {
+      console.log("[UPLOAD] Saving entity", { entityId, relatedTo: req.body.relatedTo, parentId: req.body.parentId });
       await db("entities").insert({
         entityId,
         spaceId,
