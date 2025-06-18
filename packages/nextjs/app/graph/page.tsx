@@ -15,6 +15,7 @@ import { waitForTransactionReceipt } from "wagmi/actions";
 import { wagmiConfig } from "~~/services/web3/wagmiConfig";
 import { getLayoutedElements } from "~~/utils/grc20/layout";
 import { addKnowledge } from "~~/utils/grc20/addKnowledge";
+import AddEntityModal from "~~/components/AddEntityModal";
 
 const ReactFlow = dynamic(() => import("reactflow").then(mod => mod.ReactFlow), {
   ssr: false,
@@ -227,6 +228,7 @@ const GraphPage: NextPage = () => {
   // Add new state variables
   const [selectedRelationType, setSelectedRelationType] = useState<string>("");
   const [customRelationDetails, setCustomRelationDetails] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   // Memoize nodeTypes and edgeTypes so they are stable across renders
   const edgeTypesMemo = useMemo(() => ({}), []);
 
@@ -865,6 +867,21 @@ const GraphPage: NextPage = () => {
           ></div>
         </div>
       )}
+
+      <button
+        className="btn btn-primary fixed bottom-4 right-4 z-50 shadow-lg"
+        onClick={() => setIsCreateModalOpen(true)}
+      >
+        ➕ Add New Knowledge
+      </button>
+
+      <AddEntityModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        spaceId={spaceId}
+        userAddress={userAddress}
+        walletClient={walletClient}
+      />
     </div>
   );
 };
