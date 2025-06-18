@@ -185,10 +185,11 @@ const AvatarNode = ({ id, data }: { id: string; data: any }) => {
                   </button>
                   <button
                     onClick={handleSubmit}
-                    className="btn btn-primary btn-xs"
+                    className="btn btn-primary btn-xs flex items-center gap-1"
                     disabled={!inputValue.trim() || isSubmitting}
                   >
-                    {isSubmitting ? <span className="loading loading-spinner loading-xs"></span> : "Submit"}
+                    {isSubmitting && <span className="loading loading-spinner loading-xs"></span>}
+                    {isSubmitting ? "Submitting…" : "Submit"}
                   </button>
                 </div>
               </div>
