@@ -114,12 +114,12 @@ const GraphPage: NextPage = () => {
 
     try {
       // 1. Create/ensure properties for storing relation metadata
-      const { id: relDetailsPropertyId, ops: relDetailsPropertyOps } = Graph.createProperty({
+      const { ops: relDetailsPropertyOps } = Graph.createProperty({
         name: 'Knowledge Relationship Details',
         dataType: 'TEXT',
       });
 
-      const { id: relTimestampPropertyId, ops: relTimestampPropertyOps } = Graph.createProperty({
+      const { ops: relTimestampPropertyOps } = Graph.createProperty({
         name: 'Knowledge Relationship Timestamp',
         dataType: 'TIME',
       });
@@ -167,7 +167,8 @@ const GraphPage: NextPage = () => {
           spaceId,
           relationType: selectedType?.id,
           fromEntity: linkSource.id,
-          toEntity: linkTarget.id
+          toEntity: linkTarget.id,
+          relatedTo: linkSource.id,
         }),
       });
 
@@ -210,6 +211,24 @@ const GraphPage: NextPage = () => {
         }
       };
       setEdges(eds => addEdge(newEdge, eds));
+
+      // 7. Add a visual node for the relationship itself so it can be distinguished & positioned below the linked entities
+      const midX = (linkSource.position.x + linkTarget.position.x) / 2;
+      const belowY = Math.max(linkSource.position.y, linkTarget.position.y) + 120;
+      setNodes(ns => [
+        ...ns,
+        {
+          id: relationId,
+          data: {
+            label: selectedType?.label,
+            description: customRelationDetails || relationshipDescription,
+            isRelation: true,
+          },
+          position: { x: midX, y: belowY },
+          draggable: true,
+          style: { background: '#0f766e', color: '#ffffff', border: '1px solid #065f46' },
+        },
+      ]);
     } catch (e: any) {
       setError(e.message);
       console.error("Failed to create relationship", e);
@@ -268,12 +287,13 @@ const GraphPage: NextPage = () => {
 
         const tempNodes: Node[] = [];
         const tempEdges: Edge[] = [];
+        const nodePosMap: Record<string, {x:number,y:number}> = {};
         const xSpacing = 250;
 
         roots.forEach((root, rootIdx) => {
           const x = rootIdx * xSpacing + 100;
           // Root entity node
-          tempNodes.push({
+          const rootNode: Node = {
             id: root.entityId,
             data: { 
               label: root.name || root.entityId.slice(0, 6),
@@ -286,7 +306,9 @@ const GraphPage: NextPage = () => {
             position: { x, y: 100 },
             draggable: true,
             style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
-          });
+          };
+          tempNodes.push(rootNode);
+          nodePosMap[root.entityId] = rootNode.position;
 
           const children = [...(childrenMap[root.entityId] || [])];
 
@@ -312,7 +334,7 @@ const GraphPage: NextPage = () => {
               : child.description
                 ? child.description.slice(0, 24)
                 : child.entityId.slice(0, 6);
-            tempNodes.push({
+            const childNode: Node = {
               id: child.entityId,
               data: {
                 label: childLabel,
@@ -325,13 +347,58 @@ const GraphPage: NextPage = () => {
               },
               position: { x, y: childY },
               draggable: true,
-            });
+            };
+            tempNodes.push(childNode);
+            nodePosMap[child.entityId] = childNode.position;
             tempEdges.push({
               id: nanoid(6),
               source: root.entityId,
               target: child.entityId,
             });
           });
+        });
+
+        // Pass 2: add relation entities (teal) if present
+        json.forEach(r => {
+          if (r.opsJson) {
+            try {
+              const ops = JSON.parse(r.opsJson);
+              const relOp = ops.find((o:any)=>o.type==='CREATE_RELATION' && o.relation?.id===r.entityId);
+              if (relOp) {
+                const { fromEntity, toEntity } = relOp.relation;
+                const fromPos = nodePosMap[fromEntity];
+                const toPos = nodePosMap[toEntity];
+                if (fromPos && toPos) {
+                  const xMid = (fromPos.x + toPos.x)/2;
+                  const yBelow = Math.max(fromPos.y, toPos.y)+120;
+                  tempNodes.push({
+                    id: r.entityId,
+                    data: {
+                      label: r.name || r.entityId.slice(0,6),
+                      description: r.description,
+                      isRelation:true,
+                      ops
+                    },
+                    position:{x:xMid,y:yBelow},
+                    draggable:true,
+                    style:{background:'#0f766e',color:'#ffffff',border:'1px solid #065f46'}
+                  });
+                  tempEdges.push({
+                    id: nanoid(6),
+                    source: fromEntity,
+                    target: r.entityId,
+                    style: {stroke:'transparent'},
+                  });
+                  tempEdges.push({
+                    id: nanoid(6),
+                    source: r.entityId,
+                    target: toEntity,
+                    style: {stroke:'transparent'},
+                  });
+                }
+              }
+            }catch{}
+          }
         });
 
         setNodes(tempNodes);
