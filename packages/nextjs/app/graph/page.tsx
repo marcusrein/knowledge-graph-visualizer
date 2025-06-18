@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, memo, useCallback } from "react";
 import type { NextPage } from "next";
 import { nanoid } from "nanoid";
-import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge, EdgeProps } from "reactflow";
+import { Position, applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge } from "reactflow";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { Address } from "~~/components/scaffold-eth";
 import { Edit } from "@graphprotocol/grc-20/proto";
@@ -68,9 +68,8 @@ const nodeTypes = {
 
 // Default edge options (defined once, outside component)
 const defaultEdgeOptions = {
-  type: 'bezier',
   animated: true,
-  style: { stroke: '#94a3b8', strokeWidth: 2 },
+  style: { stroke: "#94a3b8", strokeWidth: 2 },
   markerEnd: {
     type: MarkerType.ArrowClosed,
     color: '#94a3b8',
@@ -91,27 +90,6 @@ const RELATION_TYPES = [
   { id: 'defines', label: 'Defines', description: 'Provides a definition or explanation of' },
   { id: 'implements', label: 'Implements', description: 'Shows practical application of' },
 ] as const;
-
-// Custom edge component to render an arch curve between top handles
-const ArchEdge = ({ id, sourceX, sourceY, targetX, targetY, style, markerEnd, label, labelStyle }: EdgeProps) => {
-  const dx = Math.abs(targetX - sourceX);
-  // arch height is 40% of horizontal distance, clamped between 60 and 200px
-  const archHeight = Math.max(60, Math.min(200, dx * 0.4));
-  const midY = Math.min(sourceY, targetY) - archHeight;
-  const path = `M${sourceX},${sourceY} C${sourceX},${midY} ${targetX},${midY} ${targetX},${targetY}`;
-  return (
-    <>
-      <path id={id} className="reactflow__edge-path" d={path} style={style} markerEnd={markerEnd} />
-      {label && (
-        <text>
-          <textPath href={`#${id}`} style={labelStyle} startOffset="50%" textAnchor="middle">
-            {label}
-          </textPath>
-        </text>
-      )}
-    </>
-  );
-};
 
 const GraphPage: NextPage = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -271,7 +249,6 @@ const GraphPage: NextPage = () => {
         id: relationId,
         source: linkSource.id,
         target: linkTarget.id,
-        type: 'arch',
         animated: false,
         style: { stroke: '#f59e0b', strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: '#f59e0b' },
@@ -405,7 +382,6 @@ const GraphPage: NextPage = () => {
               target: child.entityId,
               sourceHandle: "b",
               targetHandle: "target-top",
-              type: 'bezier',
             });
           });
         });
@@ -421,7 +397,6 @@ const GraphPage: NextPage = () => {
   return (
     <div style={{ height: "90vh", width: "100%" }}>
       <ReactFlow
-        edgeTypes={{ arch: ArchEdge }}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
