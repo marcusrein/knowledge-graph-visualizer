@@ -382,12 +382,12 @@ const GraphPage: NextPage = () => {
           childrenMap[parentId].push(r);
         });
 
-        // --- Layout Top-Level Roots ---
+        // --- Layout Top-Level & Bottom-Level Roots FIRST ---
         const allRoots = normalEntityRows.filter(r => !r.relatedTo);
         const topLevelRoots = allRoots.filter(r => !targetEntityIds.has(r.entityId));
         const bottomLevelRoots = allRoots.filter(r => targetEntityIds.has(r.entityId));
 
-        const xSpacing = 450;
+        const xSpacing = 400;
         const yTop = 100;
 
         topLevelRoots.forEach((root, idx) => {
@@ -459,7 +459,115 @@ const GraphPage: NextPage = () => {
           });
         });
 
-        // --- Layout Relation Nodes ---
+        // --- Spacing logic for bottom roots ---
+        const yBottom = 1200;
+        const relationsByTarget = relationEntityRows.reduce((acc, r) => {
+          const relOp = relationOpsMap[r.entityId];
+          const to = relOp.relation.toEntity;
+          if (!acc[to]) acc[to] = [];
+          acc[to].push(r);
+          return acc;
+        }, {} as Record<string, EntityRow[]>);
+        // 1. Calculate ideal initial X for each root
+        const bottomRootsWithX = bottomLevelRoots.map((root, idx) => {
+          const relationsTargetingRoot = relationsByTarget[root.entityId] || [];
+          const relNodePositions = relationsTargetingRoot.map(relRow => nodePosMap[relRow.entityId]).filter(Boolean);
+
+          let x;
+          if (relNodePositions.length > 0) {
+            x = relNodePositions.reduce((sum, pos) => sum + pos.x, 0) / relNodePositions.length;
+          } else {
+            x = idx * xSpacing + 100; // Fallback
+          }
+          return { root, x };
+        });
+
+        // 2. Sort by ideal X to place them left-to-right
+        bottomRootsWithX.sort((a, b) => a.x - b.x);
+
+        // 3. Place nodes, ensuring minimum spacing
+        const minSpacing = 350;
+        let lastPlacedX = -Infinity;
+
+        bottomRootsWithX.forEach(({ root }, idx) => {
+          let x = bottomRootsWithX[idx].x;
+
+          if (idx > 0) {
+            const minAllowedX = lastPlacedX + minSpacing;
+            if (x < minAllowedX) {
+              x = minAllowedX;
+            }
+          }
+          lastPlacedX = x;
+
+          const rootPos = { x, y: yBottom };
+          const rootNode: Node = {
+            id: root.entityId,
+            type: "avatar",
+            data: {
+              label: truncate(root.name || root.entityId.slice(0, 6), 30),
+              description: root.description,
+              user: root.userAddress,
+              cid: root.cid,
+              timestamp: root.timestamp,
+              ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
+              style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
+              isConnectable: true,
+            },
+            position: rootPos,
+            draggable: true,
+          };
+          tempNodes.push(rootNode);
+          nodePosMap[root.entityId] = rootPos;
+
+          const valueChildren = childrenMap[root.entityId] || [];
+          if (root.description) {
+            const descId = `${root.entityId}-desc`;
+            if (!valueChildren.some(c => c.description === root.description)) {
+              valueChildren.unshift({
+                entityId: descId,
+                name: root.description.slice(0, 24),
+                description: root.description,
+                relatedTo: root.entityId,
+                userAddress: root.userAddress,
+                cid: root.cid,
+                timestamp: root.timestamp,
+                opsJson: root.opsJson,
+              } as EntityRow);
+            }
+          }
+
+          valueChildren.forEach((child, childIdx) => {
+            const horizontalOffset = (childIdx - (valueChildren.length - 1) / 2) * 140;
+            const childY = rootPos.y + 100;
+            const childNode: Node = {
+              id: child.entityId,
+              type: "avatar",
+              data: {
+                label: truncate(child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6), 30),
+                knowledgeCategoryName: root.name,
+                description: child.description,
+                user: child.userAddress,
+                cid: child.cid,
+                timestamp: child.timestamp,
+                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
+                style: { background: "#ffffff", color: "#000000" },
+                isConnectable: false,
+              },
+              position: { x: rootPos.x + horizontalOffset, y: childY },
+              draggable: true,
+            };
+            tempNodes.push(childNode);
+            nodePosMap[child.entityId] = childNode.position;
+            tempEdges.push({
+              id: nanoid(6),
+              source: root.entityId,
+              target: child.entityId,
+            });
+          });
+        });
+
+        // --- Layout Relation Nodes SECOND ---
         const relationsBySource = relationEntityRows.reduce((acc, r) => {
           const relOp = relationOpsMap[r.entityId];
           const from = relOp.relation.fromEntity;
@@ -575,94 +683,6 @@ const GraphPage: NextPage = () => {
                 source: relRow.entityId,
                 target: child.entityId,
               });
-            });
-          });
-        });
-
-        // --- Layout Bottom-Level Roots ---
-        const yBottom = 1200;
-        const relationsByTarget = relationEntityRows.reduce((acc, r) => {
-          const relOp = relationOpsMap[r.entityId];
-          const to = relOp.relation.toEntity;
-          if (!acc[to]) acc[to] = [];
-          acc[to].push(r);
-          return acc;
-        }, {} as Record<string, EntityRow[]>);
-
-        bottomLevelRoots.forEach((root, idx) => {
-          const relationsTargetingRoot = relationsByTarget[root.entityId] || [];
-          const relNodePositions = relationsTargetingRoot.map(relRow => nodePosMap[relRow.entityId]).filter(Boolean);
-
-          let x;
-          if (relNodePositions.length > 0) {
-            x = relNodePositions.reduce((sum, pos) => sum + pos.x, 0) / relNodePositions.length;
-          } else {
-            x = idx * xSpacing + 100; // Fallback
-          }
-
-          const rootPos = { x, y: yBottom };
-          const rootNode: Node = {
-            id: root.entityId,
-            type: "avatar",
-            data: {
-              label: truncate(root.name || root.entityId.slice(0, 6), 30),
-              description: root.description,
-              user: root.userAddress,
-              cid: root.cid,
-              timestamp: root.timestamp,
-              ops: root.opsJson ? JSON.parse(root.opsJson) : undefined,
-              style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
-              isConnectable: true,
-            },
-            position: rootPos,
-            draggable: true,
-          };
-          tempNodes.push(rootNode);
-          nodePosMap[root.entityId] = rootPos;
-
-          const valueChildren = childrenMap[root.entityId] || [];
-          if (root.description) {
-            const descId = `${root.entityId}-desc`;
-            if (!valueChildren.some(c => c.description === root.description)) {
-              valueChildren.unshift({
-                entityId: descId,
-                name: root.description.slice(0, 24),
-                description: root.description,
-                relatedTo: root.entityId,
-                userAddress: root.userAddress,
-                cid: root.cid,
-                timestamp: root.timestamp,
-                opsJson: root.opsJson,
-              } as EntityRow);
-            }
-          }
-
-          valueChildren.forEach((child, childIdx) => {
-            const horizontalOffset = (childIdx - (valueChildren.length - 1) / 2) * 140;
-            const childY = rootPos.y + 100;
-            const childNode: Node = {
-              id: child.entityId,
-              type: "avatar",
-              data: {
-                label: truncate(child.name || child.description?.slice(0, 24) || child.entityId.slice(0, 6), 30),
-                knowledgeCategoryName: root.name,
-                description: child.description,
-                user: child.userAddress,
-                cid: child.cid,
-                timestamp: child.timestamp,
-                ops: child.opsJson ? JSON.parse(child.opsJson) : undefined,
-                style: { background: "#ffffff", color: "#000000" },
-                isConnectable: false,
-              },
-              position: { x: rootPos.x + horizontalOffset, y: childY },
-              draggable: true,
-            };
-            tempNodes.push(childNode);
-            nodePosMap[child.entityId] = childNode.position;
-            tempEdges.push({
-              id: nanoid(6),
-              source: root.entityId,
-              target: child.entityId,
             });
           });
         });
