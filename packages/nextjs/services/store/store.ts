@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import scaffoldConfig from "~~/scaffold.config";
-import { ChainWithAttributes, NETWORKS_EXTRA_DATA } from "~~/utils/scaffold-eth";
+import { ChainWithAttributes } from "~~/utils/scaffold-eth";
 
 /**
  * Zustand Store
@@ -16,7 +16,7 @@ type GlobalState = {
     price: number;
     isFetching: boolean;
   };
-  setNativeCurrencyPrice: (newNativeCurrencyPriceState: number) => void;
+  setNativeCurrencyPrice: (newNativeCurrencyPrice: number) => void;
   setIsNativeCurrencyFetching: (newIsNativeCurrencyFetching: boolean) => void;
   targetNetwork: ChainWithAttributes;
   setTargetNetwork: (newTargetNetwork: ChainWithAttributes) => void;
@@ -29,11 +29,8 @@ export const useGlobalState = create<GlobalState>(set => ({
   },
   setNativeCurrencyPrice: (newValue: number): void =>
     set(state => ({ nativeCurrency: { ...state.nativeCurrency, price: newValue } })),
-  setIsNativeCurrencyFetching: (newValue: boolean): void =>
-    set(state => ({ nativeCurrency: { ...state.nativeCurrency, isFetching: newValue } })),
-  targetNetwork: {
-    ...scaffoldConfig.targetNetworks[0],
-    ...NETWORKS_EXTRA_DATA[scaffoldConfig.targetNetworks[0].id],
-  },
+  setIsNativeCurrencyFetching: (isFetching: boolean) =>
+    set(state => ({ nativeCurrency: { ...state.nativeCurrency, isFetching } })),
+  targetNetwork: scaffoldConfig.targetNetworks[0],
   setTargetNetwork: (newTargetNetwork: ChainWithAttributes) => set(() => ({ targetNetwork: newTargetNetwork })),
 }));

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import type { NextPage } from "next";
 import { applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, Handle, Position } from "reactflow";
 import type { Connection } from "reactflow";
@@ -42,14 +42,14 @@ type EntityRow = {
 
 // Add these constants near the top after imports
 const RELATION_TYPES = [
-  { id: 'prerequisite', label: 'Is a prerequisite for', description: 'Knowledge that must be understood first' },
-  { id: 'builds-upon', label: 'Builds upon', description: 'Extends or enhances the previous knowledge' },
-  { id: 'contradicts', label: 'Contradicts', description: 'Presents conflicting information or perspective' },
-  { id: 'supports', label: 'Provides evidence for', description: 'Offers data or reasoning that supports' },
-  { id: 'example', label: 'Is an example of', description: 'Demonstrates or illustrates the concept' },
-  { id: 'related', label: 'Is related to', description: 'Has a general connection to' },
-  { id: 'defines', label: 'Defines', description: 'Provides a definition or explanation of' },
-  { id: 'implements', label: 'Implements', description: 'Shows practical application of' },
+  { id: "prerequisite", label: "Is a prerequisite for", description: "Knowledge that must be understood first" },
+  { id: "builds-upon", label: "Builds upon", description: "Extends or enhances the previous knowledge" },
+  { id: "contradicts", label: "Contradicts", description: "Presents conflicting information or perspective" },
+  { id: "supports", label: "Provides evidence for", description: "Offers data or reasoning that supports" },
+  { id: "example", label: "Is an example of", description: "Demonstrates or illustrates the concept" },
+  { id: "related", label: "Is related to", description: "Has a general connection to" },
+  { id: "defines", label: "Defines", description: "Provides a definition or explanation of" },
+  { id: "implements", label: "Implements", description: "Shows practical application of" },
 ] as const;
 
 const truncate = (str: string, length: number) => {
@@ -59,6 +59,63 @@ const truncate = (str: string, length: number) => {
 };
 
 const AvatarNode = ({ data }: { data: any }) => {
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const hideTooltipTimer = useRef<NodeJS.Timeout | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const showTooltip = () => {
+    if (hideTooltipTimer.current) {
+      clearTimeout(hideTooltipTimer.current);
+    }
+    setIsTooltipVisible(true);
+  };
+
+  const hideTooltip = () => {
+    hideTooltipTimer.current = setTimeout(() => {
+      // Don't hide if the user is actively typing or about to submit
+      if (!isAdding) {
+        setIsTooltipVisible(false);
+      }
+    }, 200);
+  };
+
+  const handleAddClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsAdding(true);
+    // Keep tooltip open
+    if (hideTooltipTimer.current) {
+      clearTimeout(hideTooltipTimer.current);
+    }
+  };
+
+  const handleCancelClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsAdding(false);
+    setInputValue("");
+    setIsTooltipVisible(false); // Optionally close tooltip on cancel
+  };
+
+  const handleSubmit = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!inputValue.trim() || !data.handleAddNewKnowledge) return;
+
+    setIsSubmitting(true);
+    try {
+      await data.handleAddNewKnowledge(data.id, inputValue);
+      // Success, form will disappear on reload
+    } catch (error) {
+      // Error is handled in the main component, just reset state here
+      console.error("Submission failed from node", error);
+    } finally {
+      setIsSubmitting(false);
+      setIsAdding(false);
+      setInputValue("");
+      setIsTooltipVisible(false);
+    }
+  };
+
   const baseStyle = {
     padding: "10px 15px",
     borderRadius: 8,
@@ -89,18 +146,54 @@ const AvatarNode = ({ data }: { data: any }) => {
     </div>
   );
 
-  if (data.descriptionObjects && data.descriptionObjects.length > 0) {
+  // Show tooltip for all non-relationship nodes, and for relationship nodes that have details.
+  const shouldShowTooltipContainer = !data.isRelationship || (data.descriptionObjects && data.descriptionObjects.length > 0);
+
+  if (shouldShowTooltipContainer) {
     return (
-      <div className="custom-tooltip-container">
+      <div className="custom-tooltip-container" onMouseEnter={showTooltip} onMouseLeave={hideTooltip}>
         {nodeContent}
-        <div className="custom-tooltip-content">
-          {data.descriptionObjects.map((descObj: { userAddress: string; description: string }, index: number) => (
-            <div key={index} className="flex items-center gap-2 mb-2 last:mb-0">
-              <BlockieAvatar address={descObj.userAddress} size={24} />
-              <span>{descObj.description}</span>
-            </div>
-          ))}
-        </div>
+        {isTooltipVisible && (
+          <div className="custom-tooltip-content" onMouseEnter={showTooltip} onMouseLeave={hideTooltip}>
+            {data.descriptionObjects &&
+              data.descriptionObjects.map((descObj: { userAddress: string; description: string }, index: number) => (
+                <div key={index} className="flex items-center gap-2 mb-2 last:mb-0">
+                  <BlockieAvatar address={descObj.userAddress} size={24} />
+                  <span>{descObj.description}</span>
+                </div>
+              ))}
+
+            {!data.isRelationship && !isAdding && (
+              <button onClick={handleAddClick} className="btn btn-primary btn-xs mt-2 w-full">
+                Add Knowledge
+              </button>
+            )}
+
+            {!data.isRelationship && isAdding && (
+              <div className="mt-2 space-y-2">
+                <textarea
+                  className="textarea textarea-bordered w-full"
+                  placeholder="Share what you know..."
+                  value={inputValue}
+                  onChange={e => setInputValue(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                />
+                <div className="flex justify-end gap-2">
+                  <button onClick={handleCancelClick} className="btn btn-ghost btn-xs">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    className="btn btn-primary btn-xs"
+                    disabled={!inputValue.trim() || isSubmitting}
+                  >
+                    {isSubmitting ? <span className="loading loading-spinner loading-xs"></span> : "Submit"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -130,8 +223,8 @@ const GraphPage: NextPage = () => {
   const [spaceId, setSpaceId] = useState<string | null>(null);
 
   // Add new state variables
-  const [selectedRelationType, setSelectedRelationType] = useState<string>('');
-  const [customRelationDetails, setCustomRelationDetails] = useState('');
+  const [selectedRelationType, setSelectedRelationType] = useState<string>("");
+  const [customRelationDetails, setCustomRelationDetails] = useState("");
   // Memoize nodeTypes and edgeTypes so they are stable across renders
   const edgeTypesMemo = useMemo(() => ({}), []);
 
@@ -143,18 +236,18 @@ const GraphPage: NextPage = () => {
 
   // Retrieve personalSpaceId from localStorage on client
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('personalSpaceId');
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("personalSpaceId");
       setSpaceId(saved);
     }
   }, []);
 
   const onNodesChange = useCallback((changes: any) => {
-    setNodes((nds) => applyNodeChanges(changes, nds));
+    setNodes(nds => applyNodeChanges(changes, nds));
   }, []);
 
   const onEdgesChange = useCallback((changes: any) => {
-    setEdges((eds) => applyEdgeChanges(changes, eds));
+    setEdges(eds => applyEdgeChanges(changes, eds));
   }, []);
 
   const onNodeClick = (_: any, node: any) => {
@@ -186,18 +279,18 @@ const GraphPage: NextPage = () => {
 
       // 1. Create/ensure properties for storing relation metadata
       const { ops: relDetailsPropertyOps } = Graph.createProperty({
-        name: 'Knowledge Relationship Details',
-        dataType: 'TEXT',
+        name: "Knowledge Relationship Details",
+        dataType: "TEXT",
       });
 
       const { ops: relTimestampPropertyOps } = Graph.createProperty({
-        name: 'Knowledge Relationship Timestamp',
-        dataType: 'TIME',
+        name: "Knowledge Relationship Timestamp",
+        dataType: "TIME",
       });
 
       // 2. Create (or reuse) a Type entity representing the selected relationship kind
       const selectedType = RELATION_TYPES.find(t => t.id === selectedRelationType);
-      if (!selectedType) throw new Error('Invalid relation type');
+      if (!selectedType) throw new Error("Invalid relation type");
 
       const { id: relationTypeId, ops: relationTypeOps } = Graph.createType({
         name: selectedType.label,
@@ -218,12 +311,7 @@ const GraphPage: NextPage = () => {
       });
 
       // Combine all ops (create property/type + relation)
-      const allOps = [
-        ...relDetailsPropertyOps,
-        ...relTimestampPropertyOps,
-        ...relationTypeOps,
-        ...relationOps,
-      ];
+      const allOps = [...relDetailsPropertyOps, ...relTimestampPropertyOps, ...relationTypeOps, ...relationOps];
 
       console.log("[LINK] Ops generated", allOps);
 
@@ -297,9 +385,9 @@ const GraphPage: NextPage = () => {
       setIsLinking(false);
       setLinkSource(null);
       setLinkTarget(null);
-      setSelectedRelationType('');
-      setRelationshipDescription('');
-      setCustomRelationDetails('');
+      setSelectedRelationType("");
+      setRelationshipDescription("");
+      setCustomRelationDetails("");
       setLoading(false);
     }
   }, [linkSource, linkTarget, selectedRelationType, relationshipDescription, customRelationDetails, userAddress, walletClient, spaceId]);
@@ -307,18 +395,14 @@ const GraphPage: NextPage = () => {
   const handleDecodeCID = async (cid: string) => {
     setIsDecoding(true);
     setDecodedData(null);
-    
     try {
       // Strip ipfs:// prefix if present
       const cleanCid = cid.replace(/^ipfs:\/\//, "");
-      
       // Fetch the binary data from IPFS
       const response = await fetch(`https://ipfs.io/ipfs/${cleanCid}`);
       if (!response.ok) throw new Error(`Failed to fetch IPFS data: ${response.status}`);
-      
       const arrayBuffer = await response.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
-      
       // Decode the binary data
       const decoded = Edit.fromBinary(uint8Array);
       setDecodedData(decoded);
@@ -329,6 +413,86 @@ const GraphPage: NextPage = () => {
       setIsDecoding(false);
     }
   };
+
+  const handleAddNewKnowledge = useCallback(
+    async (nodeId: string, knowledgeValue: string) => {
+      if (!nodeId || !knowledgeValue || !userAddress || !walletClient || !spaceId) {
+        throw new Error("Missing required data for adding knowledge.");
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        // 1. Generate ops to create the new knowledge value as a separate entity
+        const { id: newEntityId, ops } = Graph.createEntity({
+          description: knowledgeValue,
+        });
+
+        // 2. Send ops and metadata to backend to be stored and pinned
+        const uploadRes = await fetch("http://localhost:4000/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userAddress,
+            edits: ops,
+            entityId: newEntityId,
+            description: knowledgeValue,
+            spaceId,
+            relatedTo: nodeId, // This links the new knowledge to its parent entity
+          }),
+        });
+
+        if (!uploadRes.ok) {
+          const text = await uploadRes.text();
+          throw new Error(`Upload API error: ${uploadRes.status} - ${text}`);
+        }
+        const uploadJson = await uploadRes.json();
+        const cidWithPrefix: string = uploadJson.cid;
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 3. Publish the edit on-chain
+        const metaRes = await fetch(`https://api-testnet.grc-20.thegraph.com/space/${spaceId}/edit/calldata`, {
+          method: "POST",
+          body: JSON.stringify({ cid: cidWithPrefix, network: "TESTNET" }),
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!metaRes.ok) {
+          const text = await metaRes.text();
+          throw new Error(`GRC-20 API error: ${metaRes.status} - ${text}`);
+        }
+        const json = await metaRes.json();
+        const { to, data } = json;
+
+        const txPromise = async () => {
+          const hash = await walletClient.sendTransaction({ to, data: data as `0x${string}` });
+          const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
+          if (receipt.status === "reverted") {
+            throw new Error("Transaction reverted");
+          }
+        };
+
+        await toast.promise(txPromise(), {
+          loading: "Submitting transaction...",
+          success: "Transaction successful! Refreshing...",
+          error: (err: Error) => `Error: ${err.message}`,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        window.location.reload();
+      } catch (e: any) {
+        setError(e.message);
+        console.error("Failed to add knowledge", e);
+        // Re-throw the error so the calling component knows about it
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userAddress, walletClient, spaceId],
+  );
 
   useEffect(() => {
     (async () => {
@@ -375,8 +539,9 @@ const GraphPage: NextPage = () => {
               cid: r.cid,
               timestamp: r.timestamp,
               ops: r.opsJson ? JSON.parse(r.opsJson) : undefined,
-              isConnectable: !r.relationType && !(r as any).fromEntity,
+              isConnectable: !isRelationship,
               isRelationship: isRelationship,
+              handleAddNewKnowledge,
               style:
                 isRelationship
                   ? { background: "#0f766e", color: "#ffffff", border: "1px solid #065f46" } // Green
@@ -440,7 +605,7 @@ const GraphPage: NextPage = () => {
         /* noop */
       }
     })();
-  }, []);
+  }, [handleAddNewKnowledge]);
 
   return (
     <div style={{ height: "90vh", width: "100%" }}>
@@ -686,12 +851,12 @@ const GraphPage: NextPage = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="form-control">
                 <label className="label">
                   <span className="label-text font-semibold">Relationship Type</span>
                 </label>
-                <select 
+                <select
                   className="select select-bordered w-full"
                   value={selectedRelationType}
                   onChange={e => setSelectedRelationType(e.target.value)}
@@ -731,8 +896,8 @@ const GraphPage: NextPage = () => {
                   setIsLinking(false);
                   setLinkSource(null);
                   setLinkTarget(null);
-                  setSelectedRelationType('');
-                  setCustomRelationDetails('');
+                  setSelectedRelationType("");
+                  setCustomRelationDetails("");
                 }}
               >
                 Cancel
@@ -759,8 +924,8 @@ const GraphPage: NextPage = () => {
               setIsLinking(false);
               setLinkSource(null);
               setLinkTarget(null);
-              setSelectedRelationType('');
-              setCustomRelationDetails('');
+              setSelectedRelationType("");
+              setCustomRelationDetails("");
             }}
           ></div>
         </div>
