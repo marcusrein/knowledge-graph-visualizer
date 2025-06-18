@@ -1,10 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import type { NextPage } from "next";
 import { nanoid } from "nanoid";
 import { applyNodeChanges, applyEdgeChanges, Node, Edge, MarkerType, addEdge } from "reactflow";
+import type { Connection } from "reactflow";
 import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { Address } from "~~/components/scaffold-eth";
 import { Edit } from "@graphprotocol/grc-20/proto";
@@ -66,6 +67,9 @@ const GraphPage: NextPage = () => {
   // Add new state variables
   const [selectedRelationType, setSelectedRelationType] = useState<string>('');
   const [customRelationDetails, setCustomRelationDetails] = useState('');
+  // Memoize nodeTypes and edgeTypes so they are stable across renders
+  const nodeTypesMemo = useMemo(() => ({}), []);
+  const edgeTypesMemo = useMemo(() => ({}), []);
 
   useEffect(() => {
     if (error) {
@@ -289,6 +293,7 @@ const GraphPage: NextPage = () => {
             },
             position: { x, y: 100 },
             draggable: true,
+            style: { background: "#1e3a8a", color: "#ffffff", border: "1px solid #1e40af" },
           });
 
           const children = [...(childrenMap[root.entityId] || [])];
@@ -348,19 +353,21 @@ const GraphPage: NextPage = () => {
   return (
     <div style={{ height: "90vh", width: "100%" }}>
       <ReactFlowProvider>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick}
-        onConnect={onConnect}
-        isValidConnection={(connection) => connection.source !== connection.target}
-        fitView
-      >
-        <Background />
-        <Controls />
-      </ReactFlow>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
+          onConnect={onConnect}
+          isValidConnection={useCallback((connection: Connection) => connection.source !== connection.target, [])}
+          fitView
+          nodeTypes={nodeTypesMemo}
+          edgeTypes={edgeTypesMemo}
+        >
+          <Background />
+          <Controls />
+        </ReactFlow>
       </ReactFlowProvider>
 
       {selectedNode && (
