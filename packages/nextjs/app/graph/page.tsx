@@ -35,6 +35,9 @@ type EntityRow = {
   cid: string;
   timestamp: string;
   opsJson?: string;
+  relationType?: string;
+  fromEntity?: string;
+  toEntity?: string;
 };
 
 // Add these constants near the top after imports
@@ -154,6 +157,13 @@ const GraphPage: NextPage = () => {
     setError(null);
 
     try {
+      console.log("[LINK] Creating relationship", {
+        from: linkSource?.id,
+        to: linkTarget?.id,
+        selectedRelationType,
+        description: customRelationDetails || relationshipDescription,
+      });
+
       // 1. Create/ensure properties for storing relation metadata
       const { ops: relDetailsPropertyOps } = Graph.createProperty({
         name: 'Knowledge Relationship Details',
@@ -195,6 +205,8 @@ const GraphPage: NextPage = () => {
         ...relationOps,
       ];
 
+      console.log("[LINK] Ops generated", allOps);
+
       // 4. Send ops to backend
       const uploadRes = await fetch("http://localhost:4000/api/upload", {
         method: "POST",
@@ -219,6 +231,8 @@ const GraphPage: NextPage = () => {
       const uploadJson = await uploadRes.json();
       const cidWithPrefix: string = uploadJson.cid;
 
+      console.log("[LINK] Upload API response", uploadJson);
+
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // 5. Publish on-chain
@@ -235,12 +249,16 @@ const GraphPage: NextPage = () => {
       const json = await metaRes.json();
       const { to, data } = json;
 
+      console.log("[LINK] GRC-20 calldata response", json);
+
       const txPromise = async () => {
         const hash = await walletClient.sendTransaction({ to, data: data as `0x${string}` });
         const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
         if (receipt.status === "reverted") {
           throw new Error("Transaction reverted");
         }
+        console.log("[LINK] Transaction hash", hash);
+        console.log("[LINK] Transaction receipt", receipt);
       };
 
       await toast.promise(txPromise(), {
@@ -310,20 +328,49 @@ const GraphPage: NextPage = () => {
         const targetEntityIds = new Set<string>();
 
         json.forEach(r => {
+          const isExplicitRelationRow = (r as any).relationType || (r as any).fromEntity;
+
+          let relOp: any | undefined;
           if (r.opsJson) {
             try {
               const ops = JSON.parse(r.opsJson);
-              const relOp = ops.find((o: any) => o.type === "CREATE_RELATION" && o.relation?.id === r.entityId);
-              if (relOp) {
-                relationEntityRows.push(r);
-                relationOpsMap[r.entityId] = relOp;
-                if (relOp.relation.toEntity) {
-                  targetEntityIds.add(relOp.relation.toEntity);
-                }
-                return;
-              }
-            } catch {}
+              relOp = ops.find(
+                (o: any) =>
+                  o.type === "CREATE_RELATION" && (o.relation?.id === r.entityId || o.relation?.entity === r.entityId),
+              );
+            } catch {
+              /* JSON parse error – ignore */
+            }
           }
+
+          if (relOp) {
+            relationEntityRows.push(r);
+            relationOpsMap[r.entityId] = relOp;
+            if (relOp.relation?.toEntity) {
+              targetEntityIds.add(relOp.relation.toEntity);
+            }
+            return;
+          }
+
+          if (isExplicitRelationRow) {
+            // build a synthetic relOp from row data so downstream code can reuse the same logic
+            const fakeRelOp = {
+              relation: {
+                id: r.entityId,
+                entity: r.entityId,
+                fromEntity: (r as any).fromEntity,
+                toEntity: (r as any).toEntity,
+                type: (r as any).relationType,
+              },
+            };
+            relationEntityRows.push(r);
+            relationOpsMap[r.entityId] = fakeRelOp;
+            if ((r as any).toEntity) {
+              targetEntityIds.add((r as any).toEntity);
+            }
+            return;
+          }
+
           normalEntityRows.push(r);
         });
 
@@ -383,7 +430,8 @@ const GraphPage: NextPage = () => {
           }
 
           valueChildren.forEach((child, childIdx) => {
-            const childY = rootPos.y + 100 + childIdx * 80;
+            const horizontalOffset = (childIdx - (valueChildren.length - 1) / 2) * 140;
+            const childY = rootPos.y + 100;
             const childNode: Node = {
               id: child.entityId,
               type: "avatar",
@@ -398,7 +446,7 @@ const GraphPage: NextPage = () => {
                 style: { background: "#ffffff", color: "#000000" },
                 isConnectable: false,
               },
-              position: { x: rootPos.x, y: childY },
+              position: { x: rootPos.x + horizontalOffset, y: childY },
               draggable: true,
             };
             tempNodes.push(childNode);
@@ -474,6 +522,15 @@ const GraphPage: NextPage = () => {
               markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
             });
 
+            // Move target entity below this relation for a clear hierarchy
+            const targetId = relOp.relation.toEntity;
+            const targetNode = tempNodes.find(n => n.id === targetId);
+            if (targetNode) {
+              const newTargetY = yRelations + 180; // place 180px below relation
+              targetNode.position = { x: xPos, y: newTargetY };
+              nodePosMap[targetId] = targetNode.position;
+            }
+
             const relChildren = childrenMap[relRow.entityId] || [];
             if (relRow.description) {
               const descId = `${relRow.entityId}-desc`;
@@ -492,6 +549,7 @@ const GraphPage: NextPage = () => {
             }
 
             relChildren.forEach((child, childIdx) => {
+              const horizontalOffset = (childIdx - (relChildren.length - 1) / 2) * 140;
               const childY = yRelations + 80 + childIdx * 80;
               const childNode: Node = {
                 id: child.entityId,
@@ -507,7 +565,7 @@ const GraphPage: NextPage = () => {
                   style: { background: "#ffffff", color: "#000000" },
                   isConnectable: false,
                 },
-                position: { x: xPos, y: childY },
+                position: { x: xPos + horizontalOffset, y: childY },
                 draggable: true,
               };
               tempNodes.push(childNode);
@@ -580,7 +638,8 @@ const GraphPage: NextPage = () => {
           }
 
           valueChildren.forEach((child, childIdx) => {
-            const childY = rootPos.y + 100 + childIdx * 80;
+            const horizontalOffset = (childIdx - (valueChildren.length - 1) / 2) * 140;
+            const childY = rootPos.y + 100;
             const childNode: Node = {
               id: child.entityId,
               type: "avatar",
@@ -595,7 +654,7 @@ const GraphPage: NextPage = () => {
                 style: { background: "#ffffff", color: "#000000" },
                 isConnectable: false,
               },
-              position: { x: rootPos.x, y: childY },
+              position: { x: rootPos.x + horizontalOffset, y: childY },
               draggable: true,
             };
             tempNodes.push(childNode);
