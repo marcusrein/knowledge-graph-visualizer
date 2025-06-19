@@ -229,6 +229,8 @@ const GraphPage: NextPage = () => {
   const [selectedRelationType, setSelectedRelationType] = useState("");
   const [customRelationDetails, setCustomRelationDetails] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // Toggle for hiding/displaying past nodes
+  const [showOnlyLatest, setShowOnlyLatest] = useState(false);
   // Memoize nodeTypes and edgeTypes so they are stable across renders
   const edgeTypesMemo = useMemo(() => ({}), []);
 
@@ -436,7 +438,22 @@ const GraphPage: NextPage = () => {
       try {
         const res = await fetch("http://localhost:4000/api/entities");
         if (!res.ok) return;
-        const json = (await res.json()) as EntityRow[];
+        let json = (await res.json()) as EntityRow[];
+
+        // If toggle is on, only show the latest node and its relationships
+        if (showOnlyLatest && json.length > 0) {
+          // Find the latest timestamp
+          const latestTimestamp = Math.max(...json.map(r => new Date(r.timestamp).getTime()));
+          // Find the latest node(s)
+          const latestNodes = json.filter(r => new Date(r.timestamp).getTime() === latestTimestamp);
+          // Find relationships where fromEntity or toEntity is in latestNodes
+          const latestNodeIds = new Set(latestNodes.map(n => n.entityId));
+          json = json.filter(r =>
+            latestNodeIds.has(r.entityId) ||
+            latestNodeIds.has((r as any).fromEntity) ||
+            latestNodeIds.has((r as any).toEntity)
+          );
+        }
 
         const childrenMap: Record<string, EntityRow[]> = json
           .filter(r => r.relatedTo)
@@ -542,7 +559,7 @@ const GraphPage: NextPage = () => {
         /* noop */
       }
     })();
-  }, [handleAddNewKnowledge]);
+  }, [handleAddNewKnowledge, showOnlyLatest]);
 
   return (
     <div style={{ height: "90vh", width: "100%" }}>
@@ -569,6 +586,12 @@ const GraphPage: NextPage = () => {
               onClick={() => setIsModalOpen(true)}
             >
               Add New Knowledge Category
+            </button>
+            <button
+              className={`btn btn-outline btn-md ml-2 ${showOnlyLatest ? 'btn-primary' : ''}`}
+              onClick={() => setShowOnlyLatest(v => !v)}
+            >
+              {showOnlyLatest ? 'Show All Nodes' : 'Show Only Latest Node'}
             </button>
           </div>
         </ReactFlow>
