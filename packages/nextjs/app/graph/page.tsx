@@ -234,18 +234,25 @@ const GraphPage: NextPage = () => {
   // Memoize nodeTypes and edgeTypes so they are stable across renders
   const edgeTypesMemo = useMemo(() => ({}), []);
 
-  const handleAddNewKnowledge = async (nodeId: string, knowledgeValue: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-      await addKnowledge({ nodeId, knowledgeValue, userAddress: userAddress!, walletClient, spaceId: spaceId! });
-    } catch (e: any) {
-      setError(e.message);
-      toast.error(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handleAddNewKnowledge = useCallback(
+    async (nodeId: string, knowledgeValue: string) => {
+      if (!userAddress || !walletClient || !spaceId) {
+        toast.error("Please connect your wallet and select a space.");
+        return;
+      }
+      try {
+        setLoading(true);
+        setError(null);
+        await addKnowledge({ nodeId, knowledgeValue, userAddress, walletClient, spaceId });
+      } catch (e: any) {
+        setError(e.message);
+        toast.error(e.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userAddress, walletClient, spaceId],
+  );
 
   useEffect(() => {
     if (error) {

@@ -22,8 +22,11 @@ export const addKnowledge = async ({
   walletClient,
   spaceId,
 }: AddKnowledgeParams) => {
-  // 1. Build ops for new entity
-  const { id: newEntityId, ops } = Graph.createEntity({ description: knowledgeValue });
+  // 1. Build ops for new entity and relation
+  const { id: newEntityId, ops } = Graph.createEntity({
+    description: knowledgeValue,
+    name: knowledgeValue.slice(0, 32),
+  });
 
   // 2. Upload via backend so the edit is pinned to IPFS and recorded in DB
   const payload = {
@@ -33,7 +36,6 @@ export const addKnowledge = async ({
     description: knowledgeValue,
     name: knowledgeValue.slice(0, 32),
     spaceId,
-    parentId: nodeId,
     relatedTo: nodeId,
   };
 
