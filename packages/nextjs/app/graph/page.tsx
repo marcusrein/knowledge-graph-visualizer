@@ -229,8 +229,8 @@ const GraphPage: NextPage = () => {
   const [selectedRelationType, setSelectedRelationType] = useState("");
   const [customRelationDetails, setCustomRelationDetails] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  // Toggle for hiding/displaying past nodes
-  const [showOnlyLatest, setShowOnlyLatest] = useState(false);
+  // Toggle to show only nodes created today
+  const [showTodaysNodes, setShowTodaysNodes] = useState(false);
   // Memoize nodeTypes and edgeTypes so they are stable across renders
   const edgeTypesMemo = useMemo(() => ({}), []);
 
@@ -447,19 +447,55 @@ const GraphPage: NextPage = () => {
         if (!res.ok) return;
         let json = (await res.json()) as EntityRow[];
 
-        // If toggle is on, only show the latest node and its relationships
-        if (showOnlyLatest && json.length > 0) {
-          // Find the latest timestamp
-          const latestTimestamp = Math.max(...json.map(r => new Date(r.timestamp).getTime()));
-          // Find the latest node(s)
-          const latestNodes = json.filter(r => new Date(r.timestamp).getTime() === latestTimestamp);
-          // Find relationships where fromEntity or toEntity is in latestNodes
-          const latestNodeIds = new Set(latestNodes.map(n => n.entityId));
-          json = json.filter(r =>
-            latestNodeIds.has(r.entityId) ||
-            latestNodeIds.has((r as any).fromEntity) ||
-            latestNodeIds.has((r as any).toEntity)
-          );
+        if (showTodaysNodes && json.length > 0) {
+          const today = new Date();
+          const isToday = (ts: string) => {
+            const d = new Date(ts);
+            return (
+              d.getDate() === today.getDate() &&
+              d.getMonth() === today.getMonth() &&
+              d.getFullYear() === today.getFullYear()
+            );
+          };
+
+          // within showTodaysNodes block before loops add helper
+          const extractEndpoints = (row: any): string[] => {
+            const ids: string[] = [];
+            if (row.fromEntity) {
+              ids.push(row.fromEntity);
+              if (row.toEntity) ids.push(row.toEntity);
+            } else if (row.opsJson) {
+              try {
+                const ops = typeof row.opsJson === "string" ? JSON.parse(row.opsJson) : row.opsJson;
+                const relOp = ops?.find((o: any) => o.type === "CREATE_RELATION" && (o.relation?.id === row.entityId || o.relation?.entity === row.entityId));
+                if (relOp) {
+                  if (relOp.relation?.fromEntity) ids.push(relOp.relation.fromEntity);
+                  if (relOp.relation?.toEntity) ids.push(relOp.relation.toEntity);
+                }
+              } catch {}
+            }
+            return ids;
+          };
+
+          // 1️⃣ All entities (including relationships) timestamped today
+          const todayIds = new Set(json.filter(r => isToday(r.timestamp)).map(r => r.entityId));
+
+          // 2️⃣ Gather IDs directly connected to any today relationship (from / to)
+          const connectedIds = new Set<string>();
+          json.forEach(r => {
+            if (todayIds.has(r.entityId)) {
+               extractEndpoints(r).forEach(id => connectedIds.add(id));
+            }
+          });
+
+          const baseIds = new Set([...todayIds, ...connectedIds]);
+
+          // 3️⃣ Final pass: include any row whose id is in baseIds OR references baseIds
+          json = json.filter(r => {
+             if (baseIds.has(r.entityId)) return true;
+             const refs = [r.relatedTo, ...(extractEndpoints(r))];
+             return refs.some(id => baseIds.has(id as string));
+          });
         }
 
         const childrenMap: Record<string, EntityRow[]> = json
@@ -566,7 +602,7 @@ const GraphPage: NextPage = () => {
         /* noop */
       }
     })();
-  }, [handleAddNewKnowledge, showOnlyLatest]);
+  }, [handleAddNewKnowledge, showTodaysNodes]);
 
   return (
     <div style={{ height: "90vh", width: "100%" }}>
@@ -595,10 +631,10 @@ const GraphPage: NextPage = () => {
               Add New Knowledge Category
             </button>
             <button
-              className={`btn btn-outline btn-md ml-2 ${showOnlyLatest ? 'btn-primary' : ''}`}
-              onClick={() => setShowOnlyLatest(v => !v)}
+              className={`btn btn-outline btn-md ml-2 ${showTodaysNodes ? 'btn-primary' : ''}`}
+              onClick={() => setShowTodaysNodes(v => !v)}
             >
-              {showOnlyLatest ? 'Show All Nodes' : 'Show Only Latest Node'}
+              {showTodaysNodes ? 'Show All Nodes' : "Show Today's Nodes"}
             </button>
           </div>
         </ReactFlow>
