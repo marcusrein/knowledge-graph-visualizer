@@ -65,6 +65,59 @@ To get started with this starter kit, follow the steps below:
 
 Now, visit your app at `http://localhost:3000`. You can test the full flow of creating knowledge and seeing your address appear on the on-chain leaderboard.
 
+## 🧑‍🔬 Test It Yourself (5-minute guide)
+
+Want to verify the flow or show it to a teammate? Follow these exact steps in **three separate terminals** (they work on macOS / Linux / WSL / Codespaces):
+
+```bash
+# 1. Clone & install
+git clone <repo-url>
+cd <repo-name>
+yarn install
+
+# 2. Terminal A – local Ethereum chain
+yarn chain
+
+# 3. Terminal B – deploy contracts (runs only once per chain start)
+yarn deploy
+
+# 4. Terminal C – backend + frontend in watch-mode
+# (make sure you are at the **repo root**, not inside a package)
+# backend (handles IPFS uploads + SQLite DB)
+yarn backend:start
+# open a second tab in the same terminal for the frontend or open a **Terminal D**
+yarn start
+```
+
+Then open http://localhost:3000 in your browser, connect a wallet, and try:
+1. Creating a new Knowledge Category.
+2. Adding knowledge values to it.
+3. Watching your address appear on `/leaderboard`.
+
+### Environment variables
+
+The project works out-of-the-box for local usage. If you want on-chain tracking on Sepolia you can copy `.env.example` to `.env` (backend) and fill in:
+
+```env
+TRACKER_CONTRACT_ADDRESS=<address of ContributionTracker on Sepolia>
+PRIVATE_KEY=<dev wallet with some Sepolia ETH for gas>
+SEPOLIA_RPC_URL=<your RPC, e.g. from Alchemy>
+```
+
+You can still play with the UI without these values – the on-chain tracker call is skipped if they are missing.
+
+### Common gotchas
+
+* **SQLite read-only** – if you see `SQLITE_READONLY: attempt to write a readonly database`, delete the local DB and let the backend recreate it:
+  ```bash
+  yarn reset
+  ```
+  (or simply `rm -rf packages/backend/data`)
+* **Port already in use** – stop any lingering hardhat / backend / frontend processes before rerunning.
+* **Need a clean slate?** – see the full reset instructions at the end of this README (`yarn fresh-start`).
+
+Happy hacking! 🚀
+
 ## Resetting / Cleaning Local Data
 
 Need a fresh start for a demo or testing? The repository ships with helper scripts for different levels of reset:
@@ -149,46 +202,3 @@ To get started with Scaffold-ETH 2, follow the steps below:
 cd my-dapp-example
 yarn install
 ```
-
-2. Run a local network in the first terminal:
-
-```
-yarn chain
-```
-
-This command starts a local Ethereum network using Hardhat. The network runs on your local machine and can be used for testing and development. You can customize the network configuration in `packages/hardhat/hardhat.config.ts`.
-
-3. On a second terminal, deploy the test contract:
-
-```
-yarn deploy
-```
-
-This command deploys a test smart contract to the local network. The contract is located in `packages/hardhat/contracts` and can be modified to suit your needs. The `yarn deploy` command uses the deploy script located in `packages/hardhat/deploy` to deploy the contract to the network. You can also customize the deploy script.
-
-4. On a third terminal, start your NextJS app:
-
-```
-yarn start
-```
-
-Visit your app on: `http://localhost:3000`. You can interact with your smart contract using the `Debug Contracts` page. You can tweak the app config in `packages/nextjs/scaffold.config.ts`.
-
-Run smart contract test with `yarn hardhat:test`
-
-- Edit your smart contracts in `packages/hardhat/contracts`
-- Edit your frontend homepage at `packages/nextjs/app/page.tsx`. For guidance on [routing](https://nextjs.org/docs/app/building-your-application/routing/defining-routes) and configuring [pages/layouts](https://nextjs.org/docs/app/building-your-application/routing/pages-and-layouts) checkout the Next.js documentation.
-- Edit your deployment scripts in `packages/hardhat/deploy`
-
-
-## Documentation
-
-Visit our [docs](https://docs.scaffoldeth.io) to learn how to start building with Scaffold-ETH 2.
-
-To know more about its features, check out our [website](https://scaffoldeth.io).
-
-## Contributing to Scaffold-ETH 2
-
-We welcome contributions to Scaffold-ETH 2!
-
-Please see [CONTRIBUTING.MD](https://github.com/scaffold-eth/scaffold-eth-2/blob/main/CONTRIBUTING.md) for more information and guidelines for contributing to Scaffold-ETH 2.
