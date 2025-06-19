@@ -13,16 +13,17 @@ import scaffoldConfig from "~~/scaffold.config";
 
 const { onlyLocalBurnerWallet, targetNetworks } = scaffoldConfig;
 
+const includeBurner =
+  !targetNetworks.some(network => network.id !== (chains.hardhat as chains.Chain).id) || !onlyLocalBurnerWallet;
+
 const wallets = [
+  ...(includeBurner ? [rainbowkitBurnerWallet] : []), // show burner first for local dev
   metaMaskWallet,
   walletConnectWallet,
   ledgerWallet,
   coinbaseWallet,
   rainbowWallet,
   safeWallet,
-  ...(!targetNetworks.some(network => network.id !== (chains.hardhat as chains.Chain).id) || !onlyLocalBurnerWallet
-    ? [rainbowkitBurnerWallet]
-    : []),
 ];
 
 /**

@@ -39,7 +39,7 @@ export const addKnowledge = async ({
 
   console.log("[CLIENT] Upload payload", payload);
 
-  const uploadRes = await fetch("http://localhost:4000/api/upload", {
+  const uploadRes = await fetch("/api/upload", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

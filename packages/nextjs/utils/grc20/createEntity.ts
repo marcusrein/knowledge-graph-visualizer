@@ -16,7 +16,7 @@ export const createEntityOnChain = async ({ name, description, userAddress, wall
   const { id: entityId, ops } = Graph.createEntity({ name, description });
 
   // 2. Upload to backend
-  const uploadRes = await fetch("http://localhost:4000/api/upload", {
+  const uploadRes = await fetch("/api/upload", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

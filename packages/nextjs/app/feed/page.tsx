@@ -29,7 +29,7 @@ const FeedPage: NextPage = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:4000/api/entities");
+        const res = await fetch("/api/entities");
         if (!res.ok) throw new Error(`API error ${res.status}`);
         const json = (await res.json()) as EntityRow[];
         setRows(json);

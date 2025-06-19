@@ -333,7 +333,7 @@ const GraphPage: NextPage = () => {
       console.log("[LINK] Ops generated", allOps);
 
       // 4. Send ops to backend
-      const uploadRes = await fetch("http://localhost:4000/api/upload", {
+      const uploadRes = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -434,7 +434,7 @@ const GraphPage: NextPage = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:4000/api/entities");
+        const res = await fetch("/api/entities");
         if (!res.ok) return;
         const json = (await res.json()) as EntityRow[];
 

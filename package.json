@@ -51,7 +51,8 @@
     "vercel:yolo": "yarn workspace @se-2/nextjs vercel:yolo",
     "verify": "yarn hardhat:verify",
     "reset": "node scripts/clean-db.js",
-    "fresh-start": "ts-node --transpile-only scripts/fresh-start.ts"
+    "fresh-start": "ts-node --transpile-only scripts/fresh-start.ts",
+    "local:ipfs": "docker run --rm -d --name local-ipfs -p 5001:5001 -p 8080:8080 ipfs/kubo:latest daemon --migrate=true"
   },
   "devDependencies": {
     "@types/dagre": "^0.7.52",

@@ -1,8 +1,16 @@
-# 🛰 Geo Genesis + GRC-20 Starter Kit (based on Scaffold-ETH 2)
+# 🛰 GRC-20 Knowledge Graph Quickstart (Lightweight)
 
-This monorepo is a full-stack starter kit that lets you **upload knowledge to The Graph's GRC-20 standard on the Geo Genesis testnet** and compete on a fully on-chain contribution leaderboard.
+This branch trims the original Scaffold-ETH starter down to a single page demo – the **Knowledge Graph** – so new developers can clone, run, and start tinkering in seconds.
 
-It provides a hands-on-template for developers looking to build applications using the GRC-20 SDK.
+No Hardhat compile, no SQLite DB, no extra tabs.  Just:
+
+```bash
+yarn install
+yarn dev
+# → http://localhost:3000/graph
+```
+
+Inside the Graph page you can add entities, publish them to IPFS via the lightweight upload endpoint, and watch the graph lay itself out live.
 
 ## How it Works
 

@@ -52,7 +52,7 @@ const UploadPage: NextPage = () => {
       const { ops } = Graph.createEntity({ name, description });
 
       // 2. Send ops to backend to publish to IPFS & store contribution record
-      const uploadRes = await fetch("http://localhost:4000/api/upload", {
+      const uploadRes = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
