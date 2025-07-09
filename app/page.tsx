@@ -150,20 +150,24 @@ export default function GraphPage() {
     <div className="h-screen flex flex-col">
       {showIntro && (
         <div className="modal modal-open">
-          <div className="modal-box max-w-md bg-base-100 text-base-content shadow-xl border border-base-300">
-            <h3 className="font-bold text-xl mb-4 text-center">Welcome to the Knowledge Graph!</h3>
-            <p className="text-sm leading-relaxed mb-6 text-center">
-              Add nodes and connections to today&apos;s shared canvas. The graph resets daily at&nbsp;00:00&nbsp;UTC,
-              but you can browse snapshots from previous days using the date picker.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center sm:justify-end gap-3 mt-4">
-              <button className="btn btn-outline btn-sm" onClick={() => dismissIntro(false)}>Close</button>
-              <button className="btn btn-primary btn-sm" onClick={() => dismissIntro(true)}>
-                Don&apos;t show again
-              </button>
+          <div className="modal-box max-w-md glass">
+            <div className="p-4">
+              <h3 className="font-bold text-2xl mb-4 text-center">Welcome to the Knowledge Graph!</h3>
+              <p className="text-center mb-6">
+                Add nodes and connections to today&apos;s shared canvas. The graph resets daily at&nbsp;00:00&nbsp;UTC,
+                but you can browse snapshots from previous days using the date picker.
+              </p>
+              <div className="flex justify-end gap-4 mt-6">
+                <button className="btn btn-ghost" onClick={() => dismissIntro(false)}>
+                  Close
+                </button>
+                <button className="btn btn-primary" onClick={() => dismissIntro(true)}>
+                  Don&apos;t show again
+                </button>
+              </div>
             </div>
           </div>
-          <div className="modal-backdrop bg-black/50" onClick={() => dismissIntro(false)} />
+          <div className="modal-backdrop bg-black/30" onClick={() => dismissIntro(false)} />
         </div>
       )}
       <header className="p-4 flex flex-wrap gap-4 justify-between items-center bg-base-200">
