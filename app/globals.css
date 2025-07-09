@@ -10,6 +10,11 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-primary: #3b82f6;
+  --color-primary-dark: #2563eb;
+  --color-base-100: #ffffff;
+  --color-base-200: #f3f4f6;
+  --color-base-300: #e5e7eb;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,10 +22,82 @@
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+  
+  @theme inline {
+    --color-base-100: #1f2937;
+    --color-base-200: #111827;
+    --color-base-300: #374151;
+  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Custom button styles */
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg border transition-all duration-200 cursor-pointer;
+  @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.btn-sm {
+  @apply px-3 py-1.5 text-xs;
+}
+
+.btn-primary {
+  @apply bg-blue-600 text-white border-blue-600 hover:bg-blue-700 focus:ring-blue-500;
+  @apply shadow-sm hover:shadow-md;
+}
+
+.btn-outline {
+  @apply bg-transparent border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500;
+  @apply dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800;
+}
+
+.btn-outline-primary {
+  @apply border-blue-600 text-blue-600 hover:bg-blue-50 focus:ring-blue-500;
+  @apply dark:hover:bg-blue-900/20;
+}
+
+/* Custom input styles */
+.input {
+  @apply block w-full rounded-md border px-3 py-2 text-sm;
+  @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  @apply transition-colors duration-200;
+}
+
+.input-sm {
+  @apply px-2 py-1 text-xs;
+}
+
+.input-bordered {
+  @apply border-gray-300 bg-white focus:border-blue-500 focus:ring-blue-500;
+  @apply dark:border-gray-600 dark:bg-gray-800 dark:text-white;
+}
+
+.input-primary {
+  @apply border-blue-500 ring-blue-500;
+}
+
+/* Base color utilities */
+.bg-base-100 {
+  @apply bg-white dark:bg-gray-900;
+}
+
+.bg-base-200 {
+  @apply bg-gray-100 dark:bg-gray-800;
+}
+
+.bg-base-300 {
+  @apply bg-gray-200 dark:bg-gray-700;
+}
+
+.border-base-300 {
+  @apply border-gray-200 dark:border-gray-700;
 }

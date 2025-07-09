@@ -149,35 +149,42 @@ export default function GraphPage() {
   return (
     <div className="h-screen flex flex-col">
       {showIntro && (
-        <div className="modal modal-open">
-          <div className="modal-box max-w-lg" data-theme="light">
-            <h3 className="font-bold text-2xl mb-4">Welcome to the Knowledge Graph!</h3>
-            <p className="py-4">
-              This is a collaborative canvas. Add nodes and connections, and see edits from others in real-time. The
-              graph resets daily, but you can always view snapshots from previous days using the date picker.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl p-6 space-y-6">
+            <h2 className="text-2xl font-bold text-gray-800">Welcome to the Knowledge Graph!</h2>
+            <p className="text-gray-600 leading-relaxed">
+              This collaborative canvas resets daily at&nbsp;00:00&nbsp;UTC. Add nodes and connections today, and use the
+              date picker to explore snapshots from previous days.
             </p>
-            <div className="modal-action">
-              <button className="btn btn-ghost" onClick={() => dismissIntro(false)}>
+            <div className="flex justify-end gap-4">
+              <button
+                className="btn btn-outline"
+                onClick={() => dismissIntro(false)}
+              >
                 Close
               </button>
-              <button className="btn btn-primary" onClick={() => dismissIntro(true)}>
+              <button
+                className="btn btn-primary"
+                onClick={() => dismissIntro(true)}
+              >
                 Don&apos;t Show Again
               </button>
             </div>
           </div>
-          <div className="modal-backdrop bg-black/50" onClick={() => dismissIntro(false)} />
         </div>
       )}
-      <header className="p-4 flex flex-wrap gap-4 justify-between items-center bg-base-200">
+      <header className="p-4 flex flex-wrap gap-4 justify-between items-center bg-base-200 border-b border-base-300">
         <h1 className="text-xl font-bold">Knowledge Graph</h1>
         <div className="flex gap-2 items-center">
-          <input
-            type="date"
-            className="input input-sm"
-            value={selectedDate}
-            max={today}
-            onChange={(e) => setSelectedDate(e.target.value)}
-          />
+          <div className="relative">
+            <input
+              type="date"
+              className="input input-sm input-bordered hover:border-blue-500 focus:input-primary cursor-pointer"
+              value={selectedDate}
+              max={today}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
           <button
             className="btn btn-primary btn-sm"
             onClick={handleAddNode}
@@ -186,7 +193,7 @@ export default function GraphPage() {
             Add Node
           </button>
           {address ? (
-            <button className="btn btn-outline btn-sm" onClick={() => disconnect()}>
+            <button className="btn btn-outline btn-sm hover:btn-outline-primary font-mono" onClick={() => disconnect()}>
               {address.slice(0, 6)}…{address.slice(-4)}
             </button>
           ) : (
