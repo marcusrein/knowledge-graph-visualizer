@@ -1,5 +1,6 @@
 import { memo, useState, useEffect } from 'react';
 import { Node } from 'reactflow';
+import { deepEqual } from '@/lib/utils'; // We will create this utility function
 
 interface InspectorProps {
   selectedNode: Node | null;
@@ -14,14 +15,16 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
   useEffect(() => {
     if (selectedNode) {
       setLabel(selectedNode.data.label);
-      setProperties(selectedNode.data.properties || {});
+      setProperties(JSON.parse(selectedNode.data.properties || '{}'));
     }
   }, [selectedNode]);
 
   if (!selectedNode) return null;
 
   const isRelation = /^\d+$/.test(selectedNode.id);
-  const hasChanges = label !== selectedNode.data.label;
+  const hasChanges =
+    label !== selectedNode.data.label ||
+    !deepEqual(properties, JSON.parse(selectedNode.data.properties || '{}'));
 
   const handleSave = () => {
     onSave(selectedNode.id, {
@@ -29,6 +32,32 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
       properties,
     });
   };
+
+  const handlePropertyChange = (oldKey: string, newKey: string, value: string) => {
+    setProperties(currentProperties => {
+      const newProperties: Record<string, any> = {};
+      Object.entries(currentProperties).forEach(([key, val]) => {
+        if (key === oldKey) {
+          newProperties[newKey] = value;
+        } else {
+          newProperties[key] = val;
+        }
+      });
+      return newProperties;
+    });
+  };
+
+  const handleAddProperty = () => {
+    const newKey = `newProperty${Object.keys(properties).length + 1}`;
+    setProperties({ ...properties, [newKey]: '' });
+  };
+
+  const handleRemoveProperty = (key: string) => {
+    const newProperties = { ...properties };
+    delete newProperties[key];
+    setProperties(newProperties);
+  };
+
 
   return (
     <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
@@ -62,11 +91,33 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
 
         <div className="divider">Properties</div>
 
-        <div className="text-sm text-gray-500 text-center py-4">
-          {Object.keys(properties).length > 0
-            ? JSON.stringify(properties, null, 2)
-            : 'No properties yet.'}
+        <div className="space-y-2">
+          {Object.entries(properties).map(([key, value]) => (
+            <div key={key} className="flex items-center gap-2">
+              <input
+                type="text"
+                className="input input-bordered input-sm w-full"
+                value={key}
+                placeholder="key"
+                onChange={(e) => handlePropertyChange(key, e.target.value, value)}
+              />
+              <input
+                type="text"
+                className="input input-bordered input-sm w-full"
+                value={value}
+                placeholder="value"
+                onChange={(e) => handlePropertyChange(key, key, e.target.value)}
+              />
+              <button onClick={() => handleRemoveProperty(key)} className="btn btn-ghost btn-sm">
+                &times;
+              </button>
+            </div>
+          ))}
         </div>
+
+        <button onClick={handleAddProperty} className="btn btn-sm btn-outline mt-2 w-full">
+          + Add Property
+        </button>
       </div>
 
       <div className="mt-6">

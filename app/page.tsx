@@ -203,7 +203,7 @@ export default function GraphPage() {
       const entityNodes = entitiesQuery.data.map((e) => ({
         id: e.nodeId,
         type: 'default', // Make entities visually distinct if needed later
-        data: { label: e.label },
+        data: { label: e.label, properties: e.properties },
         position: {
           x: e.x ?? Math.random() * 400,
           y: e.y ?? Math.random() * 400,
@@ -213,7 +213,7 @@ export default function GraphPage() {
       const relationNodes = relationsQuery.data.map((r) => ({
         id: String(r.id),
         type: 'relation', // Use our custom node type
-        data: { label: r.relationType },
+        data: { label: r.relationType, properties: r.properties },
         position: {
           x: r.x ?? Math.random() * 400,
           y: r.y ?? Math.random() * 400,
