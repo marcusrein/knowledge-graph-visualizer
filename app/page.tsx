@@ -22,6 +22,7 @@ import toast from 'react-hot-toast';
 
 import RelationNode from '@/components/RelationNode';
 import Inspector from '@/components/Inspector';
+import { useTerminology } from '@/lib/TerminologyContext';
 
 const nodeTypes = {
   relation: RelationNode,
@@ -38,6 +39,7 @@ export default function GraphPage() {
   const { address } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
+  const { mode, toggleMode, getTerm } = useTerminology();
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
@@ -261,7 +263,7 @@ export default function GraphPage() {
 
       // Prevent connecting to/from a relation node
       if (isSourceNumeric || isTargetNumeric) {
-        toast.error('Can only connect main entities');
+        toast.error(getTerm('ERROR_CONNECT_ENTITIES'));
         return;
       }
 
@@ -287,7 +289,7 @@ export default function GraphPage() {
     const randY = Math.random() * 400;
     addEntity.mutate({
       nodeId,
-      label: `Node ${nodes.length + 1}`,
+      label: `${getTerm('ENTITY')} ${nodes.filter(n => !isNumeric(n.id)).length + 1}`,
       type: 'category',
       userAddress: address,
       x: randX,
@@ -371,7 +373,23 @@ export default function GraphPage() {
         </div>
       )}
       <header className="p-4 flex flex-wrap gap-4 justify-between items-center bg-base-200 border-b border-base-300">
-        <h1 className="text-xl font-bold">Knowledge Graph</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold">Knowledge Graph</h1>
+          <div className="flex items-center gap-2 p-1 rounded-full bg-base-300">
+            <button
+              onClick={toggleMode}
+              className={`btn btn-sm ${mode === 'normie' ? 'btn-primary' : 'btn-ghost'}`}
+            >
+              Normie
+            </button>
+            <button
+              onClick={toggleMode}
+              className={`btn btn-sm ${mode === 'dev' ? 'btn-primary' : 'btn-ghost'}`}
+            >
+              Dev
+            </button>
+          </div>
+        </div>
         <div className="flex gap-2 items-center">
           <div className="relative">
             <input

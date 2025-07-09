@@ -1,6 +1,7 @@
 import { memo, useState, useEffect } from 'react';
 import { Node } from 'reactflow';
 import { deepEqual } from '@/lib/utils'; // We will create this utility function
+import { useTerminology } from '@/lib/TerminologyContext';
 
 interface InspectorProps {
   selectedNode: Node | null;
@@ -9,6 +10,7 @@ interface InspectorProps {
 }
 
 const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
+  const { getTerm } = useTerminology();
   const [label, setLabel] = useState('');
   const [properties, setProperties] = useState<Record<string, any>>({});
 
@@ -63,7 +65,9 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
   return (
     <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold">{isRelation ? 'Relation Details' : 'Entity Details'}</h3>
+        <h3 className="text-xl font-bold">
+          {isRelation ? getTerm('RELATION') : getTerm('ENTITY')} Details
+        </h3>
         <button onClick={onClose} className="btn btn-sm btn-ghost">
           &times;
         </button>
@@ -85,12 +89,12 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
           <input
             type="text"
             className="input input-bordered w-full"
-            value={isRelation ? 'Relation' : 'Entity'}
+            value={isRelation ? getTerm('RELATION') : getTerm('ENTITY')}
             readOnly
           />
         </div>
 
-        <div className="divider">Properties</div>
+        <div className="divider">{getTerm('PROPERTIES')}</div>
 
         <div className="space-y-2">
           {Object.entries(properties).map(([key, value], index) => (
