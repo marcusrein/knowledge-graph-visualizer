@@ -150,7 +150,7 @@ export default function GraphPage() {
     <div className="h-screen flex flex-col">
       {showIntro && (
         <div className="modal modal-open">
-          <div className="modal-box max-w-md bg-base-200 text-base-content shadow-xl">
+          <div className="modal-box max-w-md bg-base-100 text-base-content shadow-xl border border-base-300">
             <h3 className="font-bold text-xl mb-4 text-center">Welcome to the Knowledge Graph!</h3>
             <p className="text-sm leading-relaxed mb-6 text-center">
               Add nodes and connections to today&apos;s shared canvas. The graph resets daily at&nbsp;00:00&nbsp;UTC,
