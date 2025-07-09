@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
 import ReactFlow, {
   Background,
@@ -19,6 +19,7 @@ import 'reactflow/dist/style.css';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import toast from 'react-hot-toast';
+import usePartySocket from 'partysocket/react';
 
 import RelationNode from '@/components/RelationNode';
 import Inspector from '@/components/Inspector';
@@ -42,6 +43,27 @@ export default function GraphPage() {
   const { mode, toggleMode, getTerm } = useTerminology();
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const [selectedDate, setSelectedDate] = useState<string>(today);
+  const [showIntro, setShowIntro] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  const socket = usePartySocket({
+    host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || '127.0.0.1:1999',
+    room: selectedDate,
+    onMessage(event) {
+      const message = JSON.parse(event.data);
+      if (message.type === 'node-move') {
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.id === message.payload.nodeId
+              ? { ...n, position: message.payload.position }
+              : n
+          )
+        );
+      }
+    },
+  });
 
   useEffect(() => {
     if (connectError) {
@@ -55,11 +77,6 @@ export default function GraphPage() {
   }, [connectError]);
 
   /* ---------- hydration & modal ---------- */
-  const [mounted, setMounted] = useState(false);
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const [selectedDate, setSelectedDate] = useState<string>(today);
-  const [showIntro, setShowIntro] = useState(false);
-
   useEffect(() => {
     setMounted(true);
     const hide = localStorage.getItem('kg_hide_intro');
@@ -321,14 +338,18 @@ export default function GraphPage() {
   const onNodeDragStop = useCallback(
     (_evt: any, node: Node) => {
       if (address) {
+        const payload = { nodeId: node.id, x: node.position.x, y: node.position.y };
+        // Optimistically update via websocket, then persist via API
+        socket.send(JSON.stringify({ type: 'node-move', payload: { nodeId: node.id, position: node.position } }));
+
         if (isNumeric(node.id)) {
-          updateRelationPosition.mutate({ id: node.id, x: node.position.x, y: node.position.y });
+          updateRelationPosition.mutate({ id: node.id, x: payload.x, y: payload.y });
         } else {
-          updatePosition.mutate({ nodeId: node.id, x: node.position.x, y: node.position.y });
+          updatePosition.mutate(payload);
         }
       }
     },
-    [address, updatePosition, updateRelationPosition]
+    [address, updatePosition, updateRelationPosition, socket]
   );
 
   const onNodeClick = useCallback((_evt: any, node: Node) => {
