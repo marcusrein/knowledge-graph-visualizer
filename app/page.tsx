@@ -15,10 +15,19 @@ import 'reactflow/dist/style.css';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
+import { useConnect } from 'wagmi';
+import toast from 'react-hot-toast';
 
 export default function GraphPage() {
   const queryClient = useQueryClient();
   const { address } = useAccount();
+  const { error: connectError } = useConnect();
+
+  useEffect(() => {
+    if (connectError && (connectError as any).name === 'ConnectorNotFoundError') {
+      toast.error('No browser wallet detected. Install MetaMask or choose WalletConnect.');
+    }
+  }, [connectError]);
 
   /* ---------- hydration & modal ---------- */
   const [mounted, setMounted] = useState(false);

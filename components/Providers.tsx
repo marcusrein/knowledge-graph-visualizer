@@ -5,6 +5,7 @@ import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, darkTheme, lightTheme } from '@rainbow-me/rainbowkit';
 import { wagmiConfig } from '@/lib/wallet';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ export function Providers({ children }: { children: ReactNode }) {
           }}
         >
           {children}
+          <Toaster position="top-right" />
         </RainbowKitProvider>
       </WagmiProvider>
     </QueryClientProvider>
