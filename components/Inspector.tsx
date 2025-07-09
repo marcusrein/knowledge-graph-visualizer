@@ -33,17 +33,18 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
     });
   };
 
-  const handlePropertyChange = (oldKey: string, newKey: string, value: string) => {
+  const handlePropertyChange = (index: number, part: 'key' | 'value', value: string) => {
     setProperties(currentProperties => {
-      const newProperties: Record<string, any> = {};
-      Object.entries(currentProperties).forEach(([key, val]) => {
-        if (key === oldKey) {
-          newProperties[newKey] = value;
-        } else {
-          newProperties[key] = val;
-        }
-      });
-      return newProperties;
+      const entries = Object.entries(currentProperties);
+      const [currentKey, currentValue] = entries[index];
+
+      if (part === 'key') {
+        entries[index] = [value, currentValue];
+      } else {
+        entries[index] = [currentKey, value];
+      }
+      
+      return Object.fromEntries(entries);
     });
   };
 
@@ -92,21 +93,21 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
         <div className="divider">Properties</div>
 
         <div className="space-y-2">
-          {Object.entries(properties).map(([key, value]) => (
-            <div key={key} className="flex items-center gap-2">
+          {Object.entries(properties).map(([key, value], index) => (
+            <div key={index} className="flex items-center gap-2">
               <input
                 type="text"
                 className="input input-bordered input-sm w-full"
                 value={key}
                 placeholder="key"
-                onChange={(e) => handlePropertyChange(key, e.target.value, value)}
+                onChange={(e) => handlePropertyChange(index, 'key', e.target.value)}
               />
               <input
                 type="text"
                 className="input input-bordered input-sm w-full"
                 value={value}
                 placeholder="value"
-                onChange={(e) => handlePropertyChange(key, key, e.target.value)}
+                onChange={(e) => handlePropertyChange(index, 'value', e.target.value)}
               />
               <button onClick={() => handleRemoveProperty(key)} className="btn btn-ghost btn-sm">
                 &times;
