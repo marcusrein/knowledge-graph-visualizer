@@ -51,7 +51,7 @@ export default function GraphPage() {
   const { address } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
-  const { mode, toggleMode, getTerm } = useTerminology();
+  const { getTerm } = useTerminology();
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [presentUsers, setPresentUsers] = useState<PresentUser[]>([]);
@@ -159,7 +159,26 @@ export default function GraphPage() {
       if (!res.ok) throw new Error('Failed to save node data');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      // After successfully saving, update the node in React Flow state
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === variables.nodeId) {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                ...variables.data,
+                // Ensure label is updated from the server response if available
+                label: data.label || data.relationType || n.data.label,
+              },
+            };
+          }
+          return n;
+        })
+      );
+      // Invalidate queries to refetch from the source of truth if needed,
+      // though the manual update above provides a snappier feel.
       queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
       queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
     },
@@ -178,8 +197,11 @@ export default function GraphPage() {
         throw new Error(error.error || 'Failed to delete relation');
       }
     },
-    // No optimistic update, just refetch on success
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      // Optimistically remove the node and its edges
+      setNodes((nds) => nds.filter((n) => n.id !== variables.id));
+      setEdges((eds) => eds.filter((e) => e.source !== variables.id && e.target !== variables.id));
+      setSelectedNode(null);
       queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
     },
   });
@@ -197,7 +219,11 @@ export default function GraphPage() {
         throw new Error(error.error || 'Failed to delete node');
       }
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      // Optimistically remove the node and its edges
+      setNodes((nds) => nds.filter((n) => n.id !== variables.nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== variables.nodeId && e.target !== variables.nodeId));
+      setSelectedNode(null);
       queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
       queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
     },
@@ -229,7 +255,22 @@ export default function GraphPage() {
       });
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] }),
+    onSuccess: (newNodeData) => {
+      // Add the new node to the state optimistically
+      const newNode = {
+        id: newNodeData.id,
+        position: { x: 200, y: 150 },
+        data: { label: newNodeData.label || 'New Topic' },
+        style: {
+          backgroundColor: '#fff',
+          color: '#000',
+          border: '1px solid #ddd',
+        },
+      };
+      setNodes((nds) => [...nds, newNode]);
+      setSelectedNode(newNode);
+      queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
+    },
   });
 
   const addRelation = useMutation({
@@ -307,230 +348,192 @@ export default function GraphPage() {
   }, [entitiesQuery.data, relationsQuery.data, selections]);
 
   const onConnect = useCallback(
-    (connection: Connection) => {
-      console.log('Attempting connection:', connection);
-      console.log('Current nodes in state:', nodes);
-      if (!address || !connection.source || !connection.target) return;
+    (params: Connection | Edge) => {
+      const { source, sourceHandle, target, targetHandle } = params;
 
-      const sourceNode = nodes.find((n) => n.id === connection.source);
-      const targetNode = nodes.find((n) => n.id === connection.target);
+      // prevent self-looping connections
+      if (source === target) return;
 
-      console.log('Found source node:', sourceNode);
-      console.log('Found target node:', targetNode);
-
-      if (!sourceNode || !targetNode) return;
-
-      const isSourceNumeric = isNumeric(sourceNode.id);
-      const isTargetNumeric = isNumeric(targetNode.id);
-      console.log(`Checking IDs: source is numeric? ${isSourceNumeric}, target is numeric? ${isTargetNumeric}`);
-
-      // Prevent connecting to/from a relation node
-      if (isSourceNumeric || isTargetNumeric) {
-        toast.error(getTerm('ERROR_CONNECT_ENTITIES'));
-        return;
-      }
-
-      const x = (sourceNode.position.x + targetNode.position.x) / 2;
-      const y = (sourceNode.position.y + targetNode.position.y) / 2;
+      const newEdge: Edge = {
+        ...params,
+        id: `${source}-${target}`,
+        // animated: true,
+      };
 
       addRelation.mutate({
-        sourceId: connection.source,
-        targetId: connection.target,
-        relationType: 'related',
-        userAddress: address,
-        x,
-        y,
+        fromId: source,
+        toId: target,
+        relationType: 'connected to',
+        date: selectedDate,
       });
+
+      setEdges((eds) => addEdge(newEdge, eds));
     },
-    [address, addRelation, nodes]
+    [addRelation, selectedDate]
   );
 
   const handleAddNode = () => {
-    if (!address || selectedDate !== today) return;
-    const nodeId = crypto.randomUUID();
-    const randX = Math.random() * 400;
-    const randY = Math.random() * 400;
     addEntity.mutate({
-      nodeId,
-      label: `${getTerm('ENTITY')} ${nodes.filter(n => !isNumeric(n.id)).length + 1}`,
-      type: 'category',
-      userAddress: address,
-      x: randX,
-      y: randY,
+      label: 'New Topic',
+      type: 'topic',
+      x: 200,
+      y: 150,
+      properties: {},
+      date: selectedDate,
     });
   };
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      const isDraggable = selectedDate === today && address;
-      setNodes((nds) => applyNodeChanges(changes, nds));
-
-      if (isDraggable) {
-        for (const change of changes) {
-          if (change.type === 'remove') {
-            // Check if it's a relation (numeric ID) or entity (UUID)
-            if (isNumeric(change.id)) {
-              deleteRelation.mutate({ id: change.id });
-            } else {
-              deleteEntity.mutate({ nodeId: change.id });
-            }
-          }
-        }
-      }
-    },
-    [address, selectedDate, today, deleteEntity, deleteRelation]
-  );
-
   const onNodeDragStop = useCallback(
-    (_evt: any, node: Node) => {
-      if (address) {
-        const payload = { nodeId: node.id, x: node.position.x, y: node.position.y };
-        // Optimistically update via websocket, then persist via API
-        socket.send(JSON.stringify({ type: 'node-move', payload: { nodeId: node.id, position: node.position } }));
+    (_: any, node: Node) => {
+      socket.send(JSON.stringify({
+        type: 'node-move',
+        payload: { nodeId: node.id, position: node.position },
+      }));
 
-        if (isNumeric(node.id)) {
-          updateRelationPosition.mutate({ id: node.id, x: payload.x, y: payload.y });
-        } else {
-          updatePosition.mutate(payload);
-        }
+      // Persist position change to the database
+      if (isNumeric(node.id)) {
+        updateRelationPosition.mutate({
+          id: node.id,
+          x: node.position.x,
+          y: node.position.y,
+        });
+      } else {
+        updatePosition.mutate({
+          nodeId: node.id,
+          x: node.position.x,
+          y: node.position.y,
+        });
       }
     },
-    [address, updatePosition, updateRelationPosition, socket]
+    [socket, updatePosition, updateRelationPosition]
   );
 
-  const onNodeClick = useCallback(
-    (_evt: any, node: Node) => {
-      setSelectedNode(node);
-      socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
-    },
-    [socket]
+  const handlePaneClick = () => {
+    setSelectedNode(null);
+    socket.send(JSON.stringify({ type: 'selection', nodeId: null }));
+  };
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    []
   );
 
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      // For now, prevent edge deletion since they are managed by relation nodes
-      const isEditable = selectedDate === today && address;
-      const filteredChanges = changes.filter(c => c.type !== 'remove');
-      setEdges((eds) => applyEdgeChanges(filteredChanges, eds));
-    },
-    [address, selectedDate, today]
+    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+    []
   );
 
+  const handleNodeClick = (_: any, node: Node) => {
+    setSelectedNode(node);
+    socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
+  };
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-screen flex flex-col">
-      {showIntro && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl p-6 space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800">Welcome to the Knowledge Graph!</h2>
-            <p className="text-gray-600 leading-relaxed">
-              This collaborative canvas resets daily at&nbsp;00:00&nbsp;UTC. Add nodes and connections today, and use the
-              date picker to explore snapshots from previous days.
-            </p>
-            <div className="flex justify-end gap-4">
-              <button
-                className="btn btn-outline"
-                onClick={() => dismissIntro(false)}
-              >
-                Close
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => dismissIntro(true)}
-              >
-                Don&apos;t Show Again
-              </button>
-            </div>
+    <div className="flex h-screen bg-gray-800 text-white">
+      <div className="flex-1 h-screen relative">
+        <div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
+          <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
+            <img src="/file.svg" alt="File" className="w-6 h-6" />
+            <span className="font-mono text-lg">GRC-20</span>
+            <span className="font-mono text-lg text-gray-400">/</span>
+            <img src="/globe.svg" alt="Globe" className="w-6 h-6" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-sm"
+            />
           </div>
-        </div>
-      )}
-      <header className="p-4 flex flex-wrap gap-4 justify-between items-center bg-base-200 border-b border-base-300">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold">Knowledge Graph</h1>
-          <div className="flex items-center gap-2 p-1 rounded-full bg-base-300">
-            <button
-              onClick={toggleMode}
-              className={`btn btn-sm ${mode === 'normie' ? 'btn-primary' : 'btn-ghost'}`}
-            >
-              Normie
-            </button>
-            <button
-              onClick={toggleMode}
-              className={`btn btn-sm ${mode === 'dev' ? 'btn-primary' : 'btn-ghost'}`}
-            >
-              Dev
-            </button>
-          </div>
-        </div>
-        <div className="flex gap-4 items-center">
-          <div className="flex -space-x-2">
-            {presentUsers.map((user) => (
+
+          <div className="flex items-center space-x-2">
+            {presentUsers.map(user => (
               <Avatar key={user.id} address={user.address} />
             ))}
           </div>
-          <div className="flex gap-2 items-center">
-            <div className="relative">
-              <input
-                type="date"
-                className="input input-sm input-bordered hover:border-blue-500 focus:input-primary cursor-pointer"
-                value={selectedDate}
-                max={today}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
+        </div>
+
+        <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
+          {address ? (
+            <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
+              <span className="text-sm font-mono">{`${address.slice(
+                0,
+                6
+              )}...${address.slice(-4)}`}</span>
+              <button
+                onClick={() => disconnect()}
+                className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs"
+              >
+                Disconnect
+              </button>
             </div>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={handleAddNode}
-              disabled={!mounted || !address || selectedDate !== today}
-            >
-              Add Node
-            </button>
-            {mounted &&
-              (address ? (
-                <button className="btn btn-outline btn-sm hover:btn-outline-primary font-mono" onClick={() => disconnect()}>
-                  {address.slice(0, 6)}…{address.slice(-4)}
-                </button>
-              ) : (
+          ) : (
+            <div className="flex items-center space-x-2">
+              {connectors.map((connector) => (
                 <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    const connector = connectors[0];
-                    if (!connector) {
-                      toast.error('No injected wallet found. Please install MetaMask.');
-                      return;
-                    }
-                    connect({ connector });
-                  }}
+                  key={connector.uid}
+                  onClick={() => connect({ connector })}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
                 >
-                  Connect Wallet
+                  {connector.name}
                 </button>
               ))}
-          </div>
+            </div>
+          )}
         </div>
-      </header>
-      <main className="flex-1">
+
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onConnect={onConnect}
           onNodesChange={onNodesChange}
-          onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
-          onNodeClick={onNodeClick}
-          onPaneClick={() => {
-            setSelectedNode(null);
-            socket.send(JSON.stringify({ type: 'selection', nodeId: null }));
-          }}
+          onConnect={onConnect}
+          onPaneClick={handlePaneClick}
+          onNodeClick={handleNodeClick}
+          onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           fitView
+          className="bg-gray-900"
         >
           <Background />
           <Controls />
+          {nodes.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center bg-gray-800 bg-opacity-80 p-8 rounded-lg pointer-events-auto">
+                <h2 className="text-2xl font-bold mb-2">Welcome to your Knowledge Graph</h2>
+                <p className="text-gray-400 mb-6">
+                  Map ideas, projects, and people to see how they connect.
+                </p>
+                <button
+                  onClick={handleAddNode}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                >
+                  Create your first Topic
+                </button>
+              </div>
+            </div>
+          )}
         </ReactFlow>
-      </main>
+
+      </div>
       <Inspector
         selectedNode={selectedNode}
-        onClose={() => setSelectedNode(null)}
-        onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
+        onUpdate={updateNodeData.mutate}
+        onDelete={(id, isRelation) => {
+          if (isRelation) {
+            deleteRelation.mutate({ id });
+          } else {
+            deleteEntity.mutate({ nodeId: id });
+          }
+        }}
+        getTerm={getTerm}
       />
     </div>
   );
