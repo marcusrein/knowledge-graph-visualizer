@@ -17,13 +17,50 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { nodeId, label, type, userAddress } = body;
+  const { x, y } = body;
   if (!nodeId || !label || !type) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
   }
 
   const stmt = db.prepare(
-    "INSERT INTO entities (nodeId, label, type, userAddress, created_at) VALUES (?,?,?,?,datetime('now'))"
+    "INSERT INTO entities (nodeId, label, type, userAddress, x, y, created_at) VALUES (?,?,?,?,?,?,datetime('now'))"
   );
-  const info = stmt.run(nodeId, label, type, userAddress ?? null);
+  const info = stmt.run(nodeId, label, type, userAddress ?? null, x ?? null, y ?? null);
   return NextResponse.json({ id: info.lastInsertRowid });
+}
+
+export async function PATCH(req: NextRequest) {
+  const body = await req.json();
+  const { nodeId, x, y } = body;
+  if (!nodeId || x === undefined || y === undefined) {
+    return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+  }
+
+  const stmt = db.prepare('UPDATE entities SET x=?, y=? WHERE nodeId=?');
+  stmt.run(x, y, nodeId);
+  return NextResponse.json({ success: true });
+}
+
+export async function DELETE(req: NextRequest) {
+  const body = await req.json();
+  const { nodeId } = body;
+  if (!nodeId) {
+    return NextResponse.json({ error: 'Missing node ID' }, { status: 400 });
+  }
+
+  const deleteTransaction = db.transaction((id: string) => {
+    const info = db.prepare('DELETE FROM entities WHERE nodeId = ?').run(id);
+    if (info.changes > 0) {
+      db.prepare('DELETE FROM relations WHERE sourceId = ? OR targetId = ?').run(id, id);
+    }
+    return info;
+  });
+
+  const info = deleteTransaction(nodeId);
+
+  if (info.changes === 0) {
+    return NextResponse.json({ error: 'Node not found' }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
 } 

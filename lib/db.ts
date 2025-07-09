@@ -22,6 +22,8 @@ const init = () => {
       label TEXT,
       type TEXT CHECK(type IN ('category', 'knowledge')),
       userAddress TEXT,
+      x REAL,
+      y REAL,
       created_at TEXT
     );
 
@@ -34,6 +36,18 @@ const init = () => {
       created_at TEXT
     );
   `);
+
+  // Add x and y columns if they were missing from an existing database
+  try {
+    db.prepare('ALTER TABLE entities ADD COLUMN x REAL').run();
+  } catch (e) {
+    /* ignore: column already exists */
+  }
+  try {
+    db.prepare('ALTER TABLE entities ADD COLUMN y REAL').run();
+  } catch (e) {
+    /* ignore: column already exists */
+  }
 };
 
 init();

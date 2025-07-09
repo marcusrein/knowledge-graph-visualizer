@@ -10,6 +10,10 @@ import ReactFlow, {
   Edge,
   Node,
   OnConnectStartParams,
+  applyNodeChanges,
+  NodeChange,
+  applyEdgeChanges,
+  EdgeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -51,6 +55,55 @@ export default function GraphPage() {
     }
     setShowIntro(false);
   };
+
+  const updatePosition = useMutation({
+    mutationFn: async (payload: { nodeId: string; x: number; y: number }) => {
+      const res = await fetch('/api/entities', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Failed to update position');
+    },
+  });
+
+  const deleteRelation = useMutation({
+    mutationFn: async (payload: { id: string }) => {
+      const res = await fetch('/api/relations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        toast.error(error.error || 'Failed to delete relation');
+        throw new Error(error.error || 'Failed to delete relation');
+      }
+    },
+    // No optimistic update, just refetch on success
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
+    },
+  });
+
+  const deleteEntity = useMutation({
+    mutationFn: async (payload: { nodeId: string }) => {
+      const res = await fetch('/api/entities', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        toast.error(error.error || 'Failed to delete node');
+        throw new Error(error.error || 'Failed to delete node');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
+    },
+  });
 
   // fetch nodes and edges
   const entitiesQuery = useQuery({
@@ -96,6 +149,7 @@ export default function GraphPage() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
+  /* ---------- mutations ---------- */
   // map API to React Flow
   useEffect(() => {
     if (entitiesQuery.data) {
@@ -103,7 +157,10 @@ export default function GraphPage() {
         entitiesQuery.data.map((e) => ({
           id: e.nodeId,
           data: { label: e.label },
-          position: { x: Math.random() * 400, y: Math.random() * 400 },
+          position: {
+            x: e.x ?? Math.random() * 400,
+            y: e.y ?? Math.random() * 400,
+          },
         }))
       );
     }
@@ -138,13 +195,58 @@ export default function GraphPage() {
   const handleAddNode = () => {
     if (!address || selectedDate !== today) return;
     const nodeId = crypto.randomUUID();
+    const randX = Math.random() * 400;
+    const randY = Math.random() * 400;
     addEntity.mutate({
       nodeId,
       label: `Node ${nodes.length + 1}`,
       type: 'category',
       userAddress: address,
+      x: randX,
+      y: randY,
     });
   };
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const isDraggable = selectedDate === today && address;
+      setNodes((nds) => applyNodeChanges(changes, nds));
+
+      if (isDraggable) {
+        for (const change of changes) {
+          if (change.type === 'remove') {
+            deleteEntity.mutate({ nodeId: change.id });
+          }
+        }
+      }
+    },
+    [address, selectedDate, today, deleteEntity]
+  );
+
+  const onNodeDragStop = useCallback(
+    (_evt: any, node: Node) => {
+      if (address) {
+        updatePosition.mutate({ nodeId: node.id, x: node.position.x, y: node.position.y });
+      }
+    },
+    [address, updatePosition]
+  );
+
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      const isEditable = selectedDate === today && address;
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+
+      if (isEditable) {
+        for (const change of changes) {
+          if (change.type === 'remove') {
+            deleteRelation.mutate({ id: change.id });
+          }
+        }
+      }
+    },
+    [address, selectedDate, today, deleteRelation]
+  );
 
   return (
     <div className="h-screen flex flex-col">
@@ -218,6 +320,9 @@ export default function GraphPage() {
           nodes={nodes}
           edges={edges}
           onConnect={onConnect}
+          onNodesChange={onNodesChange}
+          onNodeDragStop={onNodeDragStop}
+          onEdgesChange={onEdgesChange}
           fitView
         >
           <Background />
