@@ -137,20 +137,20 @@ export default function GraphPage() {
     <div className="h-screen flex flex-col">
       {showIntro && (
         <div className="modal modal-open">
-          <div className="modal-box max-w-md">
-            <h3 className="font-bold text-lg mb-2">Welcome to the Knowledge Graph!</h3>
-            <p className="mb-4 text-sm">
-              Anyone can add nodes and links today. At 00:00&nbsp;UTC the canvas resets, but you can revisit past days via
-              the date picker.
+          <div className="modal-box max-w-md bg-base-200 text-base-content shadow-xl">
+            <h3 className="font-bold text-xl mb-4 text-center">Welcome to the Knowledge Graph!</h3>
+            <p className="text-sm leading-relaxed mb-6 text-center">
+              Add nodes and connections to today&apos;s shared canvas. The graph resets daily at&nbsp;00:00&nbsp;UTC,
+              but you can browse snapshots from previous days using the date picker.
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col sm:flex-row justify-center sm:justify-end gap-3">
               <button className="btn btn-sm" onClick={() => dismissIntro(false)}>Close</button>
               <button className="btn btn-sm btn-primary" onClick={() => dismissIntro(true)}>
                 Don&apos;t show again
               </button>
             </div>
           </div>
-          <div className="modal-backdrop" onClick={() => dismissIntro(false)} />
+          <div className="modal-backdrop bg-black/50" onClick={() => dismissIntro(false)} />
         </div>
       )}
       <header className="p-4 flex flex-wrap gap-4 justify-between items-center bg-base-200">
