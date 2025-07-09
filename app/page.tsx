@@ -24,8 +24,13 @@ export default function GraphPage() {
   const { error: connectError } = useConnect();
 
   useEffect(() => {
-    if (connectError && (connectError as any).name === 'ConnectorNotFoundError') {
-      toast.error('No browser wallet detected. Install MetaMask or choose WalletConnect.');
+    if (connectError) {
+      console.debug('connect error', connectError);
+      if ((connectError as any).name === 'ConnectorNotFoundError') {
+        toast.error('No browser wallet detected. Install MetaMask or choose WalletConnect.');
+      } else {
+        toast.error(connectError.message);
+      }
     }
   }, [connectError]);
 
