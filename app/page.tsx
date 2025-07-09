@@ -21,16 +21,25 @@ import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import toast from 'react-hot-toast';
 
 import RelationNode from '@/components/RelationNode';
+import Inspector from '@/components/Inspector';
 
 const nodeTypes = {
   relation: RelationNode,
 };
+
+// A more robust check for numeric strings (for relation IDs)
+function isNumeric(str: string) {
+  if (typeof str !== 'string') return false;
+  return /^\d+$/.test(str);
+}
 
 export default function GraphPage() {
   const queryClient = useQueryClient();
   const { address } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
+
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
   useEffect(() => {
     if (connectError) {
@@ -80,6 +89,28 @@ export default function GraphPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+    },
+  });
+
+  const updateNodeData = useMutation({
+    mutationFn: async ({ nodeId, data }: { nodeId: string; data: { label?: string; properties?: any } }) => {
+      const isRelation = isNumeric(nodeId);
+      const endpoint = isRelation ? '/api/relations' : '/api/entities';
+      const payload = isRelation
+        ? { id: nodeId, relationType: data.label, properties: data.properties }
+        : { nodeId: nodeId, label: data.label, properties: data.properties };
+
+      const res = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Failed to save node data');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
     },
   });
 
@@ -298,6 +329,10 @@ export default function GraphPage() {
     [address, updatePosition, updateRelationPosition]
   );
 
+  const onNodeClick = useCallback((_evt: any, node: Node) => {
+    setSelectedNode(node);
+  }, []);
+
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       // For now, prevent edge deletion since they are managed by relation nodes
@@ -384,6 +419,7 @@ export default function GraphPage() {
           onNodesChange={onNodesChange}
           onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
           fitView
         >
@@ -391,11 +427,11 @@ export default function GraphPage() {
           <Controls />
         </ReactFlow>
       </main>
+      <Inspector
+        selectedNode={selectedNode}
+        onClose={() => setSelectedNode(null)}
+        onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
+      />
     </div>
   );
-}
-
-function isNumeric(str: string) {
-  if (typeof str != "string") return false
-  return !isNaN(parseFloat(str))
 }

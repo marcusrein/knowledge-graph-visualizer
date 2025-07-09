@@ -24,6 +24,7 @@ const init = () => {
       userAddress TEXT,
       x REAL,
       y REAL,
+      properties TEXT,
       created_at TEXT
     );
 
@@ -35,6 +36,7 @@ const init = () => {
       userAddress TEXT,
       x REAL,
       y REAL,
+      properties TEXT,
       created_at TEXT
     );
   `);
@@ -50,6 +52,11 @@ const init = () => {
   } catch (e) {
     /* ignore: column already exists */
   }
+  try {
+    db.prepare('ALTER TABLE entities ADD COLUMN properties TEXT').run();
+  } catch (e) {
+    /* ignore: column already exists */
+  }
 
   // Add x and y columns to relations if they were missing
   try {
@@ -59,6 +66,11 @@ const init = () => {
   }
   try {
     db.prepare('ALTER TABLE relations ADD COLUMN y REAL').run();
+  } catch (e) {
+    /* ignore: column already exists */
+  }
+  try {
+    db.prepare('ALTER TABLE relations ADD COLUMN properties TEXT').run();
   } catch (e) {
     /* ignore: column already exists */
   }

@@ -52,9 +52,9 @@ export async function DELETE(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { id, x, y } = body;
-  if (!id || x === undefined || y === undefined) {
-    return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+  const { id, x, y, relationType, properties } = body;
+  if (!id) {
+    return NextResponse.json({ error: 'Missing relation ID' }, { status: 400 });
   }
 
   const relationId = parseInt(id, 10);
@@ -62,10 +62,23 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid relation ID' }, { status: 400 });
   }
 
-  const stmt = db.prepare('UPDATE relations SET x=?, y=? WHERE id=?');
-  const info = stmt.run(x, y, relationId);
+  if (x !== undefined && y !== undefined) {
+    db.prepare('UPDATE relations SET x=?, y=? WHERE id=?').run(x, y, relationId);
+  }
 
-  if (info.changes === 0) {
+  if (relationType) {
+    db.prepare('UPDATE relations SET relationType=? WHERE id=?').run(relationType, relationId);
+  }
+
+  if (properties) {
+    db.prepare('UPDATE relations SET properties=? WHERE id=?').run(JSON.stringify(properties), relationId);
+  }
+
+  // Check if any update was successful to prevent false negatives
+  const checkStmt = db.prepare('SELECT id FROM relations WHERE id = ?');
+  const info = checkStmt.get(relationId) as { id: number } | undefined;
+
+  if (!info) {
     return NextResponse.json({ error: 'Relation not found' }, { status: 404 });
   }
 

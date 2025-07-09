@@ -31,13 +31,23 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { nodeId, x, y } = body;
-  if (!nodeId || x === undefined || y === undefined) {
-    return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+  const { nodeId, x, y, label, properties } = body;
+  if (!nodeId) {
+    return NextResponse.json({ error: 'Missing nodeId' }, { status: 400 });
   }
 
-  const stmt = db.prepare('UPDATE entities SET x=?, y=? WHERE nodeId=?');
-  stmt.run(x, y, nodeId);
+  if (x !== undefined && y !== undefined) {
+    db.prepare('UPDATE entities SET x=?, y=? WHERE nodeId=?').run(x, y, nodeId);
+  }
+
+  if (label) {
+    db.prepare('UPDATE entities SET label=? WHERE nodeId=?').run(label, nodeId);
+  }
+
+  if (properties) {
+    db.prepare('UPDATE entities SET properties=? WHERE nodeId=?').run(JSON.stringify(properties), nodeId);
+  }
+
   return NextResponse.json({ success: true });
 }
 
