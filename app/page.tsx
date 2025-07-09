@@ -188,7 +188,17 @@ export default function GraphPage() {
               {address.slice(0, 6)}…{address.slice(-4)}
             </button>
           ) : (
-            <button className="btn btn-primary btn-sm" onClick={() => connect({ connector: connectors[0] })}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                const connector = connectors[0];
+                if (!connector) {
+                  toast.error('No injected wallet found. Please install MetaMask.');
+                  return;
+                }
+                connect({ connector });
+              }}
+            >
               Connect Wallet
             </button>
           )}
