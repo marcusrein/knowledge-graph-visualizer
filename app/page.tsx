@@ -24,6 +24,17 @@ import usePartySocket from 'partysocket/react';
 import RelationNode from '@/components/RelationNode';
 import Inspector from '@/components/Inspector';
 import { useTerminology } from '@/lib/TerminologyContext';
+import Avatar from '@/components/Avatar';
+
+interface PresentUser {
+  id: string;
+  address: string;
+}
+
+interface Selection {
+  address: string;
+  nodeId: string | null;
+}
 
 const nodeTypes = {
   relation: RelationNode,
@@ -43,6 +54,8 @@ export default function GraphPage() {
   const { mode, toggleMode, getTerm } = useTerminology();
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [presentUsers, setPresentUsers] = useState<PresentUser[]>([]);
+  const [selections, setSelections] = useState<Selection[]>([]);
   const today = format(new Date(), 'yyyy-MM-dd');
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [showIntro, setShowIntro] = useState(false);
@@ -53,6 +66,19 @@ export default function GraphPage() {
     room: selectedDate,
     onMessage(event) {
       const message = JSON.parse(event.data);
+      if (message.type === 'sync') {
+        setPresentUsers(message.users);
+      }
+      if (message.type === 'selection') {
+        const { address, nodeId } = message;
+        setSelections(prev => {
+          const otherSelections = prev.filter(s => s.address !== address);
+          if (nodeId) {
+            return [...otherSelections, { address, nodeId }];
+          }
+          return otherSelections;
+        });
+      }
       if (message.type === 'node-move') {
         setNodes((nds) =>
           nds.map((n) =>
@@ -64,6 +90,12 @@ export default function GraphPage() {
       }
     },
   });
+
+  useEffect(() => {
+    if (address && socket) {
+      socket.send(JSON.stringify({ type: 'sync-user', address }));
+    }
+  }, [address, socket]);
 
   useEffect(() => {
     if (connectError) {
@@ -219,26 +251,40 @@ export default function GraphPage() {
   // map API to React Flow
   useEffect(() => {
     if (entitiesQuery.data && relationsQuery.data) {
-      const entityNodes = entitiesQuery.data.map((e) => ({
-        id: e.nodeId,
-        type: 'default', // Make entities visually distinct if needed later
-        data: { label: e.label, properties: e.properties },
-        position: {
-          x: e.x ?? Math.random() * 400,
-          y: e.y ?? Math.random() * 400,
-        },
-      }));
+      const entityNodes = entitiesQuery.data.map((e) => {
+        const selection = selections.find(s => s.nodeId === e.nodeId);
+        return {
+          id: e.nodeId,
+          type: 'default',
+          data: { label: e.label, properties: e.properties },
+          position: {
+            x: e.x ?? Math.random() * 400,
+            y: e.y ?? Math.random() * 400,
+          },
+          style: selection ? {
+            borderColor: addressToColor(selection.address),
+            borderWidth: 2,
+            boxShadow: `0 0 10px ${addressToColor(selection.address)}`,
+          } : undefined
+        };
+      });
 
-      const relationNodes = relationsQuery.data.map((r) => ({
-        id: String(r.id),
-        type: 'relation', // Use our custom node type
-        data: { label: r.relationType, properties: r.properties },
-        position: {
-          x: r.x ?? Math.random() * 400,
-          y: r.y ?? Math.random() * 400,
-        },
-        draggable: true,
-      }));
+      const relationNodes = relationsQuery.data.map((r) => {
+        const selection = selections.find(s => s.nodeId === String(r.id));
+        return {
+          id: String(r.id),
+          type: 'relation',
+          data: { label: r.relationType, properties: r.properties },
+          position: {
+            x: r.x ?? Math.random() * 400,
+            y: r.y ?? Math.random() * 400,
+          },
+          draggable: true,
+          style: selection ? {
+            // custom nodes need a different way to style, we can do this later
+          } : undefined
+        };
+      });
 
       const newEdges = relationsQuery.data.flatMap((r) => [
         {
@@ -258,7 +304,7 @@ export default function GraphPage() {
       setNodes([...entityNodes, ...relationNodes]);
       setEdges(newEdges);
     }
-  }, [entitiesQuery.data, relationsQuery.data]);
+  }, [entitiesQuery.data, relationsQuery.data, selections]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -352,9 +398,13 @@ export default function GraphPage() {
     [address, updatePosition, updateRelationPosition, socket]
   );
 
-  const onNodeClick = useCallback((_evt: any, node: Node) => {
-    setSelectedNode(node);
-  }, []);
+  const onNodeClick = useCallback(
+    (_evt: any, node: Node) => {
+      setSelectedNode(node);
+      socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
+    },
+    [socket]
+  );
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
@@ -411,43 +461,50 @@ export default function GraphPage() {
             </button>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
-          <div className="relative">
-            <input
-              type="date"
-              className="input input-sm input-bordered hover:border-blue-500 focus:input-primary cursor-pointer"
-              value={selectedDate}
-              max={today}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
-          </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleAddNode}
-            disabled={!mounted || !address || selectedDate !== today}
-          >
-            Add Node
-          </button>
-          {mounted &&
-            (address ? (
-              <button className="btn btn-outline btn-sm hover:btn-outline-primary font-mono" onClick={() => disconnect()}>
-                {address.slice(0, 6)}…{address.slice(-4)}
-              </button>
-            ) : (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  const connector = connectors[0];
-                  if (!connector) {
-                    toast.error('No injected wallet found. Please install MetaMask.');
-                    return;
-                  }
-                  connect({ connector });
-                }}
-              >
-                Connect Wallet
-              </button>
+        <div className="flex gap-4 items-center">
+          <div className="flex -space-x-2">
+            {presentUsers.map((user) => (
+              <Avatar key={user.id} address={user.address} />
             ))}
+          </div>
+          <div className="flex gap-2 items-center">
+            <div className="relative">
+              <input
+                type="date"
+                className="input input-sm input-bordered hover:border-blue-500 focus:input-primary cursor-pointer"
+                value={selectedDate}
+                max={today}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
+            </div>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleAddNode}
+              disabled={!mounted || !address || selectedDate !== today}
+            >
+              Add Node
+            </button>
+            {mounted &&
+              (address ? (
+                <button className="btn btn-outline btn-sm hover:btn-outline-primary font-mono" onClick={() => disconnect()}>
+                  {address.slice(0, 6)}…{address.slice(-4)}
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    const connector = connectors[0];
+                    if (!connector) {
+                      toast.error('No injected wallet found. Please install MetaMask.');
+                      return;
+                    }
+                    connect({ connector });
+                  }}
+                >
+                  Connect Wallet
+                </button>
+              ))}
+          </div>
         </div>
       </header>
       <main className="flex-1">
@@ -459,6 +516,10 @@ export default function GraphPage() {
           onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
+          onPaneClick={() => {
+            setSelectedNode(null);
+            socket.send(JSON.stringify({ type: 'selection', nodeId: null }));
+          }}
           nodeTypes={nodeTypes}
           fitView
         >
@@ -474,3 +535,12 @@ export default function GraphPage() {
     </div>
   );
 }
+
+const addressToColor = (address: string) => {
+  let hash = 0;
+  for (let i = 0; i < address.length; i++) {
+    hash = address.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+  return `#${'00000'.substring(0, 6 - c.length)}${c}`;
+};
