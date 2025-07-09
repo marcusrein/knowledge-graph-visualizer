@@ -1,8 +1,13 @@
-import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { createConfig, http } from 'wagmi';
+import { metaMask } from 'wagmi/connectors';
 import { mainnet, sepolia } from 'wagmi/chains';
 
-export const wagmiConfig = getDefaultConfig({
-  appName: 'Knowledge Graph Demo',
-  projectId: 'wagmi-demo', // dummy projectId for demo; replace in prod
-  chains: [sepolia, mainnet],
+const chains = [mainnet, sepolia];
+
+export const wagmiConfig = createConfig({
+  connectors: [metaMask({ chains })],
+  transports: {
+    [mainnet.id]: http(),
+    [sepolia.id]: http(),
+  },
 }); 

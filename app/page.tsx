@@ -13,15 +13,14 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
-import { useConnect } from 'wagmi';
+import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import toast from 'react-hot-toast';
 
 export default function GraphPage() {
   const queryClient = useQueryClient();
   const { address } = useAccount();
-  const { error: connectError } = useConnect();
+  const { connect, connectors, error: connectError } = useConnect();
+  const { disconnect } = useDisconnect();
 
   useEffect(() => {
     if (connectError) {
@@ -184,7 +183,15 @@ export default function GraphPage() {
           >
             Add Node
           </button>
-          <ConnectButton />
+          {address ? (
+            <button className="btn btn-outline btn-sm" onClick={() => disconnect()}>
+              {address.slice(0, 6)}…{address.slice(-4)}
+            </button>
+          ) : (
+            <button className="btn btn-primary btn-sm" onClick={() => connect({ connector: connectors[0] })}>
+              Connect Wallet
+            </button>
+          )}
         </div>
       </header>
       <main className="flex-1">
