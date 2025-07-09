@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
+import { format } from 'date-fns';
 import ReactFlow, {
   Background,
   Controls,
@@ -19,19 +20,38 @@ export default function GraphPage() {
   const queryClient = useQueryClient();
   const { address } = useAccount();
 
+  /* ---------- hydration & modal ---------- */
+  const [mounted, setMounted] = useState(false);
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const [selectedDate, setSelectedDate] = useState<string>(today);
+  const [showIntro, setShowIntro] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const hide = localStorage.getItem('kg_hide_intro');
+    if (!hide) setShowIntro(true);
+  }, []);
+
+  const dismissIntro = (neverShow: boolean) => {
+    if (neverShow) {
+      localStorage.setItem('kg_hide_intro', '1');
+    }
+    setShowIntro(false);
+  };
+
   // fetch nodes and edges
   const entitiesQuery = useQuery({
-    queryKey: ['entities'],
+    queryKey: ['entities', selectedDate],
     queryFn: async () => {
-      const res = await fetch('/api/entities');
+      const res = await fetch(`/api/entities?date=${selectedDate}`);
       return (await res.json()) as any[];
     },
   });
 
   const relationsQuery = useQuery({
-    queryKey: ['relations'],
+    queryKey: ['relations', selectedDate],
     queryFn: async () => {
-      const res = await fetch('/api/relations');
+      const res = await fetch(`/api/relations?date=${selectedDate}`);
       return (await res.json()) as any[];
     },
   });
@@ -45,7 +65,7 @@ export default function GraphPage() {
       });
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['entities'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] }),
   });
 
   const addRelation = useMutation({
@@ -57,7 +77,7 @@ export default function GraphPage() {
       });
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['relations'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] }),
   });
 
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -103,7 +123,7 @@ export default function GraphPage() {
   );
 
   const handleAddNode = () => {
-    if (!address) return;
+    if (!address || selectedDate !== today) return;
     const nodeId = crypto.randomUUID();
     addEntity.mutate({
       nodeId,
@@ -115,10 +135,39 @@ export default function GraphPage() {
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="p-4 flex justify-between items-center bg-base-200">
+      {showIntro && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-md">
+            <h3 className="font-bold text-lg mb-2">Welcome to the Knowledge Graph!</h3>
+            <p className="mb-4 text-sm">
+              Anyone can add nodes and links today. At 00:00&nbsp;UTC the canvas resets, but you can revisit past days via
+              the date picker.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="btn btn-sm" onClick={() => dismissIntro(false)}>Close</button>
+              <button className="btn btn-sm btn-primary" onClick={() => dismissIntro(true)}>
+                Don&apos;t show again
+              </button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => dismissIntro(false)} />
+        </div>
+      )}
+      <header className="p-4 flex flex-wrap gap-4 justify-between items-center bg-base-200">
         <h1 className="text-xl font-bold">Knowledge Graph</h1>
-        <div className="flex gap-2">
-          <button className="btn btn-primary" onClick={handleAddNode} disabled={!address}>
+        <div className="flex gap-2 items-center">
+          <input
+            type="date"
+            className="input input-sm"
+            value={selectedDate}
+            max={today}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleAddNode}
+            disabled={!mounted || !address || selectedDate !== today}
+          >
             Add Node
           </button>
           <ConnectButton />
