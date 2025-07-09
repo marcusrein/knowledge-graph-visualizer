@@ -33,6 +33,8 @@ const init = () => {
       targetId TEXT,
       relationType TEXT,
       userAddress TEXT,
+      x REAL,
+      y REAL,
       created_at TEXT
     );
   `);
@@ -45,6 +47,18 @@ const init = () => {
   }
   try {
     db.prepare('ALTER TABLE entities ADD COLUMN y REAL').run();
+  } catch (e) {
+    /* ignore: column already exists */
+  }
+
+  // Add x and y columns to relations if they were missing
+  try {
+    db.prepare('ALTER TABLE relations ADD COLUMN x REAL').run();
+  } catch (e) {
+    /* ignore: column already exists */
+  }
+  try {
+    db.prepare('ALTER TABLE relations ADD COLUMN y REAL').run();
   } catch (e) {
     /* ignore: column already exists */
   }

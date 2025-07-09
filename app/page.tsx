@@ -20,6 +20,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import toast from 'react-hot-toast';
 
+import RelationNode from '@/components/RelationNode';
+
+const nodeTypes = {
+  relation: RelationNode,
+};
+
 export default function GraphPage() {
   const queryClient = useQueryClient();
   const { address } = useAccount();
@@ -64,6 +70,16 @@ export default function GraphPage() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Failed to update position');
+    },
+  });
+
+  const updateRelationPosition = useMutation({
+    mutationFn: async (payload: { id: string; x: number; y: number }) => {
+      await fetch('/api/relations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
     },
   });
 
@@ -152,44 +168,85 @@ export default function GraphPage() {
   /* ---------- mutations ---------- */
   // map API to React Flow
   useEffect(() => {
-    if (entitiesQuery.data) {
-      setNodes(
-        entitiesQuery.data.map((e) => ({
-          id: e.nodeId,
-          data: { label: e.label },
-          position: {
-            x: e.x ?? Math.random() * 400,
-            y: e.y ?? Math.random() * 400,
-          },
-        }))
-      );
-    }
-  }, [entitiesQuery.data]);
+    if (entitiesQuery.data && relationsQuery.data) {
+      const entityNodes = entitiesQuery.data.map((e) => ({
+        id: e.nodeId,
+        type: 'default', // Make entities visually distinct if needed later
+        data: { label: e.label },
+        position: {
+          x: e.x ?? Math.random() * 400,
+          y: e.y ?? Math.random() * 400,
+        },
+      }));
 
-  useEffect(() => {
-    if (relationsQuery.data) {
-      setEdges(
-        relationsQuery.data.map((r) => ({
-          id: String(r.id),
+      const relationNodes = relationsQuery.data.map((r) => ({
+        id: String(r.id),
+        type: 'relation', // Use our custom node type
+        data: { label: r.relationType },
+        position: {
+          x: r.x ?? Math.random() * 400,
+          y: r.y ?? Math.random() * 400,
+        },
+        draggable: true,
+      }));
+
+      const newEdges = relationsQuery.data.flatMap((r) => [
+        {
+          id: `${r.sourceId}-${r.id}`,
           source: r.sourceId,
+          target: String(r.id),
+          type: 'straight',
+        },
+        {
+          id: `${r.id}-${r.targetId}`,
+          source: String(r.id),
           target: r.targetId,
-          label: r.relationType,
-        }))
-      );
+          type: 'straight',
+        },
+      ]);
+
+      setNodes([...entityNodes, ...relationNodes]);
+      setEdges(newEdges);
     }
-  }, [relationsQuery.data]);
+  }, [entitiesQuery.data, relationsQuery.data]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      if (!address) return;
+      console.log('Attempting connection:', connection);
+      console.log('Current nodes in state:', nodes);
+      if (!address || !connection.source || !connection.target) return;
+
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const targetNode = nodes.find((n) => n.id === connection.target);
+
+      console.log('Found source node:', sourceNode);
+      console.log('Found target node:', targetNode);
+
+      if (!sourceNode || !targetNode) return;
+
+      const isSourceNumeric = isNumeric(sourceNode.id);
+      const isTargetNumeric = isNumeric(targetNode.id);
+      console.log(`Checking IDs: source is numeric? ${isSourceNumeric}, target is numeric? ${isTargetNumeric}`);
+
+      // Prevent connecting to/from a relation node
+      if (isSourceNumeric || isTargetNumeric) {
+        toast.error('Can only connect main entities');
+        return;
+      }
+
+      const x = (sourceNode.position.x + targetNode.position.x) / 2;
+      const y = (sourceNode.position.y + targetNode.position.y) / 2;
+
       addRelation.mutate({
         sourceId: connection.source,
         targetId: connection.target,
         relationType: 'related',
         userAddress: address,
+        x,
+        y,
       });
     },
-    [address, addRelation]
+    [address, addRelation, nodes]
   );
 
   const handleAddNode = () => {
@@ -215,37 +272,40 @@ export default function GraphPage() {
       if (isDraggable) {
         for (const change of changes) {
           if (change.type === 'remove') {
-            deleteEntity.mutate({ nodeId: change.id });
+            // Check if it's a relation (numeric ID) or entity (UUID)
+            if (isNumeric(change.id)) {
+              deleteRelation.mutate({ id: change.id });
+            } else {
+              deleteEntity.mutate({ nodeId: change.id });
+            }
           }
         }
       }
     },
-    [address, selectedDate, today, deleteEntity]
+    [address, selectedDate, today, deleteEntity, deleteRelation]
   );
 
   const onNodeDragStop = useCallback(
     (_evt: any, node: Node) => {
       if (address) {
-        updatePosition.mutate({ nodeId: node.id, x: node.position.x, y: node.position.y });
+        if (isNumeric(node.id)) {
+          updateRelationPosition.mutate({ id: node.id, x: node.position.x, y: node.position.y });
+        } else {
+          updatePosition.mutate({ nodeId: node.id, x: node.position.x, y: node.position.y });
+        }
       }
     },
-    [address, updatePosition]
+    [address, updatePosition, updateRelationPosition]
   );
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
+      // For now, prevent edge deletion since they are managed by relation nodes
       const isEditable = selectedDate === today && address;
-      setEdges((eds) => applyEdgeChanges(changes, eds));
-
-      if (isEditable) {
-        for (const change of changes) {
-          if (change.type === 'remove') {
-            deleteRelation.mutate({ id: change.id });
-          }
-        }
-      }
+      const filteredChanges = changes.filter(c => c.type !== 'remove');
+      setEdges((eds) => applyEdgeChanges(filteredChanges, eds));
     },
-    [address, selectedDate, today, deleteRelation]
+    [address, selectedDate, today]
   );
 
   return (
@@ -294,25 +354,26 @@ export default function GraphPage() {
           >
             Add Node
           </button>
-          {address ? (
-            <button className="btn btn-outline btn-sm hover:btn-outline-primary font-mono" onClick={() => disconnect()}>
-              {address.slice(0, 6)}…{address.slice(-4)}
-            </button>
-          ) : (
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => {
-                const connector = connectors[0];
-                if (!connector) {
-                  toast.error('No injected wallet found. Please install MetaMask.');
-                  return;
-                }
-                connect({ connector });
-              }}
-            >
-              Connect Wallet
-            </button>
-          )}
+          {mounted &&
+            (address ? (
+              <button className="btn btn-outline btn-sm hover:btn-outline-primary font-mono" onClick={() => disconnect()}>
+                {address.slice(0, 6)}…{address.slice(-4)}
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  const connector = connectors[0];
+                  if (!connector) {
+                    toast.error('No injected wallet found. Please install MetaMask.');
+                    return;
+                  }
+                  connect({ connector });
+                }}
+              >
+                Connect Wallet
+              </button>
+            ))}
         </div>
       </header>
       <main className="flex-1">
@@ -323,6 +384,7 @@ export default function GraphPage() {
           onNodesChange={onNodesChange}
           onNodeDragStop={onNodeDragStop}
           onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
           fitView
         >
           <Background />
@@ -331,4 +393,9 @@ export default function GraphPage() {
       </main>
     </div>
   );
+}
+
+function isNumeric(str: string) {
+  if (typeof str != "string") return false
+  return !isNaN(parseFloat(str))
 }
