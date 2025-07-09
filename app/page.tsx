@@ -22,7 +22,6 @@ import toast from 'react-hot-toast';
 import usePartySocket from 'partysocket/react';
 
 import RelationNode from '@/components/RelationNode';
-import TopicNode from '@/components/TopicNode';
 import Inspector from '@/components/Inspector';
 import { useTerminology } from '@/lib/TerminologyContext';
 import Avatar from '@/components/Avatar';
@@ -40,7 +39,6 @@ interface Selection {
 
 const nodeTypes = {
   relation: RelationNode,
-  topic: TopicNode,
 };
 
 // A more robust check for numeric strings (for relation IDs)
@@ -293,11 +291,10 @@ export default function GraphPage() {
     onSuccess: (newNodeData) => {
       completeStep('create-topic');
       // Add the new node to the state optimistically
-      const newNode: Node = {
+      const newNode = {
         id: newNodeData.id,
         position: { x: 200, y: 150 },
         data: { label: newNodeData.label || 'New Topic' },
-        type: 'topic', // Use our custom node type
         style: {
           backgroundColor: '#fff',
           color: '#000',
@@ -334,21 +331,25 @@ export default function GraphPage() {
   // map API to React Flow
   useEffect(() => {
     if (entitiesQuery.data && relationsQuery.data) {
-      const entityNodes = entitiesQuery.data.map((e: any) => ({
-        id: e.id,
-        position: { x: e.x, y: e.y },
-        data: { label: e.label, properties: e.properties },
-        type: 'topic', // Assign the custom type to fetched nodes
-        style: {
-          backgroundColor: '#fff',
-          color: '#000',
-          border: '1px solid #ddd',
-          borderRadius: '8px',
-          padding: '10px 15px',
-        },
-      }));
+      const entityNodes = entitiesQuery.data.map((e) => {
+        const selection = selections.find(s => s.nodeId === e.nodeId);
+        return {
+          id: e.nodeId,
+          type: 'default',
+          data: { label: e.label, properties: e.properties },
+          position: {
+            x: e.x ?? Math.random() * 400,
+            y: e.y ?? Math.random() * 400,
+          },
+          style: selection ? {
+            borderColor: addressToColor(selection.address),
+            borderWidth: 2,
+            boxShadow: `0 0 10px ${addressToColor(selection.address)}`,
+          } : undefined
+        };
+      });
 
-      const relationNodes = relationsQuery.data.map((r: any) => {
+      const relationNodes = relationsQuery.data.map((r) => {
         const selection = selections.find(s => s.nodeId === String(r.id));
         return {
           id: String(r.id),
@@ -572,6 +573,7 @@ export default function GraphPage() {
           }
         }}
         onClose={() => setSelectedNode(null)}
+        getTerm={getTerm}
       />
       {showChecklist && (
         <OnboardingChecklist

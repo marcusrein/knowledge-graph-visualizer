@@ -21,6 +21,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
+    "react-tooltip": "^5.29.1",
     "reactflow": "^11.11.4",
     "tippy.js": "^6.3.7",
     "viem": "^2.31.7",

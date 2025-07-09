@@ -2,7 +2,6 @@ import { memo, useState, useEffect } from 'react';
 import { Node } from 'reactflow';
 import { deepEqual } from '@/lib/utils'; // We will create this utility function
 import { useTerminology } from '@/lib/TerminologyContext';
-import Tooltip from './Tooltip';
 
 interface InspectorProps {
   selectedNode: Node | null;
@@ -74,18 +73,9 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   return (
     <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
       <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-2">
-          <h3 className="text-xl font-bold">
-            {isRelation ? getTerm('RELATION') : getTerm('ENTITY')} Details
-          </h3>
-          <Tooltip
-            content={
-              isRelation
-                ? 'A Connection (or Relation) links two Topics and describes their relationship. It can have its own properties, turning your graph into a powerful property graph.'
-                : "A Topic (or Entity) is the basic building block of the graph. It can be a person, place, idea—anything you want to connect."
-            }
-          />
-        </div>
+        <h3 className="text-xl font-bold">
+          {isRelation ? getTerm('RELATION') : getTerm('ENTITY')} Details
+        </h3>
         <button onClick={onClose} className="btn btn-sm btn-ghost">
           &times;
         </button>
