@@ -7,9 +7,10 @@ interface InspectorProps {
   selectedNode: Node | null;
   onClose: () => void;
   onSave: (nodeId: string, data: { label?: string; properties?: any }) => void;
+  onDelete: (nodeId: string, isRelation: boolean) => void;
 }
 
-const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
+const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) => {
   const { getTerm } = useTerminology();
   const [label, setLabel] = useState('');
   const [properties, setProperties] = useState<Record<string, any>>({});
@@ -59,6 +60,13 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
     const newProperties = { ...properties };
     delete newProperties[key];
     setProperties(newProperties);
+  };
+
+  const handleDelete = () => {
+    if (selectedNode) {
+      onDelete(selectedNode.id, isRelation);
+      onClose(); // Close inspector after deletion
+    }
   };
 
 
@@ -125,9 +133,12 @@ const Inspector = ({ selectedNode, onClose, onSave }: InspectorProps) => {
         </button>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 space-y-2">
         <button className="btn btn-primary w-full" disabled={!hasChanges} onClick={handleSave}>
           Save Changes
+        </button>
+        <button className="btn btn-error btn-outline w-full" onClick={handleDelete}>
+          Delete
         </button>
       </div>
     </aside>

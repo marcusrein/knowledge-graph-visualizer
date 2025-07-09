@@ -25,6 +25,7 @@ import RelationNode from '@/components/RelationNode';
 import Inspector from '@/components/Inspector';
 import { useTerminology } from '@/lib/TerminologyContext';
 import Avatar from '@/components/Avatar';
+import OnboardingChecklist from '@/components/OnboardingChecklist';
 
 interface PresentUser {
   id: string;
@@ -46,6 +47,12 @@ function isNumeric(str: string) {
   return /^\d+$/.test(str);
 }
 
+const ONBOARDING_STEPS = [
+  { id: 'create-topic', title: 'Create your first Topic' },
+  { id: 'name-topic', title: 'Give your Topic a name' },
+  { id: 'create-connection', title: 'Connect it to another Topic' },
+];
+
 export default function GraphPage() {
   const queryClient = useQueryClient();
   const { address } = useAccount();
@@ -60,6 +67,8 @@ export default function GraphPage() {
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [showIntro, setShowIntro] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
+  const [showChecklist, setShowChecklist] = useState(false);
 
   const socket = usePartySocket({
     host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || '127.0.0.1:1999',
@@ -111,15 +120,35 @@ export default function GraphPage() {
   /* ---------- hydration & modal ---------- */
   useEffect(() => {
     setMounted(true);
-    const hide = localStorage.getItem('kg_hide_intro');
-    if (!hide) setShowIntro(true);
+    // Onboarding checklist state
+    const completed = localStorage.getItem('kg_completed_steps');
+    if (completed) {
+      setCompletedSteps(JSON.parse(completed));
+    }
+    const hide = localStorage.getItem('kg_hide_checklist');
+    // Show checklist if not all steps are completed and it hasn't been dismissed
+    if (completed && JSON.parse(completed).length === ONBOARDING_STEPS.length) {
+      setShowChecklist(false);
+    } else if (!hide) {
+      setShowChecklist(true);
+    }
   }, []);
 
-  const dismissIntro = (neverShow: boolean) => {
-    if (neverShow) {
-      localStorage.setItem('kg_hide_intro', '1');
-    }
-    setShowIntro(false);
+  const dismissChecklist = () => {
+    setShowChecklist(false);
+    localStorage.setItem('kg_hide_checklist', '1');
+  };
+
+  const completeStep = (stepId: string) => {
+    setCompletedSteps(prev => {
+      if (prev.includes(stepId)) return prev;
+      const newCompletedSteps = [...prev, stepId];
+      localStorage.setItem('kg_completed_steps', JSON.stringify(newCompletedSteps));
+      if (newCompletedSteps.length === ONBOARDING_STEPS.length) {
+        setTimeout(() => setShowChecklist(false), 2000); // Hide after a delay
+      }
+      return newCompletedSteps;
+    });
   };
 
   const updatePosition = useMutation({
@@ -160,6 +189,10 @@ export default function GraphPage() {
       return res.json();
     },
     onSuccess: (data, variables) => {
+      // Check if a non-default name has been set
+      if (variables.data.label && variables.data.label !== 'New Topic') {
+        completeStep('name-topic');
+      }
       // After successfully saving, update the node in React Flow state
       setNodes((nds) =>
         nds.map((n) => {
@@ -256,6 +289,7 @@ export default function GraphPage() {
       return res.json();
     },
     onSuccess: (newNodeData) => {
+      completeStep('create-topic');
       // Add the new node to the state optimistically
       const newNode = {
         id: newNodeData.id,
@@ -282,7 +316,12 @@ export default function GraphPage() {
       });
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] }),
+    onSuccess: () => {
+      if (nodes.filter(n => !isNumeric(n.id)).length > 1) {
+        completeStep('create-connection');
+      }
+      queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
+    },
   });
 
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -349,20 +388,20 @@ export default function GraphPage() {
 
   const onConnect = useCallback(
     (params: Connection | Edge) => {
-      const { source, sourceHandle, target, targetHandle } = params;
-
-      // prevent self-looping connections
-      if (source === target) return;
+      // prevent self-looping connections or connecting to null
+      if (!params.source || !params.target || params.source === params.target) {
+        return;
+      }
 
       const newEdge: Edge = {
-        ...params,
-        id: `${source}-${target}`,
-        // animated: true,
+        id: `${params.source}-${params.target}`,
+        source: params.source,
+        target: params.target,
       };
 
       addRelation.mutate({
-        fromId: source,
-        toId: target,
+        fromId: params.source,
+        toId: params.target,
         relationType: 'connected to',
         date: selectedDate,
       });
@@ -525,16 +564,26 @@ export default function GraphPage() {
       </div>
       <Inspector
         selectedNode={selectedNode}
-        onUpdate={updateNodeData.mutate}
-        onDelete={(id, isRelation) => {
+        onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
+        onDelete={(id: string, isRelation: boolean) => {
           if (isRelation) {
             deleteRelation.mutate({ id });
           } else {
             deleteEntity.mutate({ nodeId: id });
           }
         }}
+        onClose={() => setSelectedNode(null)}
         getTerm={getTerm}
       />
+      {showChecklist && (
+        <OnboardingChecklist
+          steps={ONBOARDING_STEPS.map(step => ({
+            ...step,
+            isCompleted: completedSteps.includes(step.id),
+          }))}
+          onDismiss={dismissChecklist}
+        />
+      )}
     </div>
   );
 }
