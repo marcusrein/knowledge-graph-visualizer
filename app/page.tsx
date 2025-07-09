@@ -156,9 +156,9 @@ export default function GraphPage() {
               Add nodes and connections to today&apos;s shared canvas. The graph resets daily at&nbsp;00:00&nbsp;UTC,
               but you can browse snapshots from previous days using the date picker.
             </p>
-            <div className="flex flex-col sm:flex-row justify-center sm:justify-end gap-3">
-              <button className="btn btn-sm" onClick={() => dismissIntro(false)}>Close</button>
-              <button className="btn btn-sm btn-primary" onClick={() => dismissIntro(true)}>
+            <div className="flex flex-col sm:flex-row justify-center sm:justify-end gap-3 mt-4">
+              <button className="btn btn-outline btn-sm" onClick={() => dismissIntro(false)}>Close</button>
+              <button className="btn btn-primary btn-sm" onClick={() => dismissIntro(true)}>
                 Don&apos;t show again
               </button>
             </div>
