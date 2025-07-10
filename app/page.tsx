@@ -46,6 +46,7 @@ interface Selection {
 const nodeTypes = {
   relation: RelationNode,
   topic: TopicNode,
+  knowledge: TopicNode, // alias to silence React Flow warnings
   group: SpaceNode,
 };
 
@@ -381,7 +382,8 @@ export default function GraphPage() {
         id: variables.nodeId,
         position: { x: variables.x, y: variables.y },
         data: { label: variables.label || 'New' },
-        type: variables.type,
+        // Normalize to a React Flow node type
+        type: variables.type === 'knowledge' ? 'topic' : variables.type,
       };
 
       if (variables.type === 'group') {
@@ -470,6 +472,19 @@ export default function GraphPage() {
           const maskedLabel = e.visibility === 'private' && !isOwner ? `${e.userAddress?.slice(0,6)}...${e.userAddress?.slice(-4)}` : e.label;
           
           const handleResize = (width: number, height: number) => {
+            // Find current node position for richer debugging info
+            const currNode = nodes.find((n) => n.id === e.nodeId);
+            console.log('[Resize] Space', e.nodeId, {
+              prevSize: {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                width: (currNode?.style as any)?.width,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                height: (currNode?.style as any)?.height,
+              },
+              newSize: { width, height },
+              position: currNode?.position,
+            });
+
             updateEntityPatch.mutate({
               nodeId: e.nodeId,
               width,
@@ -558,20 +573,46 @@ export default function GraphPage() {
           return node;
         });
 
+        // Build a quick map of relationId -> [sourceId, targetId]
+        const relLinkMap = new Map<number, { source?: string; target?: string }>();
+        linksQuery.data.forEach((l: { relationId: number; entityId: string; role: string }) => {
+          const entry = relLinkMap.get(l.relationId) || {};
+          if (l.role === 'source') entry.source = l.entityId;
+          if (l.role === 'target') entry.target = l.entityId;
+          relLinkMap.set(l.relationId, entry);
+        });
+
         const relationNodes = relationsQuery.data.map((r: { id: number; relationType: string; properties: Record<string, string>; x: number; y: number; }) => {
           const idStr = String(r.id);
           const selection = selections.find(s => s.nodeId === idStr);
           const hasWallet = !!address;
-          return {
+
+          // Detect if both endpoints live inside the same Space
+          let parentId: string | undefined;
+          const endpoints = relLinkMap.get(r.id);
+          if (endpoints?.source && endpoints?.target) {
+            const srcNode = entitiesQuery.data.find((e: { nodeId: string }) => e.nodeId === endpoints.source);
+            const tgtNode = entitiesQuery.data.find((e: { nodeId: string }) => e.nodeId === endpoints.target);
+            if (srcNode?.parentId && srcNode.parentId === tgtNode?.parentId) {
+              parentId = srcNode.parentId;
+            }
+          }
+
+          // If we previously saved position (r.x/y) they are already in the correct coordinate space
+          // (relative to Space if parentId is set, otherwise global). Do not adjust further.
+          const initPos = positionMap.get(idStr) ?? { x: r.x ?? Math.random() * 400, y: r.y ?? Math.random() * 400 };
+
+          const relNode: Node = {
             id: idStr,
             type: 'relation',
+            parentId,
             data: {
               label: r.relationType,
               properties: r.properties,
               selectionColor: selection ? addressToColor(selection.address) : null,
               selectingAddress: selection ? selection.address : null
             },
-            position: positionMap.get(idStr) ?? { x: r.x ?? Math.random() * 400, y: r.y ?? Math.random() * 400 },
+            position: initPos,
             draggable: hasWallet,
             style: selection ? {
               borderColor: addressToColor(selection.address),
@@ -579,6 +620,8 @@ export default function GraphPage() {
               boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
             } : undefined
           };
+
+          return relNode;
         });
 
         return [...groupNodes, ...topicNodes.filter(Boolean), ...relationNodes];
@@ -604,7 +647,10 @@ export default function GraphPage() {
         }
       });
 
-      setNodes(buildNodes());
+      const built = buildNodes();
+      console.log('[BuildNodes] count', built.length);
+      console.table(built.map((n) => ({ id: n.id, type: n.type, parentId: n.parentId, x: n.position.x, y: n.position.y })));
+      setNodes(built);
       setEdges(newEdges);
     }
   }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor]);
@@ -916,6 +962,9 @@ export default function GraphPage() {
   const handleAutoLayout = () => {
     if (!requireWallet()) return;
 
+    console.log('%c[AutoLayout] Triggered', 'color: lightgreen; font-weight: bold');
+    console.log('[AutoLayout] Current node positions', nodes.map((n) => ({ id: n.id, parentId: n.parentId, pos: n.position })));
+
     // helper to run dagre on a subset and return new positions
     const runLayout = (
       subsetNodes: Node[],
@@ -943,44 +992,101 @@ export default function GraphPage() {
       subsetNodes.forEach((n) => {
         const nodeWithPos = g.node(n.id);
         if (nodeWithPos) {
-          posMap.set(n.id, { x: nodeWithPos.x + offsetX, y: nodeWithPos.y + offsetY });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const w = (n.style as any)?.width || 180;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const h = (n.style as any)?.height || 60;
+          // Convert Dagre center to React Flow top-left coordinates
+          const topLeftX = nodeWithPos.x - w / 2;
+          const topLeftY = nodeWithPos.y - h / 2;
+          posMap.set(n.id, { x: topLeftX + offsetX, y: topLeftY + offsetY });
         }
       });
+
+      console.log('[runLayout] subset ids', subsetNodes.map((n) => n.id));
+      console.log('[runLayout] offset', { offsetX, offsetY });
+      console.table(Array.from(posMap.entries()).map(([id, p]) => ({ id, ...p })));
+
       return posMap;
     };
 
     setNodes((curr) => {
       let next = [...curr];
+ 
+      // --- Detect relation nodes that live entirely inside a Space ---
+      const spaces = next.filter((n) => n.type === 'group');
+      const internalRelationIds = new Set<string>();
 
+      spaces.forEach((space) => {
+        const childIds = new Set(
+          next.filter((c) => c.parentId === space.id).map((c) => c.id)
+        );
+
+        // Find relation nodes with all endpoints inside this space
+        next
+          .filter((n) => n.type === 'relation' && !n.parentId)
+          .forEach((rel) => {
+            const relEdges = edges.filter(
+              (e) => e.source.toString() === rel.id || e.target.toString() === rel.id
+            );
+            if (relEdges.length === 0) return;
+            const allInside = relEdges.every((e) => {
+              const otherId =
+                e.source.toString() === rel.id ? e.target.toString() : e.source.toString();
+              return childIds.has(otherId);
+            });
+            if (allInside) {
+              internalRelationIds.add(rel.id);
+            }
+          });
+      });
+
+      console.log('[AutoLayout] === Global layout ===');
+ 
       // 1) Global layout (nodes without parentId)
-      const globalNodes = next.filter((n) => !n.parentId);
+      const globalNodes = next.filter(
+        (n) => !n.parentId && n.type !== 'group' && !internalRelationIds.has(n.id)
+      );
       const globalNodeIds = new Set(globalNodes.map((n) => n.id));
       const globalEdges = edges.filter(
         (e) => globalNodeIds.has(e.source.toString()) && globalNodeIds.has(e.target.toString())
       );
       const globalPos = runLayout(globalNodes, globalEdges);
       next = next.map((n) => (globalPos.has(n.id) ? { ...n, position: globalPos.get(n.id)! } : n));
-
-      // 2) Per-space layout
-      const spaces = next.filter((n) => n.type === 'group');
+ 
+      console.log('[AutoLayout] === Per-Space layout ===');
+ 
+      // 2) Per-space layout (reuse spaces found above)
+      // `spaces` already declared
       spaces.forEach((space) => {
-        const children = next.filter((c) => c.parentId === space.id);
+        const children = [
+          ...next.filter((c) => c.parentId === space.id),
+          ...next.filter((c) => internalRelationIds.has(c.id)),
+        ];
         if (!children.length) return;
-
-        const childIds = new Set(children.map((c) => c.id));
-        const childEdges = edges.filter(
-          (e) => childIds.has(e.source.toString()) && childIds.has(e.target.toString())
-        );
-
-        // Give kids some padding inside space (20px)
-        const posInsideRaw = runLayout(children, childEdges, 20, 20);
-
-        // Clamp to stay within Space bounds
+ 
+        console.log(`\n[SpaceLayout] Space ${space.id} (${children.length} children)`);
+ 
+        // Dimensions of the space (with sensible fallbacks)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sWidth = ((space.style as any)?.width ?? 400) as number;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sHeight = ((space.style as any)?.height ?? 300) as number;
-
+ 
+        // --- Dagre layout inside the space ---
+        const childIds = new Set(children.map((c) => c.id));
+        const childEdges = edges.filter(
+          (e) => childIds.has(e.source.toString()) && childIds.has(e.target.toString())
+        );
+ 
+        console.log('[SpaceLayout] Running dagre for children', Array.from(childIds));
+ 
+        // Offset children by 20px padding inside the space
+        const posInsideRaw = runLayout(children, childEdges, 20, 20);
+ 
+        console.log('[SpaceLayout] Raw positions', Array.from(posInsideRaw.entries()));
+ 
+        // Clamp positions to remain within space bounds
         const clamped = new Map<string, { x: number; y: number }>();
         children.forEach((child) => {
           const raw = posInsideRaw.get(child.id);
@@ -996,12 +1102,25 @@ export default function GraphPage() {
             y: Math.min(Math.max(raw.y, 20), maxY),
           });
         });
-
-        next = next.map((n) =>
-          clamped.has(n.id) ? { ...n, position: clamped.get(n.id)! } : n
-        );
+ 
+        console.log('[SpaceLayout] Clamped positions', Array.from(clamped.entries()));
+ 
+        next = next.map((n) => {
+          if (clamped.has(n.id)) {
+            const newPos = clamped.get(n.id)!;
+            // If this was an internal relation without parentId, attach it to the space so
+            // React Flow treats its coordinates as relative to the Space.
+            if (internalRelationIds.has(n.id)) {
+              return { ...n, parentId: space.id, position: newPos };
+            }
+            return { ...n, position: newPos };
+          }
+          return n;
+        });
       });
-
+ 
+      console.log('[AutoLayout] Final positions', next.map((n) => ({ id: n.id, pos: n.position, parentId: n.parentId })));
+ 
       return next;
     });
   };
