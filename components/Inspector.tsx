@@ -74,6 +74,18 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const entityDescription = "In a knowledge graph, a Topic represents an 'entity'—a unique person, place, idea, or concept. Think of it as a noun. You can connect Topics to show their relationships.";
   const relationDescription = "A Relation is the connection or 'edge' between two Topics. It describes how they're related, acting like a verb. For example, 'Ada Lovelace' (Topic) 'wrote' (Relation) 'the first algorithm' (Topic).";
 
+  const commonRelations = [
+    'connected to',
+    'is a',
+    'has a',
+    'part of',
+    'works at',
+    'lives in',
+    'born in',
+    'wrote',
+    'created',
+    'owns'
+  ];
 
   return (
     <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
@@ -98,30 +110,29 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
             data-tooltip-id="inspector-tooltip"
             data-tooltip-content={isRelation ? "Describe the relationship between the two Topics. Examples: 'is a friend of', 'works at', 'is located in'. Keep it descriptive!" : "Give your Topic a clear, concise name. This label is how you'll see and identify this piece of knowledge on the knowledge graph."}
           >
-            Label
+            {isRelation ? "How Topics Relate" : "Label"}
           </label>
-          <input
-            type="text"
-            className="input input-bordered w-full"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label
-            className="block text-sm font-medium text-gray-400 mb-1"
-            data-tooltip-id="inspector-tooltip"
-            data-tooltip-content="This shows whether you're inspecting a Topic (an entity) or a Relation (a connection). In knowledge graphs, everything is either a node (Topic) or an edge (Relation)."
-          >
-            Type
-          </label>
-          <input
-            type="text"
-            className="input input-bordered w-full"
-            value={isRelation ? getTerm('RELATION') : getTerm('ENTITY')}
-            readOnly
-          />
+          {isRelation ? (
+            <select
+              className="select select-bordered w-full"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            >
+              {commonRelations.map(rel => (
+                <option key={rel} value={rel}>{rel}</option>
+              ))}
+              {!commonRelations.includes(label) && (
+                <option key={label} value={label}>{label}</option>
+              )}
+            </select>
+          ) : (
+            <input
+              type="text"
+              className="input input-bordered w-full"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          )}
         </div>
 
         <div className="divider">{getTerm('PROPERTIES')}</div>
@@ -136,7 +147,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                 placeholder="key"
                 onChange={(e) => handlePropertyChange(index, 'key', e.target.value)}
                 data-tooltip-id="inspector-tooltip"
-                data-tooltip-content="Add custom data to your Topic or Relation. The 'key' is the name of the data field, like 'Date of Birth' or 'Website'."
+                data-tooltip-content={`Add a custom property to the '${label}' ${isRelation ? 'Relation' : 'Topic'}. The 'key' is the name of the data field, like 'Date of Birth' or 'Website'.`}
               />
               <input
                 type="text"
@@ -145,7 +156,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                 placeholder="value"
                 onChange={(e) => handlePropertyChange(index, 'value', e.target.value)}
                 data-tooltip-id="inspector-tooltip"
-                data-tooltip-content="This is the value for the property you defined in the 'key'. For a 'Website' key, this would be the URL."
+                data-tooltip-content={`Provide a value for the custom property. For a 'Website' key, this would be the URL.`}
               />
               <button onClick={() => handleRemoveProperty(key)} className="btn btn-ghost btn-sm">
                 &times;
@@ -158,7 +169,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
           onClick={handleAddProperty}
           className="btn btn-sm btn-outline mt-2 w-full"
           data-tooltip-id="inspector-tooltip"
-          data-tooltip-content="Enrich your Topics and Relations with extra details. Each property is a key-value pair, adding more semantic meaning and context."
+          data-tooltip-content={`Enrich your '${label}' ${isRelation ? 'Relation' : 'Topic'} with extra details. Each property is a key-value pair, adding more semantic meaning and context.`}
         >
           + Add Property
         </button>

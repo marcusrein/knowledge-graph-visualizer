@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { format } from 'date-fns';
 import ReactFlow, {
   Background,
   Controls,
-  addEdge,
   Connection,
   Edge,
   Node,
-  OnConnectStartParams,
   applyNodeChanges,
   NodeChange,
   applyEdgeChanges,
@@ -23,7 +21,6 @@ import usePartySocket from 'partysocket/react';
 
 import RelationNode from '@/components/RelationNode';
 import Inspector from '@/components/Inspector';
-import { useTerminology } from '@/lib/TerminologyContext';
 import Avatar from '@/components/Avatar';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
 import TopicNode from '@/components/TopicNode';
@@ -61,14 +58,12 @@ export default function GraphPage() {
   const { address } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
-  const { getTerm } = useTerminology();
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [presentUsers, setPresentUsers] = useState<PresentUser[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const today = format(new Date(), 'yyyy-MM-dd');
   const [selectedDate, setSelectedDate] = useState<string>(today);
-  const [showIntro, setShowIntro] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [showChecklist, setShowChecklist] = useState(false);
@@ -112,7 +107,7 @@ export default function GraphPage() {
   useEffect(() => {
     if (connectError) {
       console.debug('connect error', connectError);
-      if ((connectError as any).name === 'ConnectorNotFoundError') {
+      if ((connectError as { name?: string }).name === 'ConnectorNotFoundError') {
         toast.error('No browser wallet detected. Install MetaMask or choose WalletConnect.');
       } else {
         toast.error(connectError.message);
@@ -176,7 +171,7 @@ export default function GraphPage() {
   });
 
   const updateNodeData = useMutation({
-    mutationFn: async ({ nodeId, data }: { nodeId: string; data: { label?: string; properties?: any } }) => {
+    mutationFn: async ({ nodeId, data }: { nodeId: string; data: { label?: string; properties?: Record<string, string> } }) => {
       const isRelation = isNumeric(nodeId);
       const endpoint = isRelation ? '/api/relations' : '/api/entities';
       const payload = isRelation
@@ -270,7 +265,7 @@ export default function GraphPage() {
     queryKey: ['entities', selectedDate],
     queryFn: async () => {
       const res = await fetch(`/api/entities?date=${selectedDate}`);
-      return (await res.json()) as any[];
+      return res.json();
     },
   });
 
@@ -278,7 +273,7 @@ export default function GraphPage() {
     queryKey: ['relations', selectedDate],
     queryFn: async () => {
       const res = await fetch(`/api/relations?date=${selectedDate}`);
-      return (await res.json()) as any[];
+      return res.json();
     },
   });
 
@@ -320,7 +315,7 @@ export default function GraphPage() {
   });
 
   const addRelation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: { sourceId: string, targetId: string, relationType: string, x: number, y: number, date: string }) => {
       const res = await fetch('/api/relations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -343,7 +338,7 @@ export default function GraphPage() {
   // map API to React Flow
   useEffect(() => {
     if (entitiesQuery.data && relationsQuery.data) {
-      const entityNodes = entitiesQuery.data.map((e) => {
+      const entityNodes = entitiesQuery.data.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; }) => {
         const selection = selections.find(s => s.nodeId === e.nodeId);
         return {
           id: e.nodeId,
@@ -361,7 +356,7 @@ export default function GraphPage() {
         };
       });
 
-      const relationNodes = relationsQuery.data.map((r) => {
+      const relationNodes = relationsQuery.data.map((r: { id: number; relationType: string; properties: Record<string, string>; x: number; y: number; }) => {
         const selection = selections.find(s => s.nodeId === String(r.id));
         return {
           id: String(r.id),
@@ -378,7 +373,7 @@ export default function GraphPage() {
         };
       });
 
-      const newEdges = relationsQuery.data.flatMap((r) => [
+      const newEdges = relationsQuery.data.flatMap((r: { sourceId: string; id: number; targetId: string; }) => [
         {
           id: `${r.sourceId}-${r.id}`,
           source: r.sourceId,
@@ -405,22 +400,23 @@ export default function GraphPage() {
         return;
       }
 
-      const newEdge: Edge = {
-        id: `${params.source}-${params.target}`,
-        source: params.source,
-        target: params.target,
-      };
+      const sourceNode = nodes.find(n => n.id === params.source);
+      const targetNode = nodes.find(n => n.id === params.target);
+      if (!sourceNode || !targetNode) return;
+
+      const x = (sourceNode.position.x + targetNode.position.x) / 2;
+      const y = (sourceNode.position.y + targetNode.position.y) / 2;
 
       addRelation.mutate({
-        fromId: params.source,
-        toId: params.target,
+        sourceId: params.source,
+        targetId: params.target,
         relationType: 'connected to',
+        x,
+        y,
         date: selectedDate,
       });
-
-      setEdges((eds) => addEdge(newEdge, eds));
     },
-    [addRelation, selectedDate]
+    [nodes, addRelation, selectedDate]
   );
 
   const handleAddNode = () => {
@@ -440,7 +436,7 @@ export default function GraphPage() {
   };
 
   const onNodeDragStop = useCallback(
-    (_: any, node: Node) => {
+    (_: React.MouseEvent, node: Node) => {
       socket.send(JSON.stringify({
         type: 'node-move',
         payload: { nodeId: node.id, position: node.position },
@@ -479,7 +475,7 @@ export default function GraphPage() {
     []
   );
 
-  const handleNodeClick = (_: any, node: Node) => {
+  const handleNodeClick = (_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
     socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
   };
