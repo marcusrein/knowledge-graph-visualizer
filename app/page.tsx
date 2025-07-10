@@ -70,6 +70,7 @@ export default function GraphPage() {
   const [mounted, setMounted] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [showChecklist, setShowChecklist] = useState(false);
+  const [connecting, setConnecting] = useState(true);
 
   const socket = usePartySocket({
     host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || '127.0.0.1:1999',
@@ -133,6 +134,7 @@ export default function GraphPage() {
     } else if (!hide) {
       setShowChecklist(true);
     }
+    setConnecting(false);
   }, []);
 
   const dismissChecklist = () => {
@@ -361,6 +363,15 @@ export default function GraphPage() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
+  const addressToColor = useCallback((address: string) => {
+    let hash = 0;
+    for (let i = 0; i < address.length; i++) {
+      hash = address.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+    return `#${'00000'.substring(0, 6 - c.length)}${c}`;
+  }, []);
+
   /* ---------- mutations ---------- */
   // map API to React Flow
   useEffect(() => {
@@ -370,7 +381,7 @@ export default function GraphPage() {
         return {
           id: e.nodeId,
           type: 'topic',
-          data: { label: e.label, properties: e.properties },
+          data: { label: e.label, properties: e.properties, selectingAddress: selection ? selection.address : null },
           position: {
             x: e.x ?? Math.random() * 400,
             y: e.y ?? Math.random() * 400,
@@ -388,15 +399,18 @@ export default function GraphPage() {
         return {
           id: String(r.id),
           type: 'relation',
-          data: { label: r.relationType, properties: r.properties },
+          data: {
+            label: r.relationType,
+            properties: r.properties,
+            selectionColor: selection ? addressToColor(selection.address) : null,
+            selectingAddress: selection ? selection.address : null
+          },
           position: {
             x: r.x ?? Math.random() * 400,
             y: r.y ?? Math.random() * 400,
           },
           draggable: true,
-          style: selection ? {
-            // custom nodes need a different way to style, we can do this later
-          } : undefined
+          style: undefined // We'll handle styling inside the component
         };
       });
 
@@ -423,7 +437,7 @@ export default function GraphPage() {
       setNodes([...entityNodes, ...relationNodes]);
       setEdges(newEdges);
     }
-  }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections]);
+  }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor]);
 
   const onConnect = useCallback(
     (params: Connection | Edge) => {
@@ -620,7 +634,11 @@ export default function GraphPage() {
         </div>
 
         <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
-          {address ? (
+          {connecting ? (
+            <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
+              <span className="text-sm font-mono">Loading...</span>
+            </div>
+          ) : address ? (
             <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
               <span className="text-sm font-mono">{`${address.slice(
                 0,
@@ -730,12 +748,3 @@ export default function GraphPage() {
     </div>
   );
 }
-
-const addressToColor = (address: string) => {
-  let hash = 0;
-  for (let i = 0; i < address.length; i++) {
-    hash = address.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const c = (hash & 0x00ffffff).toString(16).toUpperCase();
-  return `#${'00000'.substring(0, 6 - c.length)}${c}`;
-};

@@ -1,10 +1,16 @@
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { HelpCircle } from 'lucide-react';
+import Avatar from './Avatar';
 
-const TopicNode = ({ data }: NodeProps) => {
+const TopicNode = ({ data }: NodeProps<{ label: string; selectingAddress?: string }>) => {
   return (
     <div className="px-4 py-3 rounded-md bg-blue-600 text-white text-base shadow relative">
+      {data.selectingAddress && (
+        <div className="absolute -top-3 -right-3">
+          <Avatar address={data.selectingAddress} />
+        </div>
+      )}
       <span>{data.label}</span>
       <span
         data-tooltip-id="kg-node-tip"

@@ -1,10 +1,24 @@
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { HelpCircle } from 'lucide-react';
+import Avatar from './Avatar';
 
-const RelationNode = ({ data }: NodeProps) => {
+const RelationNode = ({ data }: NodeProps<{ label: string; selectionColor?: string | null; selectingAddress?: string | null }>) => {
+  const style = data.selectionColor ? {
+    borderColor: data.selectionColor,
+    boxShadow: `0 0 10px ${data.selectionColor}`,
+  } : {};
+
   return (
-    <div className="pl-3 pr-6 py-1.5 shadow-md rounded-full bg-purple-600 text-white border-2 border-purple-300 relative text-sm">
+    <div
+      className="pl-3 pr-6 py-1.5 shadow-md rounded-full bg-purple-600 text-white border-2 border-purple-300 relative text-sm"
+      style={style}
+    >
+      {data.selectingAddress && (
+        <div className="absolute -top-3 -right-3">
+          <Avatar address={data.selectingAddress} />
+        </div>
+      )}
       {/* Tooltip icon */}
       <span
         data-tooltip-id="kg-node-tip"
