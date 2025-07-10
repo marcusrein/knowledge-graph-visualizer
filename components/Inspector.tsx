@@ -21,6 +21,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const [label, setLabel] = useState('');
   const [properties, setProperties] = useState<Property[]>([]);
   const [nextId, setNextId] = useState(0);
+  const [isCustomRelation, setIsCustomRelation] = useState(false);
 
   useEffect(() => {
     if (selectedNode) {
@@ -33,6 +34,13 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
       }));
       setProperties(propsArray);
       setNextId(propsArray.length);
+
+      const isRelation = /^\d+$/.test(selectedNode.id);
+      if (isRelation && !commonRelations.includes(selectedNode.data.label)) {
+        setIsCustomRelation(true);
+      } else {
+        setIsCustomRelation(false);
+      }
     }
   }, [selectedNode]);
 
@@ -95,9 +103,13 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     'works at',
     'lives in',
     'born in',
-    'wrote',
     'created',
-    'owns'
+    'owns',
+    'is a type of',
+    'is a subclass of',
+    'is a superclass of',
+    'comes from',
+
   ];
 
   return (
@@ -125,22 +137,51 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
             <Info
               className="w-4 h-4 text-gray-400 cursor-pointer"
               data-tooltip-id="inspector-tooltip"
-              data-tooltip-content={isRelation ? "This is the 'verb' that connects two Topics. It describes the action or relationship between them (e.g., 'wrote', 'visited', 'is a type of')." : "Think of this as the 'noun' or proper name for your Topic (e.g., 'Ada Lovelace', 'Paris', 'Computer Science')."}
+              data-tooltip-content={isRelation ? "This is how the two Topics are related." : "Think of this as the 'noun' or proper name for your Topic (e.g., 'Ada Lovelace', 'Paris', 'Computer Science')."}
             />
           </div>
           {isRelation ? (
-            <select
-              className="select select-bordered w-full"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            >
-              {commonRelations.map(rel => (
-                <option key={rel} value={rel}>{rel}</option>
-              ))}
-              {!commonRelations.includes(label) && (
-                <option key={label} value={label}>{label}</option>
-              )}
-            </select>
+            !isCustomRelation ? (
+              <select
+                className="select select-bordered w-full"
+                value={label}
+                onChange={(e) => {
+                  if (e.target.value === 'add_new') {
+                    setIsCustomRelation(true);
+                    setLabel('');
+                  } else {
+                    setLabel(e.target.value);
+                  }
+                }}
+              >
+                {commonRelations.map((rel) => (
+                  <option key={rel} value={rel}>
+                    {rel}
+                  </option>
+                ))}
+                {!commonRelations.includes(label) && <option value={label}>{label}</option>}
+                <option value="add_new">+ Add new relation</option>
+              </select>
+            ) : (
+              <div>
+                <input
+                  type="text"
+                  className="input input-bordered w-full"
+                  value={label}
+                  placeholder="Enter custom relation"
+                  onChange={(e) => setLabel(e.target.value)}
+                />
+                <button
+                  className="btn btn-xs btn-ghost mt-1 text-gray-500"
+                  onClick={() => {
+                    setIsCustomRelation(false);
+                    setLabel(commonRelations[0]);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )
           ) : (
             <input
               type="text"
@@ -157,7 +198,11 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
             <Info
               className="w-4 h-4 text-gray-400 cursor-pointer"
               data-tooltip-id="inspector-tooltip"
-              data-tooltip-html={`Add specific details to your <i>${isRelation ? 'Relation' : 'Topic'}</i>. Each detail has a set of <i>Attributes</i> and <i>Values</i>. For example, a common <i>Attribute</i> might be "Size" and the <i>Value</i> might be "Small". Another common <i>Attribute</i> might be "Color" and the <i>Value</i> might be "Red". Add as many details as you want!`}
+              data-tooltip-html={
+                isRelation
+                  ? "Add properties to describe the connection itself. This is useful for capturing details that don't fit in the label.<br/><br/>For example, for a <b>'works at'</b> relation, you could add details like:<br/>- Attribute: 'Role', Value: 'Engineer'<br/>- Attribute: 'Start Date', Value: '2023-01-15'<br/><br/>This follows the GRC20 spec for 'Relation Entities'."
+                  : `Add specific details to your <i>Topic</i>. Each detail has an <i>Attribute</i> and a <i>Value</i>.<br/><br/>For example, a 'Person' Topic might have an attribute 'Born' with the value '1815'.`
+              }
             />
           </div>
           <div className="space-y-2">
@@ -167,14 +212,14 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                   type="text"
                   className="input input-bordered input-sm w-full"
                   value={prop.key}
-                  placeholder="Attribute"
+                  placeholder={isRelation ? "Attribute" : "Attribute"}
                   onChange={(e) => handlePropertyChange(prop.id, 'key', e.target.value)}
                 />
                 <input
                   type="text"
                   className="input input-bordered input-sm w-full"
                   value={prop.value}
-                  placeholder="Value"
+                  placeholder={isRelation ? "Value" : "Value"}
                   onChange={(e) => handlePropertyChange(prop.id, 'value', e.target.value)}
                 />
                 <button onClick={() => handleRemoveProperty(prop.id)} className="btn btn-ghost btn-sm">
