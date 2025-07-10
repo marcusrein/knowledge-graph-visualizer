@@ -1,39 +1,54 @@
 'use client';
+import { createContext, useContext, useState, ReactNode } from 'react';
 
-import { createContext, useState, useContext, ReactNode } from 'react';
+type Terminology = {
+  knowledgeGraph: string;
+  topic: string;
+  topics: string;
+  createTopic: string;
+  relation: string;
+  relations: string;
+  createRelation: string;
+};
 
-type TerminologyMode = 'dev' | 'normie';
+const normie: Terminology = {
+  knowledgeGraph: 'Knowledge Graph',
+  topic: 'Topic',
+  topics: 'Topics',
+  createTopic: 'Create a Topic',
+  relation: 'Connection',
+  relations: 'Connections',
+  createRelation: 'Create a Connection',
+};
+
+const dev: Terminology = {
+  knowledgeGraph: 'Space',
+  topic: 'Entity',
+  topics: 'Entities',
+  createTopic: 'Create an Entity',
+  relation: 'Relation',
+  relations: 'Relations',
+  createRelation: 'Create a Relation',
+};
 
 interface TerminologyContextType {
-  mode: TerminologyMode;
+  terms: Terminology;
+  isDevMode: boolean;
   toggleMode: () => void;
-  getTerm: (devTerm: string) => string;
 }
 
 const TerminologyContext = createContext<TerminologyContextType | undefined>(undefined);
 
-const terminologyMap: Record<string, { dev: string; normie: string }> = {
-  ENTITY: { dev: 'Entity', normie: 'Topic' },
-  RELATION: { dev: 'Relation', normie: 'Relation' },
-  PROPERTIES: { dev: 'Properties', normie: 'Details' },
-  ADD_ENTITY: { dev: 'Add Entity', normie: 'Add Topic' },
-  ERROR_CONNECT_ENTITIES: { dev: 'Can only connect main entities', normie: 'Can only connect Topics' },
-};
-
 export const TerminologyProvider = ({ children }: { children: ReactNode }) => {
-  const [mode, setMode] = useState<TerminologyMode>('normie');
+  const [isDevMode, setIsDevMode] = useState(false);
+  const terms = isDevMode ? dev : normie;
 
   const toggleMode = () => {
-    setMode((prevMode) => (prevMode === 'dev' ? 'normie' : 'dev'));
-  };
-
-  const getTerm = (devTermKey: string) => {
-    const term = terminologyMap[devTermKey];
-    return term ? term[mode] : devTermKey;
+    setIsDevMode((prev) => !prev);
   };
 
   return (
-    <TerminologyContext.Provider value={{ mode, toggleMode, getTerm }}>
+    <TerminologyContext.Provider value={{ terms, isDevMode, toggleMode }}>
       {children}
     </TerminologyContext.Provider>
   );

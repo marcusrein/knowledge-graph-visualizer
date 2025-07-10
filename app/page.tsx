@@ -1,27 +1,27 @@
 "use client";
 
-import { useState, useCallback, useEffect } from 'react';
-import { format } from 'date-fns';
+import { useState, useEffect, useCallback } from 'react';
 import ReactFlow, {
-  Background,
   Controls,
-  Connection,
-  Edge,
-  Node,
+  Background,
   applyNodeChanges,
-  NodeChange,
   applyEdgeChanges,
-  EdgeChange,
-  MarkerType,
+  Node,
+  Edge,
+  OnNodesChange,
+  OnEdgesChange,
+  OnConnect,
+  Connection,
   ConnectionLineType,
+  MarkerType,
 } from 'reactflow';
-import * as dagre from 'dagre';
-import 'reactflow/dist/style.css';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
-import toast from 'react-hot-toast';
-import usePartySocket from 'partysocket/react';
-import { Menu } from 'lucide-react';
+import { usePartySocket } from 'partysocket/react';
+import { Toaster, toast } from 'react-hot-toast';
+import { format } from 'date-fns';
+
+import 'reactflow/dist/style.css';
 
 import RelationNode from '@/components/RelationNode';
 import Inspector from '@/components/Inspector';
@@ -29,6 +29,7 @@ import Avatar from '@/components/Avatar';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
 import TopicNode from '@/components/TopicNode';
 import { Tooltip } from 'react-tooltip';
+import { useTerminology } from '@/lib/TerminologyContext';
 
 interface PresentUser {
   id: string;
@@ -52,9 +53,24 @@ function isNumeric(str: string) {
 }
 
 const ONBOARDING_STEPS = [
-  { id: 'create-topic', title: 'Create your first Topic' },
-  { id: 'name-topic', title: 'Give your Topic a name' },
-  { id: 'create-connection', title: 'Connect it to another Topic' },
+  {
+    id: 'create-topic',
+    title: 'Create your first Topic',
+    description: 'Click the + button in the top left to create your first topic.',
+    isCompleted: false,
+  },
+  {
+    id: 'name-topic',
+    title: 'Name your Topic',
+    description: 'Give your new topic a name in the inspector on the right.',
+    isCompleted: false,
+  },
+  {
+    id: 'create-connection',
+    title: 'Connect two topics',
+    description: 'Create another topic and connect it to the first one by dragging from one node to another.',
+    isCompleted: false,
+  },
 ];
 
 export default function GraphPage() {
@@ -62,21 +78,22 @@ export default function GraphPage() {
   const { address } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
-
+  const { terms, isDevMode, toggleMode } = useTerminology();
+  const [showMenu, setShowMenu] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [presentUsers, setPresentUsers] = useState<PresentUser[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const today = format(new Date(), 'yyyy-MM-dd');
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [mounted, setMounted] = useState(false);
-  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [showChecklist, setShowChecklist] = useState(false);
   const [connecting, setConnecting] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(false);
+
 
   const socket = usePartySocket({
-    host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || '127.0.0.1:1999',
+    host: process.env.NEXT_PUBLIC_PARTY_HOST || 'localhost:1999',
     room: selectedDate,
     onMessage(event) {
       const message = JSON.parse(event.data);
@@ -629,34 +646,45 @@ export default function GraphPage() {
       <div className="flex-1 h-screen relative">
         <div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
           <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-            <div className="relative">
-              <button onClick={() => setMenuOpen(prev => !prev)} className="btn btn-ghost btn-circle btn-sm">
-                <Menu className="h-5 w-5" />
+            <div
+              className="relative"
+              onMouseEnter={() => setShowMenu(true)}
+              onMouseLeave={() => setShowMenu(false)}
+            >
+              <button className="flex items-center space-x-2">
+                <img src="/file.svg" alt="File" className="w-6 h-6" />
+                <span className="text-sm font-mono">GRC-20</span>
+                <span className="text-xs">▼</span>
               </button>
-              {menuOpen && (
-                <ul className="absolute left-0 mt-2 menu menu-sm z-[25] p-2 shadow bg-base-200 rounded-box w-52">
+              {showMenu && (
+                <ul className="absolute top-full left-0 mt-2 bg-gray-800 rounded-lg shadow-lg p-2 w-48">
                   <li>
-                    <button
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setShowWelcome(true);
-                      }}
+                    <a
+                      href="#"
+                      onClick={() => setShowWelcome(true)}
+                      className="block px-4 py-2 hover:bg-gray-700 rounded"
                     >
-                      Welcome / Help
-                    </button>
+                      Help
+                    </a>
                   </li>
                   <li>
-                    <a href="https://thegraph.com/" target="_blank" rel="noopener noreferrer">
+                    <a
+                      href="https://thegraph.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block px-4 py-2 hover:bg-gray-700 rounded"
+                    >
                       The Graph
                     </a>
                   </li>
                   <li>
                     <a
-                      href="https://thegraph.com/blog/grc20-knowledge-graph/"
+                      href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md"
                       target="_blank"
                       rel="noopener noreferrer"
+                      className="block px-4 py-2 hover:bg-gray-700 rounded"
                     >
-                      GRC-20 Blog Post
+                      GRC-20 Spec
                     </a>
                   </li>
                   <li>
@@ -664,6 +692,7 @@ export default function GraphPage() {
                       href="https://github.com/graphprotocol/hypergraph"
                       target="_blank"
                       rel="noopener noreferrer"
+                      className="block px-4 py-2 hover:bg-gray-700 rounded"
                     >
                       Hypergraph Repo
                     </a>
@@ -671,8 +700,16 @@ export default function GraphPage() {
                 </ul>
               )}
             </div>
+            <label className="flex items-center cursor-pointer">
+              <span className="text-sm font-mono mr-2">Dev Mode</span>
+              <div className="relative">
+                <input type="checkbox" checked={isDevMode} onChange={toggleMode} className="sr-only" />
+                <div className="block bg-gray-600 w-10 h-6 rounded-full"></div>
+                <div className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div>
+              </div>
+            </label>
 
-            <span className="font-mono text-lg">The Knowledge Graph Visualizer</span>
+            <span className="font-mono text-lg">{terms.knowledgeGraph}</span>
             <span className="font-mono text-lg text-gray-400">/</span>
             <img src="/globe.svg" alt="Globe" className="w-6 h-6" />
             <input
@@ -681,7 +718,7 @@ export default function GraphPage() {
               onChange={(e) => setSelectedDate(e.target.value)}
               className="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-sm"
               data-tooltip-id="kg-node-tip"
-              data-tooltip-content="Select a date to view the knowledge graph for that day. The knowledge graph is ephemeral and resets daily."
+              data-tooltip-content={`Select a date to view the ${terms.knowledgeGraph} for that day. It is ephemeral and resets daily.`}
             />
           </div>
 
@@ -689,7 +726,7 @@ export default function GraphPage() {
             onClick={handleAddNode}
             className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
             data-tooltip-id="kg-node-tip"
-            data-tooltip-content="Create a new Topic"
+            data-tooltip-content={terms.createTopic}
           >
             +
           </button>
@@ -787,7 +824,7 @@ export default function GraphPage() {
           <Controls />
         </ReactFlow>
 
-        {(showWelcome || nodes.length === 0) && (
+        {(showWelcome || (nodes.length === 0 && showWelcome !== false)) && (
           <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
             <div className="text-center bg-gray-800 bg-opacity-80 p-8 rounded-lg max-w-lg pointer-events-auto relative">
               <button
@@ -798,21 +835,21 @@ export default function GraphPage() {
               >
                 &times;
               </button>
-              <h2 className="text-2xl font-bold mb-2">Welcome to the Daily Knowledge Graph Visualizer</h2>
+              <h2 className="text-2xl font-bold mb-2">Welcome to the Daily {terms.knowledgeGraph} Visualizer</h2>
               <p className="text-gray-400 mb-6">
-                This is a mulitiplayer visualizer that demonstrates how Knowledge Graphs work! Use it to map ideas, projects, and people, and see how other people connect with your ideas in real time.
+                This is a mulitiplayer visualizer that demonstrates how {terms.knowledgeGraph}s work! Use it to map ideas, projects, and people, and see how other people connect with your ideas in real time.
               </p>
               <p className="text-gray-400 mb-6">
-                The data is cleared every day at midnight UTC as this is simply demonstrating how Knowledge Graphs work.
+                The data is cleared every day at midnight UTC as this is simply demonstrating how {terms.knowledgeGraph}s work.
               </p>
               <p className="text-gray-400 mb-6 font-bold">
-                To get started, create a new Topic by clicking the + button.
+                To get started, create a new {terms.topic} by clicking the + button.
               </p>
               <button
                 onClick={handleAddNode}
                 className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
               >
-                Create a Topic
+                {terms.createTopic}
               </button>
               <div className="mt-8 text-md text-gray-500">
                 <p>Learn more about the standards and technologies behind this app:</p>
