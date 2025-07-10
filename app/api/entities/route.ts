@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { format } from 'date-fns';
+// Verbose logging helper
+const log = (...args: unknown[]) => console.log('[Entities]', new Date().toISOString(), ...args);
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -11,12 +13,14 @@ export async function GET(req: NextRequest) {
     .prepare('SELECT * FROM entities WHERE date(created_at)=?')
     .all(date);
 
+  log('GET', { date, rows: rows.length });
   return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { nodeId, label, type, userAddress } = body;
+  log('POST payload', body);
   const { x, y } = body;
   if (!nodeId || !label || !type) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
@@ -32,12 +36,14 @@ export async function POST(req: NextRequest) {
     "INSERT INTO entities (nodeId, label, type, userAddress, x, y, created_at) VALUES (?,?,?,?,?,?,datetime('now'))"
   );
   const info = stmt.run(nodeId, label, type, userAddress ?? null, x ?? null, y ?? null);
+  log('POST created', { id: info.lastInsertRowid, nodeId });
   return NextResponse.json({ id: info.lastInsertRowid });
 }
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { nodeId, x, y, label, properties } = body;
+  log('PATCH payload', body);
   if (!nodeId) {
     return NextResponse.json({ error: 'Missing nodeId' }, { status: 400 });
   }
@@ -58,38 +64,46 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const body = await req.json();
-  const { nodeId } = body;
-  if (!nodeId) {
-    return NextResponse.json({ error: 'Missing node ID' }, { status: 400 });
-  }
-
-  console.log(`--- Deleting Entity: ${nodeId} ---`);
-
-  const deleteTransaction = db.transaction((id: string) => {
-    const relationsToDelete = db
-      .prepare('SELECT id FROM relations WHERE sourceId = ? OR targetId = ?')
-      .all(id, id) as { id: number }[];
-
-    if (relationsToDelete.length > 0) {
-      const relationIds = relationsToDelete.map((r) => r.id);
-      console.log('Relations to delete (IDs):', relationIds);
-      const placeholders = relationIds.map(() => '?').join(',');
-
-      // With ON DELETE CASCADE, deleting from relations will also delete from relation_links
-      db.prepare(`DELETE FROM relations WHERE id IN (${placeholders})`).run(...relationIds);
+  try {
+    const body = await req.json();
+    const { nodeId } = body;
+    if (!nodeId) {
+      return NextResponse.json({ error: 'Missing node ID' }, { status: 400 });
     }
 
-    const info = db.prepare('DELETE FROM entities WHERE nodeId = ?').run(id);
-    console.log(`Deleted ${info.changes} entity.`);
-    return info;
-  });
+    log('DELETE nodeId', nodeId);
 
-  const info = deleteTransaction(nodeId);
+    const deleteTransaction = db.transaction((id: string) => {
+      const relationsToDelete = db
+        .prepare('SELECT id FROM relations WHERE sourceId = ? OR targetId = ?')
+        .all(id, id) as { id: number }[];
 
-  if (info.changes === 0) {
-    return NextResponse.json({ error: 'Node not found' }, { status: 404 });
+      if (relationsToDelete.length > 0) {
+        const relationIds = relationsToDelete.map((r) => r.id);
+        log('Relations to delete', relationIds);
+        const placeholders = relationIds.map(() => '?').join(',');
+
+        // First remove relation_links that reference these relations to satisfy FK constraints in older DBs
+        db.prepare(`DELETE FROM relation_links WHERE relationId IN (${placeholders})`).run(...relationIds);
+
+        // Now remove the relations themselves
+        db.prepare(`DELETE FROM relations WHERE id IN (${placeholders})`).run(...relationIds);
+      }
+
+      const info = db.prepare('DELETE FROM entities WHERE nodeId = ?').run(id);
+      log('Deleted entity', { changes: info.changes });
+      return info;
+    });
+
+    const info = deleteTransaction(nodeId);
+
+    if (info.changes === 0) {
+      return NextResponse.json({ error: 'Node not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    log('Error deleting entity', err);
+    return NextResponse.json({ error: 'Internal server error', details: String(err) }, { status: 500 });
   }
-
-  return NextResponse.json({ success: true });
 } 

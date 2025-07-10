@@ -9,6 +9,11 @@ type Terminology = {
   relation: string;
   relations: string;
   createRelation: string;
+  inspectorLabel: string;
+  inspectorProperties: string;
+  inspectorAddProperty: string;
+  inspectorPropertyKey: string;
+  inspectorPropertyValue: string;
 };
 
 const normie: Terminology = {
@@ -19,16 +24,26 @@ const normie: Terminology = {
   relation: 'Connection',
   relations: 'Connections',
   createRelation: 'Create a Connection',
+  inspectorLabel: 'Label',
+  inspectorProperties: 'Details',
+  inspectorAddProperty: '+ Add Detail',
+  inspectorPropertyKey: 'Attribute',
+  inspectorPropertyValue: 'Value',
 };
 
 const dev: Terminology = {
-  knowledgeGraph: 'Space',
+  knowledgeGraph: 'Knowledge Graph',
   topic: 'Entity',
   topics: 'Entities',
   createTopic: 'Create an Entity',
   relation: 'Relation',
   relations: 'Relations',
   createRelation: 'Create a Relation',
+  inspectorLabel: 'Name',
+  inspectorProperties: 'Values',
+  inspectorAddProperty: '+ Add Value',
+  inspectorPropertyKey: 'Property ID',
+  inspectorPropertyValue: 'Value',
 };
 
 interface TerminologyContextType {

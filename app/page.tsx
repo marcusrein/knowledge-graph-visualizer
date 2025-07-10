@@ -8,20 +8,20 @@ import ReactFlow, {
   applyEdgeChanges,
   Node,
   Edge,
-  OnNodesChange,
-  OnEdgesChange,
-  OnConnect,
+  NodeChange,
+  EdgeChange,
   Connection,
   ConnectionLineType,
   MarkerType,
+  OnConnect,
 } from 'reactflow';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { usePartySocket } from 'partysocket/react';
-import { Toaster, toast } from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
-
 import 'reactflow/dist/style.css';
+import * as dagre from 'dagre';
 
 import RelationNode from '@/components/RelationNode';
 import Inspector from '@/components/Inspector';
@@ -247,9 +247,10 @@ export default function GraphPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
+      if (!res.ok && res.status !== 404) {
         const error = await res.json();
         toast.error(error.error || 'Failed to delete relation');
+        console.error('Delete relation error', error);
         throw new Error(error.error || 'Failed to delete relation');
       }
     },
@@ -269,16 +270,43 @@ export default function GraphPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
+      if (!res.ok && res.status !== 404) {
         const error = await res.json();
         toast.error(error.error || 'Failed to delete node');
+        console.error('Delete entity error', error);
         throw new Error(error.error || 'Failed to delete node');
       }
     },
     onSuccess: (data, variables) => {
-      // Optimistically remove the node and its edges
-      setNodes((nds) => nds.filter((n) => n.id !== variables.nodeId));
-      setEdges((eds) => eds.filter((e) => e.source !== variables.nodeId && e.target !== variables.nodeId));
+      const deletedNodeId = variables.nodeId;
+
+      // First update edges and compute connected relation IDs based on the latest edge state
+      setEdges((prevEdges) => {
+        const connectedRelationIds = prevEdges
+          .map((e) => {
+            if (e.source === deletedNodeId) return e.target;
+            if (e.target === deletedNodeId) return e.source;
+            return null;
+          })
+          .filter((id): id is string => id !== null && isNumeric(id));
+
+        // Remove the entity node and any connected relation nodes
+        setNodes((prevNodes) =>
+          prevNodes.filter(
+            (n) => n.id !== deletedNodeId && !connectedRelationIds.includes(n.id)
+          )
+        );
+
+        // Finally, filter out edges connected to the deleted entity or its related relations
+        return prevEdges.filter(
+          (e) =>
+            e.source !== deletedNodeId &&
+            e.target !== deletedNodeId &&
+            !connectedRelationIds.includes(e.source) &&
+            !connectedRelationIds.includes(e.target)
+        );
+      });
+
       setSelectedNode(null);
       queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
       queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
@@ -482,7 +510,7 @@ export default function GraphPage() {
     }
   }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor]);
 
-  const onConnect = useCallback(
+  const onConnect: OnConnect = useCallback(
     (params: Connection | Edge) => {
       if (!requireWallet()) return;
       // prevent self-looping connections or connecting to null
@@ -615,14 +643,13 @@ export default function GraphPage() {
     );
   };
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    []
+  const onNodesChange: (changes: NodeChange[]) => void = useCallback(
+    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    [setNodes]
   );
-
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
+  const onEdgesChange: (changes: EdgeChange[]) => void = useCallback(
+    (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+    [setEdges]
   );
 
   const handleNodeClick = (_: React.MouseEvent, node: Node) => {
@@ -700,14 +727,25 @@ export default function GraphPage() {
                 </ul>
               )}
             </div>
-            <label className="flex items-center cursor-pointer">
-              <span className="text-sm font-mono mr-2">Dev Mode</span>
-              <div className="relative">
-                <input type="checkbox" checked={isDevMode} onChange={toggleMode} className="sr-only" />
-                <div className="block bg-gray-600 w-10 h-6 rounded-full"></div>
-                <div className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div>
+            <div
+              onClick={toggleMode}
+              className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1"
+            >
+              <div
+                className={`px-3 py-1 rounded-full transition-colors duration-300 ${
+                  !isDevMode ? 'bg-blue-600 text-white' : 'text-gray-400'
+                }`}
+              >
+                Normie Mode
               </div>
-            </label>
+              <div
+                className={`px-3 py-1 rounded-full transition-colors duration-300 ${
+                  isDevMode ? 'bg-green-600 text-white' : 'text-gray-400'
+                }`}
+              >
+                Dev Mode
+              </div>
+            </div>
 
             <span className="font-mono text-lg">{terms.knowledgeGraph}</span>
             <span className="font-mono text-lg text-gray-400">/</span>
@@ -843,7 +881,7 @@ export default function GraphPage() {
                 The data is cleared every day at midnight UTC as this is simply demonstrating how {terms.knowledgeGraph}s work.
               </p>
               <p className="text-gray-400 mb-6 font-bold">
-                To get started, create a new {terms.topic} by clicking the + button.
+                To get started, create a new {terms.topic}!
               </p>
               <button
                 onClick={handleAddNode}
@@ -851,14 +889,7 @@ export default function GraphPage() {
               >
                 {terms.createTopic}
               </button>
-              <div className="mt-8 text-md text-gray-500">
-                <p>Learn more about the standards and technologies behind this app:</p>
-                <div className="flex justify-center gap-4 mt-2">
-                  <a href="https://thegraph.com" target="_blank" rel="noopener noreferrer" className="hover:text-white">The Graph</a>
-                  <a href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md" target="_blank" rel="noopener noreferrer" className="hover:text-white">GRC-20 Spec</a>
-                  <a href="https://github.com/graphprotocol/hypergraph" target="_blank" rel="noopener noreferrer" className="hover:text-white">Hypergraph</a>
-                </div>
-              </div>
+             
             </div>
           </div>
         )}

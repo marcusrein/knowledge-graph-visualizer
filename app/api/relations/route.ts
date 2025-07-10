@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { format } from 'date-fns';
+// Verbose logging helper
+const log = (...args: unknown[]) => console.log('[Relations]', new Date().toISOString(), ...args);
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -11,12 +13,14 @@ export async function GET(req: NextRequest) {
     .prepare('SELECT * FROM relations WHERE date(created_at)=?')
     .all(date);
 
+  log('GET', { date, rows: rows.length });
   return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { sourceId, targetId, relationType, userAddress, x, y } = body;
+  log('POST payload', body);
   if (!sourceId || !targetId || !relationType || x === undefined || y === undefined) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
   }
@@ -25,6 +29,7 @@ export async function POST(req: NextRequest) {
     "INSERT INTO relations (sourceId, targetId, relationType, userAddress, x, y, created_at) VALUES (?,?,?,?,?,?,datetime('now'))"
   );
   const info = stmt.run(sourceId, targetId, relationType, userAddress ?? null, x, y);
+  log('POST created', { id: info.lastInsertRowid, sourceId, targetId, relationType });
 
   // insert into relation_links table
   const linkStmt = db.prepare("INSERT INTO relation_links (relationId, entityId, role, created_at) VALUES (?,?,?,datetime('now'))");
@@ -35,30 +40,40 @@ export async function POST(req: NextRequest) {
 } 
  
 export async function DELETE(req: NextRequest) {
-  const body = await req.json();
-  const { id } = body;
-  if (!id) {
-    return NextResponse.json({ error: 'Missing relation ID' }, { status: 400 });
+  try {
+    const body = await req.json();
+    const { id } = body;
+    if (!id) {
+      return NextResponse.json({ error: 'Missing relation ID' }, { status: 400 });
+    }
+
+    const relationId = parseInt(id, 10);
+    if (isNaN(relationId)) {
+      return NextResponse.json({ error: 'Invalid relation ID' }, { status: 400 });
+    }
+    log('DELETE relationId', relationId);
+
+    // Remove any relation_links rows pointing to this relation first (to satisfy FK if cascade missing)
+    db.prepare('DELETE FROM relation_links WHERE relationId = ?').run(relationId);
+
+    const stmt = db.prepare('DELETE FROM relations WHERE id = ?');
+    const info = stmt.run(relationId);
+
+    if (info.changes === 0) {
+      return NextResponse.json({ error: 'Relation not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    log('Error deleting relation', err);
+    return NextResponse.json({ error: 'Internal server error', details: String(err) }, { status: 500 });
   }
-
-  const relationId = parseInt(id, 10);
-  if (isNaN(relationId)) {
-    return NextResponse.json({ error: 'Invalid relation ID' }, { status: 400 });
-  }
-
-  const stmt = db.prepare('DELETE FROM relations WHERE id = ?');
-  const info = stmt.run(relationId);
-
-  if (info.changes === 0) {
-    return NextResponse.json({ error: 'Relation not found' }, { status: 404 });
-  }
-
-  return NextResponse.json({ success: true });
 } 
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { id, x, y, relationType, properties, sourceId, targetId } = body;
+  log('PATCH payload', body);
   if (!id) {
     return NextResponse.json({ error: 'Missing relation ID' }, { status: 400 });
   }
