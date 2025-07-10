@@ -51,7 +51,7 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
     >
       {/* Space label & privacy icon */}
       <span className="text-xs font-semibold text-purple-800">{label}</span>
-      <span className="ml-auto text-xl leading-none text-purple-700 cursor-default">
+      <span className="ml-auto text-[10px] text-purple-700 cursor-default">
         {visibility === 'public' ? '🌍' : '🔒'}
       </span>
 

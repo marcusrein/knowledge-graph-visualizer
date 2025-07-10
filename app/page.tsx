@@ -562,35 +562,16 @@ export default function GraphPage() {
           const idStr = String(r.id);
           const selection = selections.find(s => s.nodeId === idStr);
           const hasWallet = !!address;
-
-          // Determine if relation visually inside any space
-          let relPos = positionMap.get(idStr) ?? { x: r.x ?? Math.random() * 400, y: r.y ?? Math.random() * 400 };
-          let parentId: string | undefined = undefined;
-          for (const sp of groupNodes) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const sW = ((sp.style as any)?.width ?? 400) as number;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const sH = ((sp.style as any)?.height ?? 300) as number;
-            const withinX = relPos.x >= sp.position.x && relPos.x <= sp.position.x + sW;
-            const withinY = relPos.y >= sp.position.y && relPos.y <= sp.position.y + sH;
-            if (withinX && withinY) {
-              parentId = sp.id;
-              relPos = { x: relPos.x - sp.position.x, y: relPos.y - sp.position.y };
-              break;
-            }
-          }
-
           return {
             id: idStr,
             type: 'relation',
-            parentId,
             data: {
               label: r.relationType,
               properties: r.properties,
               selectionColor: selection ? addressToColor(selection.address) : null,
               selectingAddress: selection ? selection.address : null
             },
-            position: relPos,
+            position: positionMap.get(idStr) ?? { x: r.x ?? Math.random() * 400, y: r.y ?? Math.random() * 400 },
             draggable: hasWallet,
             style: selection ? {
               borderColor: addressToColor(selection.address),
@@ -909,19 +890,10 @@ export default function GraphPage() {
 
       // Persist change to DB
       if (isNumeric(node.id)) {
-        let relX = node.position.x;
-        let relY = node.position.y;
-        if (node.parentId) {
-          const sp = nodes.find((n) => n.id === node.parentId);
-          if (sp) {
-            relX += sp.position.x;
-            relY += sp.position.y;
-          }
-        }
         updateRelationPosition.mutate({
           id: node.id,
-          x: relX,
-          y: relY,
+          x: node.position.x,
+          y: node.position.y,
         });
       } else {
         updateEntityPatch.mutate({
@@ -1049,7 +1021,7 @@ export default function GraphPage() {
     [setEdges]
   );
 
-  const handleNodeClick = (e: React.MouseEvent, node: Node) => {
+  const handleNodeClick = (_: React.MouseEvent, node: Node) => {
     if (!requireWallet()) return;
     if (node.type === 'group') {
       const gData = node.data as { visibility?: string; owner?: string };
@@ -1062,15 +1034,6 @@ export default function GraphPage() {
         return; // non-owner cannot inspect private space
       }
     }
-    if (e.altKey) {
-      // Toggle orientation property
-      const currentOrientation = (node.data.properties?.orientation as string | undefined) ?? 'vertical';
-      const newOrientation = currentOrientation === 'horizontal' ? 'vertical' : 'horizontal';
-      const newProps = { ...(node.data.properties ?? {}), orientation: newOrientation };
-      updateNodeData.mutate({ nodeId: node.id, data: { properties: newProps } });
-      return; // don't open inspector on alt-click
-    }
-
     setSelectedNode(node);
     socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
   };
