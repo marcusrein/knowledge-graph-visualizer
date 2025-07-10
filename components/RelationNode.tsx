@@ -10,7 +10,7 @@ interface RelationData {
   properties?: Record<string, unknown>;
 }
 
-const RelationNode = ({ data, id }: NodeProps<RelationData>) => {
+const RelationNode = ({ data }: NodeProps<RelationData>) => {
   const style = data.selectionColor ? {
     borderColor: data.selectionColor,
     boxShadow: `0 0 10px ${data.selectionColor}`,
@@ -18,7 +18,6 @@ const RelationNode = ({ data, id }: NodeProps<RelationData>) => {
 
   const orientation = (data.properties as Record<string, string> | undefined)?.orientation ?? 'vertical';
   const vertical = orientation !== 'horizontal';
-  console.log(`[RelationNode ${id}] Rendering with orientation: ${orientation}`);
 
   return (
     <div

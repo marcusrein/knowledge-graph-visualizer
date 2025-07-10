@@ -53,10 +53,6 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
       }));
       setProperties(propsArray);
       setNextId(propsArray.length);
-      
-      // Ensure orientation is properly typed
-      const currentOrientation = propsObject.orientation;
-      setOrientation(currentOrientation === 'horizontal' ? 'horizontal' : 'vertical');
 
       if (selectedNode.type === 'group') {
         setVisibility(selectedNode.data.visibility ?? 'public');
@@ -292,35 +288,23 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
           </div>
           <div className="flex gap-2">
             <button
-              className={`btn btn-sm ${orientation === 'vertical' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => {
-                const newOrientation = 'vertical' as const;
-                setOrientation(newOrientation);
-                const propsObject = properties.reduce((acc, prop) => {
-                  if (prop.key) acc[prop.key] = prop.value;
-                  return acc;
-                }, {} as Record<string, string>);
-                propsObject.orientation = newOrientation;
-                onSave(selectedNode.id, { properties: propsObject });
+              className={`btn btn-sm ${orientation==='vertical'?'btn-primary':'btn-ghost'}`}
+              onClick={()=>{
+                setOrientation('vertical');
+                const propsObject = properties.reduce((acc, prop) => { if (prop.key) acc[prop.key]=prop.value; return acc; }, {} as Record<string,string>);
+                propsObject.orientation='vertical';
+                onSave(selectedNode.id,{ properties: propsObject });
               }}
-            >
-              Top/Bottom
-            </button>
+            >Top/Bottom</button>
             <button
-              className={`btn btn-sm ${orientation === 'horizontal' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => {
-                const newOrientation = 'horizontal' as const;
-                setOrientation(newOrientation);
-                const propsObject = properties.reduce((acc, prop) => {
-                  if (prop.key) acc[prop.key] = prop.value;
-                  return acc;
-                }, {} as Record<string, string>);
-                propsObject.orientation = newOrientation;
-                onSave(selectedNode.id, { properties: propsObject });
+              className={`btn btn-sm ${orientation==='horizontal'?'btn-primary':'btn-ghost'}`}
+              onClick={()=>{
+                setOrientation('horizontal');
+                const propsObject = properties.reduce((acc, prop) => { if (prop.key) acc[prop.key]=prop.value; return acc; }, {} as Record<string,string>);
+                propsObject.orientation='horizontal';
+                onSave(selectedNode.id,{ properties: propsObject });
               }}
-            >
-              Left/Right
-            </button>
+            >Left/Right</button>
           </div>
         </div>
       </div>

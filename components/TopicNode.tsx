@@ -9,10 +9,9 @@ interface TopicData {
   properties?: Record<string, unknown>;
 }
 
-const TopicNode = ({ data, id }: NodeProps<TopicData>) => {
+const TopicNode = ({ data }: NodeProps<TopicData>) => {
   const orientation = (data.properties as Record<string, string> | undefined)?.orientation ?? 'vertical';
   const vertical = orientation !== 'horizontal';
-  console.log(`[TopicNode ${id}] Rendering with orientation: ${orientation}`);
   return (
     <div className="px-4 py-3 rounded-md bg-blue-600 text-white text-base shadow relative">
       {data.selectingAddress && (
