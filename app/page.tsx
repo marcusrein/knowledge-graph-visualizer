@@ -33,6 +33,12 @@ import TopicNode from '@/components/TopicNode';
 import { Tooltip } from 'react-tooltip';
 import { useTerminology } from '@/lib/TerminologyContext';
 
+const nodeTypes = {
+  relation: RelationNode,
+  topic: TopicNode,
+  group: SpaceNode,
+};
+
 interface PresentUser {
   id: string;
   address: string;
@@ -42,12 +48,6 @@ interface Selection {
   address: string;
   nodeId: string | null;
 }
-
-const nodeTypes = {
-  relation: RelationNode,
-  topic: TopicNode,
-  group: SpaceNode,
-};
 
 // A more robust check for numeric strings (for relation IDs)
 function isNumeric(str: string) {
@@ -222,20 +222,60 @@ export default function GraphPage() {
       if (!res.ok) throw new Error('Failed to save node data');
       return res.json();
     },
-    onSuccess: (data, variables) => {
-      // Check if a non-default name has been set
-      if (variables.data.label && variables.data.label !== 'New Topic') {
-        completeStep('name-topic');
-      }
-      // After successfully saving, update the node in React Flow state
+    onMutate: (variables) => {
+      // Optimistically update the node in React Flow state
       setNodes((nds) =>
         nds.map((n) => {
           if (n.id === variables.nodeId) {
             return {
               ...n,
               data: {
+                ...n.data,
+                ...variables.data,
+                properties: {
+                  ...n.data.properties,
+                  ...variables.data.properties,
+                },
+              },
+            };
+          }
+          return n;
+        })
+      );
+
+      // Force React Flow to update the node internals
+      if (rfInstance) {
+        rfInstance.setNodes(nodes => {
+          const node = nodes.find(n => n.id === variables.nodeId);
+          if (node) {
+            // This forces a re-calculation of the node's dimensions and handles
+            node.data = { ...node.data };
+          }
+          return [...nodes];
+        });
+      }
+    },
+    onSuccess: (data, variables) => {
+      // Check if a non-default name has been set
+      if (variables.data.label && variables.data.label !== 'New Topic') {
+        completeStep('name-topic');
+      }
+      // After successfully saving, update the node in React Flow state
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (rfInstance) (rfInstance as any).updateNodeInternals?.(variables.nodeId);
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === variables.nodeId) {
+            return {
+              ...n,
+              data: {
+                ...n.data,
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 ...(variables.data as any),
+                properties: {
+                  ...n.data.properties,
+                  ...variables.data.properties,
+                },
                 // Ensure label is updated from the server response if available
                 label: data.label || data.relationType || n.data.label,
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -248,8 +288,8 @@ export default function GraphPage() {
       );
       // Invalidate queries to refetch from the source of truth if needed,
       // though the manual update above provides a snappier feel.
-      queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
-      queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
+      // queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
+      // queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
     },
   });
 
