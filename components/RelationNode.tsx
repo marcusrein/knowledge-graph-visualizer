@@ -4,14 +4,14 @@ import { HelpCircle } from 'lucide-react';
 
 const RelationNode = ({ data }: NodeProps) => {
   return (
-    <div className="px-3 py-1.5 shadow-md rounded-full bg-purple-600 text-white border-2 border-purple-300 relative text-sm">
+    <div className="pl-3 pr-6 py-1.5 shadow-md rounded-full bg-purple-600 text-white border-2 border-purple-300 relative text-sm">
       {/* Tooltip icon */}
       <span
         data-tooltip-id="kg-node-tip"
         data-tooltip-content="A Relation describes how two Topics are connected."
-        className="absolute -top-1 -right-1 cursor-help"
+        className="absolute top-1/2 -translate-y-1/2 right-1 cursor-help"
       >
-        <HelpCircle size={8} />
+        <HelpCircle size={14} />
       </span>
 
       <Handle type="target" position={Position.Top} className="w-11 !bg-purple-500" />
