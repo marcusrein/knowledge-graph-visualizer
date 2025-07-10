@@ -363,6 +363,15 @@ export default function GraphPage() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
+  // Wallet guard helper
+  const requireWallet = useCallback((): boolean => {
+    if (!address) {
+      toast.error('Please connect your wallet to interact with the Knowledge Graph Visualizer');
+      return false;
+    }
+    return true;
+  }, [address]);
+
   const addressToColor = useCallback((address: string) => {
     let hash = 0;
     for (let i = 0; i < address.length; i++) {
@@ -378,6 +387,7 @@ export default function GraphPage() {
     if (entitiesQuery.data && relationsQuery.data && linksQuery.data) {
       const entityNodes = entitiesQuery.data.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; }) => {
         const selection = selections.find(s => s.nodeId === e.nodeId);
+        const hasWallet = !!address;
         return {
           id: e.nodeId,
           type: 'topic',
@@ -386,6 +396,7 @@ export default function GraphPage() {
             x: e.x ?? Math.random() * 400,
             y: e.y ?? Math.random() * 400,
           },
+          draggable: hasWallet,
           style: selection ? {
             borderColor: addressToColor(selection.address),
             borderWidth: 2,
@@ -396,6 +407,7 @@ export default function GraphPage() {
 
       const relationNodes = relationsQuery.data.map((r: { id: number; relationType: string; properties: Record<string, string>; x: number; y: number; }) => {
         const selection = selections.find(s => s.nodeId === String(r.id));
+        const hasWallet = !!address;
         return {
           id: String(r.id),
           type: 'relation',
@@ -409,7 +421,7 @@ export default function GraphPage() {
             x: r.x ?? Math.random() * 400,
             y: r.y ?? Math.random() * 400,
           },
-          draggable: true,
+          draggable: hasWallet,
           style: undefined // We'll handle styling inside the component
         };
       });
@@ -441,6 +453,7 @@ export default function GraphPage() {
 
   const onConnect = useCallback(
     (params: Connection | Edge) => {
+      if (!requireWallet()) return;
       // prevent self-looping connections or connecting to null
       if (!params.source || !params.target || params.source === params.target) {
         return;
@@ -487,10 +500,11 @@ export default function GraphPage() {
         return;
       }
     },
-    [nodes, addRelation, selectedDate, addRelationLink]
+    [nodes, addRelation, selectedDate, addRelationLink, requireWallet]
   );
 
   const handleAddNode = () => {
+    if (!requireWallet()) return;
     console.log('Creating a new topic...');
     // Generate a unique client-side identifier for the new topic
     const nodeId = crypto.randomUUID();
@@ -508,6 +522,7 @@ export default function GraphPage() {
 
   const onNodeDragStop = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      if (!requireWallet()) return;
       socket.send(JSON.stringify({
         type: 'node-move',
         payload: { nodeId: node.id, position: node.position },
@@ -528,7 +543,7 @@ export default function GraphPage() {
         });
       }
     },
-    [socket, updatePosition, updateRelationPosition]
+    [socket, updatePosition, updateRelationPosition, requireWallet]
   );
 
   const handlePaneClick = () => {
@@ -538,6 +553,7 @@ export default function GraphPage() {
 
   // --- Auto-layout using Dagre ---
   const handleAutoLayout = () => {
+    if (!requireWallet()) return;
     const g = new dagre.graphlib.Graph();
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 100 });
@@ -579,6 +595,7 @@ export default function GraphPage() {
   );
 
   const handleNodeClick = (_: React.MouseEvent, node: Node) => {
+    if (!requireWallet()) return;
     setSelectedNode(node);
     socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
   };
@@ -590,6 +607,8 @@ export default function GraphPage() {
       </div>
     );
   }
+
+  const hasWallet = !!address;
 
   return (
     <div className="flex h-screen bg-gray-800 text-white">
@@ -666,6 +685,21 @@ export default function GraphPage() {
           )}
         </div>
 
+        {!hasWallet && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center backdrop-blur-xs">
+            <div className="bg-gray-800/90 rounded-lg px-6 py-4 flex flex-col items-center space-y-4">
+              <p className="text-white text-lg font-medium text-center">The Knowledge Graph Visualizer</p>
+
+              <button
+                onClick={() => connectors[0] && connect({ connector: connectors[0] })}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+              >
+                Connect with MetaMask
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Default edge styling */}
         <ReactFlow
           deleteKeyCode={null}
@@ -674,6 +708,10 @@ export default function GraphPage() {
             markerEnd: { type: MarkerType.ArrowClosed, width: 30, height: 30, color: '#fff' },
             style: { strokeWidth: 2, stroke: '#AAA' },
           }}
+          panOnDrag={hasWallet}
+          panOnScroll={hasWallet}
+          zoomOnScroll={hasWallet}
+          zoomOnPinch={hasWallet}
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
@@ -724,8 +762,12 @@ export default function GraphPage() {
       </div>
       <Inspector
         selectedNode={selectedNode}
-        onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
+        onSave={(nodeId, data) => {
+          if (!requireWallet()) return;
+          updateNodeData.mutate({ nodeId, data })
+        }}
         onDelete={(id: string, isRelation: boolean) => {
+          if (!requireWallet()) return;
           if (isRelation) {
             deleteRelation.mutate({ id });
           } else {
