@@ -17,7 +17,7 @@ type Terminology = {
 };
 
 const normie: Terminology = {
-  knowledgeGraph: 'Knowledge Graph',
+  knowledgeGraph: 'Knowledge Graph Visualizer',
   topic: 'Topic',
   topics: 'Topics',
   createTopic: 'Create a Topic',
@@ -32,7 +32,7 @@ const normie: Terminology = {
 };
 
 const dev: Terminology = {
-  knowledgeGraph: 'Knowledge Graph',
+  knowledgeGraph: 'Knowledge Graph Visualizer',
   topic: 'Entity',
   topics: 'Entities',
   createTopic: 'Create an Entity',

@@ -14,6 +14,7 @@ import ReactFlow, {
   ConnectionLineType,
   MarkerType,
   OnConnect,
+  ReactFlowInstance,
 } from 'reactflow';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
@@ -24,6 +25,7 @@ import 'reactflow/dist/style.css';
 import * as dagre from 'dagre';
 
 import RelationNode from '@/components/RelationNode';
+import SpaceNode from '@/components/SpaceNode';
 import Inspector from '@/components/Inspector';
 import Avatar from '@/components/Avatar';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
@@ -44,6 +46,7 @@ interface Selection {
 const nodeTypes = {
   relation: RelationNode,
   topic: TopicNode,
+  group: SpaceNode,
 };
 
 // A more robust check for numeric strings (for relation IDs)
@@ -95,6 +98,7 @@ export default function GraphPage() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
   const [presentUsers, setPresentUsers] = useState<PresentUser[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -186,17 +190,6 @@ export default function GraphPage() {
     });
   };
 
-  const updatePosition = useMutation({
-    mutationFn: async (payload: { nodeId: string; x: number; y: number }) => {
-      const res = await fetch('/api/entities', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('Failed to update position');
-    },
-  });
-
   const updateRelationPosition = useMutation({
     mutationFn: async (payload: { id: string; x: number; y: number }) => {
       await fetch('/api/relations', {
@@ -208,12 +201,17 @@ export default function GraphPage() {
   });
 
   const updateNodeData = useMutation({
-    mutationFn: async ({ nodeId, data }: { nodeId: string; data: { label?: string; properties?: Record<string, string> } }) => {
+    mutationFn: async ({ nodeId, data }: { nodeId: string; data: { label?: string; properties?: Record<string, string>; visibility?: 'public' | 'private' } }) => {
       const isRelation = isNumeric(nodeId);
       const endpoint = isRelation ? '/api/relations' : '/api/entities';
       const payload = isRelation
         ? { id: nodeId, relationType: data.label, properties: data.properties }
-        : { nodeId: nodeId, label: data.label, properties: data.properties };
+        : {
+            nodeId: nodeId,
+            label: data.label,
+            properties: data.properties,
+            visibility: data.visibility,
+          };
 
       const res = await fetch(endpoint, {
         method: 'PATCH',
@@ -235,10 +233,12 @@ export default function GraphPage() {
             return {
               ...n,
               data: {
-                ...n.data,
-                ...variables.data,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ...(variables.data as any),
                 // Ensure label is updated from the server response if available
                 label: data.label || data.relationType || n.data.label,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                visibility: (variables.data as any).visibility ?? n.data.visibility,
               },
             };
           }
@@ -328,9 +328,9 @@ export default function GraphPage() {
 
   // fetch nodes and edges
   const entitiesQuery = useQuery({
-    queryKey: ['entities', selectedDate],
+    queryKey: ['entities', selectedDate, address],
     queryFn: async () => {
-      const res = await fetch(`/api/entities?date=${selectedDate}`);
+      const res = await fetch(`/api/entities?date=${selectedDate}&address=${address ?? ''}`);
       return res.json();
     },
   });
@@ -355,11 +355,16 @@ export default function GraphPage() {
     mutationFn: async (payload: {
       nodeId: string;
       label: string;
-      type: 'knowledge' | 'category';
+      type: 'knowledge' | 'category' | 'group';
       x: number;
       y: number;
+      width?: number;
+      height?: number;
       properties: Record<string, unknown>;
       date: string;
+      userAddress: string;
+      parentId?: string | null;
+      visibility?: 'public' | 'private';
     }) => {
       const res = await fetch('/api/entities', {
         method: 'POST',
@@ -371,17 +376,30 @@ export default function GraphPage() {
     onSuccess: (_data, variables) => {
       completeStep('create-topic');
       // Add the new node to the state optimistically
-      const newNode = {
+      const newNode: Node = {
         // Use the same nodeId we sent to the server to keep client and server in sync
         id: variables.nodeId,
-        position: { x: 200, y: 150 },
-        data: { label: variables.label || 'New Topic' },
-        style: {
-          backgroundColor: '#fff',
-          color: '#000',
-          border: '1px solid #ddd',
-        },
+        position: { x: variables.x, y: variables.y },
+        data: { label: variables.label || 'New' },
+        type: variables.type,
       };
+
+      if (variables.type === 'group') {
+        newNode.style = {
+          width: 400,
+          height: 300,
+          backgroundColor: 'rgba(208, 192, 247, 0.2)',
+          borderColor: '#D0C0F7',
+        };
+        newNode.type = 'group';
+        // Provide owner and visibility immediately so Inspector can allow editing
+        newNode.data = {
+          ...newNode.data,
+          owner: variables.userAddress,
+          visibility: variables.visibility ?? 'public',
+        };
+      }
+
       setNodes((nds) => [...nds, newNode]);
       setSelectedNode(newNode);
       queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
@@ -438,50 +456,133 @@ export default function GraphPage() {
   // map API to React Flow
   useEffect(() => {
     if (entitiesQuery.data && relationsQuery.data && linksQuery.data) {
-      const entityNodes = entitiesQuery.data.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; }) => {
-        const selection = selections.find(s => s.nodeId === e.nodeId);
-        const hasWallet = !!address;
-        return {
-          id: e.nodeId,
-          type: 'topic',
-          data: { label: e.label, properties: e.properties, selectingAddress: selection ? selection.address : null },
-          position: {
-            x: e.x ?? Math.random() * 400,
-            y: e.y ?? Math.random() * 400,
-          },
-          draggable: hasWallet,
-          style: selection ? {
-            borderColor: addressToColor(selection.address),
-            borderWidth: 3,
-            boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
-          } : undefined
-        };
-      });
+      const buildNodes = () => {
+        // Build new nodes preserving positions
+        const positionMap = new Map(nodes.map(n => [n.id, n.position]));
 
-      const relationNodes = relationsQuery.data.map((r: { id: number; relationType: string; properties: Record<string, string>; x: number; y: number; }) => {
-        const selection = selections.find(s => s.nodeId === String(r.id));
-        const hasWallet = !!address;
-        return {
-          id: String(r.id),
-          type: 'relation',
-          data: {
-            label: r.relationType,
-            properties: r.properties,
-            selectionColor: selection ? addressToColor(selection.address) : null,
-            selectingAddress: selection ? selection.address : null
-          },
-          position: {
-            x: r.x ?? Math.random() * 400,
-            y: r.y ?? Math.random() * 400,
-          },
-          draggable: hasWallet,
-          style: selection ? {
-            borderColor: addressToColor(selection.address),
-            borderWidth: 3,
-            boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
-          } : undefined
-        };
-      });
+        // --- first pass: Spaces (groups) ---
+        const groupEntities = entitiesQuery.data.filter((e: { type: string }) => e.type === 'group');
+        const groupIds = new Set(groupEntities.map((g: { nodeId: string }) => g.nodeId));
+
+        const groupNodes = groupEntities.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; type: string; userAddress: string; visibility: string; width?: number; height?: number; }) => {
+          const selection = selections.find(s => s.nodeId === e.nodeId);
+          const isOwner = Boolean(e.userAddress && address && e.userAddress.toLowerCase() === address.toLowerCase());
+          const maskedLabel = e.visibility === 'private' && !isOwner ? `${e.userAddress?.slice(0,6)}...${e.userAddress?.slice(-4)}` : e.label;
+          
+          const handleResize = (width: number, height: number) => {
+            updateEntityPatch.mutate({
+              nodeId: e.nodeId,
+              width,
+              height,
+            });
+            // Update the node style immediately for visual feedback
+            setNodes((nds) =>
+              nds.map((n) =>
+                n.id === e.nodeId
+                  ? { ...n, style: { ...n.style, width, height } }
+                  : n
+              )
+            );
+          };
+
+          const node: Node = {
+            id: e.nodeId,
+            type: 'group',
+            data: { 
+              label: maskedLabel, 
+              properties: e.properties, 
+              selectingAddress: selection ? selection.address : null, 
+              owner: e.userAddress, 
+              visibility: e.visibility,
+              onResize: isOwner ? handleResize : undefined,
+            },
+            position: positionMap.get(e.nodeId) ?? { x: e.x ?? Math.random() * 400, y: e.y ?? Math.random() * 400 },
+            draggable: isOwner,
+            selectable: isOwner,
+            style: {
+              width: e.width ?? 400,
+              height: e.height ?? 300,
+              backgroundColor: 'rgba(208, 192, 247, 0.2)',
+              borderColor: '#D0C0F7',
+            },
+          };
+
+          if (selection) {
+            node.style = {
+              ...node.style,
+              borderColor: addressToColor(selection.address),
+              borderWidth: 3,
+              boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
+            };
+          }
+
+          return node;
+        });
+
+        // --- second pass: Topics (non-group entities) ---
+        const groupInfoMap = new Map<string, { visibility: string; owner: string }>();
+        groupEntities.forEach((g: { nodeId: string; visibility: string; userAddress: string }) => {
+          groupInfoMap.set(g.nodeId, { visibility: g.visibility, owner: g.userAddress });
+        });
+        const topicEntities = entitiesQuery.data.filter((e: { type: string }) => e.type !== 'group');
+
+        const topicNodes = topicEntities.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; type: string; parentId: string | null; userAddress: string; visibility: string; }) => {
+          const selection = selections.find(s => s.nodeId === e.nodeId);
+          const hasWallet = !!address;
+          const node: Node = {
+            id: e.nodeId,
+            type: 'topic',
+            data: { label: e.label, properties: e.properties, selectingAddress: selection ? selection.address : null, owner: e.userAddress, visibility: e.visibility },
+            position: positionMap.get(e.nodeId) ?? { x: e.x ?? Math.random() * 400, y: e.y ?? Math.random() * 400 },
+            draggable: hasWallet,
+          };
+
+          if (e.parentId && groupIds.has(e.parentId)) {
+            const gInfo = groupInfoMap.get(e.parentId)!;
+            const isOwnerOfGroup = gInfo.owner && address && gInfo.owner.toLowerCase() === address.toLowerCase();
+            if (gInfo.visibility === 'private' && !isOwnerOfGroup) {
+              return null; // skip topics hidden inside private space
+            }
+            node.parentId = e.parentId;
+          }
+
+          if (selection) {
+            node.style = {
+              ...node.style,
+              borderColor: addressToColor(selection.address),
+              borderWidth: 3,
+              boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
+            };
+          }
+
+          return node;
+        });
+
+        const relationNodes = relationsQuery.data.map((r: { id: number; relationType: string; properties: Record<string, string>; x: number; y: number; }) => {
+          const idStr = String(r.id);
+          const selection = selections.find(s => s.nodeId === idStr);
+          const hasWallet = !!address;
+          return {
+            id: idStr,
+            type: 'relation',
+            data: {
+              label: r.relationType,
+              properties: r.properties,
+              selectionColor: selection ? addressToColor(selection.address) : null,
+              selectingAddress: selection ? selection.address : null
+            },
+            position: positionMap.get(idStr) ?? { x: r.x ?? Math.random() * 400, y: r.y ?? Math.random() * 400 },
+            draggable: hasWallet,
+            style: selection ? {
+              borderColor: addressToColor(selection.address),
+              borderWidth: 3,
+              boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
+            } : undefined
+          };
+        });
+
+        return [...groupNodes, ...topicNodes.filter(Boolean), ...relationNodes];
+      };
 
       const newEdges = linksQuery.data.map((l: { id: number; relationId: number; entityId: string; role: string; }) => {
         if (l.role === 'source') {
@@ -503,7 +604,7 @@ export default function GraphPage() {
         }
       });
 
-      setNodes([...entityNodes, ...relationNodes]);
+      setNodes(buildNodes());
       setEdges(newEdges);
     }
   }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor]);
@@ -574,18 +675,115 @@ export default function GraphPage() {
       y: 150,
       properties: {},
       date: selectedDate,
+      userAddress: address!,
     });
   };
+
+  const handleAddSpace = () => {
+    if (!requireWallet()) return;
+    console.log('Creating a new space...');
+    const nodeId = crypto.randomUUID();
+
+    addEntity.mutate({
+      nodeId,
+      label: 'New Space',
+      type: 'group',
+      x: 200,
+      y: 200,
+      width: 400,
+      height: 300,
+      properties: {},
+      date: selectedDate,
+      userAddress: address!,
+    });
+  };
+
+  const updateEntityPatch = useMutation({
+    mutationFn: async (payload: { nodeId: string, x?: number, y?: number, parentId?: string | null, width?: number, height?: number }) => {
+      await fetch('/api/entities', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    },
+  });
 
   const onNodeDragStop = useCallback(
     (_: React.MouseEvent, node: Node) => {
       if (!requireWallet()) return;
-      socket.send(JSON.stringify({
-        type: 'node-move',
-        payload: { nodeId: node.id, position: node.position },
-      }));
 
-      // Persist position change to the database
+      // Helper: find enclosing Space (group) for a point (using center of node for more predictable behavior)
+      const findEnclosingSpace = (nodeId: string, x: number, y: number): string | null => {
+        // Consider only group nodes (Spaces)
+        const spaces = nodes.filter((n) => n.type === 'group');
+        
+        // Use approximate node dimensions for center calculation
+        const nodeWidth = 180; // approximate topic node width
+        const nodeHeight = 60; // approximate topic node height
+        
+        // Use center point of the node for more predictable snapping
+        const centerX = x + nodeWidth / 2;
+        const centerY = y + nodeHeight / 2;
+        
+        for (const space of spaces) {
+          const spaceData = space.data as { visibility?: string; owner?: string };
+          if (
+            spaceData.visibility === 'private' &&
+            spaceData.owner &&
+            address &&
+            spaceData.owner.toLowerCase() !== address.toLowerCase()
+          ) {
+            continue; // skip private spaces not owned by current user
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sWidth = (space.style as any)?.width || 400;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sHeight = (space.style as any)?.height || 300;
+          
+          // Add some padding inside the space for better UX
+          const padding = 10;
+          const spaceLeft = space.position.x + padding;
+          const spaceRight = space.position.x + sWidth - padding;
+          const spaceTop = space.position.y + padding;
+          const spaceBottom = space.position.y + sHeight - padding;
+          
+          const withinX = centerX >= spaceLeft && centerX <= spaceRight;
+          const withinY = centerY >= spaceTop && centerY <= spaceBottom;
+          
+          if (withinX && withinY) {
+            return space.id;
+          }
+        }
+        return null;
+      };
+
+      // Determine new parentId if this is an Entity (non-relation, non-space)
+      let newParentId: string | null = node.parentId ?? null;
+      if (!isNumeric(node.id) && node.type !== 'group') {
+        newParentId = findEnclosingSpace(node.id, node.position.x, node.position.y);
+
+        // Update local state optimistically if parent changed
+        if (newParentId !== node.parentId) {
+          setNodes((prev) =>
+            prev.map((n) =>
+              n.id === node.id ? { ...n, parentId: newParentId ?? undefined } : n
+            )
+          );
+        }
+      }
+
+      // Broadcast movement to other clients
+      socket.send(
+        JSON.stringify({
+          type: 'node-move',
+          payload: {
+            nodeId: node.id,
+            position: node.position,
+          },
+        })
+      );
+
+      // Persist change to DB
       if (isNumeric(node.id)) {
         updateRelationPosition.mutate({
           id: node.id,
@@ -593,14 +791,15 @@ export default function GraphPage() {
           y: node.position.y,
         });
       } else {
-        updatePosition.mutate({
+        updateEntityPatch.mutate({
           nodeId: node.id,
           x: node.position.x,
           y: node.position.y,
+          parentId: newParentId,
         });
       }
     },
-    [socket, updatePosition, updateRelationPosition, requireWallet]
+    [nodes, socket, updateEntityPatch, updateRelationPosition, requireWallet]
   );
 
   const handlePaneClick = () => {
@@ -641,6 +840,12 @@ export default function GraphPage() {
     );
   };
 
+  const handleCenterView = () => {
+    if (rfInstance) {
+      rfInstance.fitView({ padding: 0.2 });
+    }
+  };
+
   const onNodesChange: (changes: NodeChange[]) => void = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
     [setNodes]
@@ -652,6 +857,17 @@ export default function GraphPage() {
 
   const handleNodeClick = (_: React.MouseEvent, node: Node) => {
     if (!requireWallet()) return;
+    if (node.type === 'group') {
+      const gData = node.data as { visibility?: string; owner?: string };
+      if (
+        gData.visibility === 'private' &&
+        gData.owner &&
+        address &&
+        gData.owner.toLowerCase() !== address.toLowerCase()
+      ) {
+        return; // non-owner cannot inspect private space
+      }
+    }
     setSelectedNode(node);
     socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
   };
@@ -761,9 +977,18 @@ export default function GraphPage() {
             onClick={handleAddNode}
             className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
             data-tooltip-id="kg-node-tip"
-            data-tooltip-content={terms.createTopic}
+            data-tooltip-content="Create Topic"
           >
             +
+          </button>
+
+          <button
+            onClick={handleAddSpace}
+            className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded"
+            data-tooltip-id="kg-node-tip"
+            data-tooltip-content="Create Space"
+          >
+            □
           </button>
 
           <button
@@ -773,6 +998,15 @@ export default function GraphPage() {
             data-tooltip-content="Tidy up layout"
           >
             ⇆
+          </button>
+
+          <button
+            onClick={handleCenterView}
+            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+            data-tooltip-id="kg-node-tip"
+            data-tooltip-content="Center view"
+          >
+            ☉
           </button>
 
           <div className="flex items-center space-x-2">
@@ -832,6 +1066,7 @@ export default function GraphPage() {
 
         {/* Default edge styling */}
         <ReactFlow
+          onInit={setRfInstance}
           deleteKeyCode={null}
           defaultEdgeOptions={{
             type: 'smoothstep',
@@ -853,71 +1088,54 @@ export default function GraphPage() {
           nodeTypes={nodeTypes}
           connectionLineType={ConnectionLineType.SmoothStep}
           fitView
-          className="bg-gray-900"
+          className={`bg-gray-900 ${((showWelcome) || (nodes.length === 0 && showWelcome !== false)) ? 'pointer-events-none opacity-10' : ''}`}
         >
           <Background />
           <Controls />
         </ReactFlow>
 
-        {(showWelcome || (nodes.length === 0 && showWelcome !== false)) && (
-          <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-            <div className="text-center bg-gray-800 bg-opacity-80 p-8 rounded-lg max-w-lg pointer-events-auto relative">
-              <button
-                className="absolute -top-3 -right-3 w-8 h-8 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded-full text-gray-300 hover:text-white"
-                onClick={() => {
-                  setShowWelcome(false);
-                }}
-              >
-                &times;
-              </button>
-              <h2 className="text-2xl font-bold mb-2">Welcome to the Daily {terms.knowledgeGraph} Visualizer</h2>
-              <p className="text-gray-400 mb-6">
-                This is a mulitiplayer visualizer that demonstrates how {terms.knowledgeGraph}s work! Use it to map ideas, projects, and people, and see how other people connect with your ideas in real time.
-              </p>
-              <p className="text-gray-400 mb-6">
-                The data is cleared every day at midnight UTC as this is simply demonstrating how {terms.knowledgeGraph}s work.
-              </p>
-              <p className="text-gray-400 mb-6 font-bold">
-                To get started, create a new {terms.topic}!
-              </p>
-              <button
-                onClick={handleAddNode}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-              >
-                {terms.createTopic}
-              </button>
-             
-            </div>
-          </div>
+        {selectedNode && (
+          <Inspector
+            selectedNode={selectedNode}
+            onClose={() => {
+              setSelectedNode(null);
+              socket.send(JSON.stringify({ type: 'selection', nodeId: null }));
+            }}
+            onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
+            onDelete={(nodeId, isRelation) => {
+              if (isRelation) {
+                deleteRelation.mutate({ id: nodeId });
+              } else {
+                deleteEntity.mutate({ nodeId });
+              }
+            }}
+          />
         )}
+
+        {showChecklist && (
+          <OnboardingChecklist
+            steps={ONBOARDING_STEPS.map(step => ({ ...step, isCompleted: completedSteps.includes(step.id) }))}
+            onDismiss={dismissChecklist}
+          />
+        )}
+
+        <Tooltip id="kg-node-tip" place="bottom" />
       </div>
-      <Inspector
-        selectedNode={selectedNode}
-        onSave={(nodeId, data) => {
-          if (!requireWallet()) return;
-          updateNodeData.mutate({ nodeId, data })
-        }}
-        onDelete={(id: string, isRelation: boolean) => {
-          if (!requireWallet()) return;
-          if (isRelation) {
-            deleteRelation.mutate({ id });
-          } else {
-            deleteEntity.mutate({ nodeId: id });
-          }
-        }}
-        onClose={() => setSelectedNode(null)}
-      />
-      {showChecklist && (
-        <OnboardingChecklist
-          steps={ONBOARDING_STEPS.map(step => ({
-            ...step,
-            isCompleted: completedSteps.includes(step.id),
-          }))}
-          onDismiss={dismissChecklist}
-        />
+
+      {showWelcome && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
+          <div className="bg-gray-800 p-8 rounded-lg text-center space-y-4 max-w-md">
+            <h2 className="text-2xl font-bold">Welcome to the Knowledge Graph Visualizer</h2>
+            <p className="text-gray-300">Create topics and connections to build your graph.</p>
+            <button
+              onClick={() => setShowWelcome(false)}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+            >
+              Get Started
+            </button>
+          </div>
+        </div>
       )}
-      {/* Global tooltip for nodes */}
-      <Tooltip id="kg-node-tip" className="z-50 max-w-xs" />
     </div>
   );
 }

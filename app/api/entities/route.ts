@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { format } from 'date-fns';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Verbose logging helper
 const log = (...args: unknown[]) => console.log('[Entities]', new Date().toISOString(), ...args);
 
@@ -9,17 +10,31 @@ export async function GET(req: NextRequest) {
   const dateParam = searchParams.get('date');
   const date = dateParam ?? format(new Date(), 'yyyy-MM-dd');
 
+  const addressParam = searchParams.get('address');
   const rows = db
-    .prepare('SELECT * FROM entities WHERE date(created_at)=?')
-    .all(date);
+    .prepare(`SELECT * FROM entities WHERE date(created_at)=? AND (type='group' OR visibility='public' OR userAddress IS NULL OR userAddress=? )`)
+    .all(date, addressParam ?? '');
 
-  log('GET', { date, rows: rows.length });
-  return NextResponse.json(rows);
+  // Redact private Space labels for non-owners
+  const sanitized = (rows as unknown[]).map((row) => {
+    const r = row as { [key: string]: any };
+    if (
+      r.type === 'group' &&
+      r.visibility === 'private' &&
+      r.userAddress &&
+      r.userAddress.toLowerCase() !== (addressParam ?? '').toLowerCase()
+    ) {
+      return { ...r, label: '', properties: '{}' };
+    }
+    return r;
+  });
+  log('GET', { date, rows: sanitized.length });
+  return NextResponse.json(sanitized);
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { nodeId, label, type, userAddress } = body;
+  const { nodeId, label, type, userAddress, parentId, visibility } = body;
   log('POST payload', body);
   const { x, y } = body;
   if (!nodeId || !label || !type) {
@@ -32,17 +47,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id: existing.id, duplicated: true });
   }
 
+  const { width, height } = body;
   const stmt = db.prepare(
-    "INSERT INTO entities (nodeId, label, type, userAddress, x, y, created_at) VALUES (?,?,?,?,?,?,datetime('now'))"
+    "INSERT INTO entities (nodeId, label, type, userAddress, parentId, x, y, width, height, properties, visibility, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))"
   );
-  const info = stmt.run(nodeId, label, type, userAddress ?? null, x ?? null, y ?? null);
+  const info = stmt.run(nodeId, label, type, userAddress ?? null, parentId ?? null, x ?? null, y ?? null, width ?? null, height ?? null, JSON.stringify(body.properties ?? {}), visibility ?? 'public');
   log('POST created', { id: info.lastInsertRowid, nodeId });
   return NextResponse.json({ id: info.lastInsertRowid });
 }
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { nodeId, x, y, label, properties } = body;
+  const { nodeId, x, y, label, properties, parentId, visibility: vis, width, height } = body;
   log('PATCH payload', body);
   if (!nodeId) {
     return NextResponse.json({ error: 'Missing nodeId' }, { status: 400 });
@@ -58,6 +74,19 @@ export async function PATCH(req: NextRequest) {
 
   if (properties) {
     db.prepare('UPDATE entities SET properties=? WHERE nodeId=?').run(JSON.stringify(properties), nodeId);
+  }
+
+  if (vis) {
+    db.prepare('UPDATE entities SET visibility=? WHERE nodeId=?').run(vis, nodeId);
+  }
+
+  // parentId can be a string or null
+  if (parentId !== undefined) {
+    db.prepare('UPDATE entities SET parentId=? WHERE nodeId=?').run(parentId, nodeId);
+  }
+
+  if (width !== undefined && height !== undefined) {
+    db.prepare('UPDATE entities SET width=?, height=? WHERE nodeId=?').run(width, height, nodeId);
   }
 
   return NextResponse.json({ success: true });

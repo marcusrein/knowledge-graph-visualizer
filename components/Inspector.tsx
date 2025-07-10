@@ -1,4 +1,5 @@
 import { useState, useEffect, memo } from 'react';
+import { useAccount } from 'wagmi';
 import { useTerminology } from '@/lib/TerminologyContext';
 import { Node } from 'reactflow';
 import { Info } from 'lucide-react';
@@ -8,7 +9,10 @@ import { deepEqual } from '@/lib/utils';
 interface InspectorProps {
   selectedNode: Node | null;
   onClose: () => void;
-  onSave: (nodeId: string, data: { label?: string; properties?: Record<string, string> }) => void;
+  onSave: (
+    nodeId: string,
+    data: { label?: string; properties?: Record<string, string>; visibility?: 'public' | 'private' }
+  ) => void;
   onDelete: (nodeId: string, isRelation: boolean) => void;
 }
 
@@ -33,6 +37,9 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const [label, setLabel] = useState('');
   const [properties, setProperties] = useState<Property[]>([]);
   const [nextId, setNextId] = useState(0);
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [owner, setOwner] = useState<string | undefined>(undefined);
+  const { address } = useAccount();
 
   useEffect(() => {
     if (selectedNode) {
@@ -45,13 +52,92 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
       }));
       setProperties(propsArray);
       setNextId(propsArray.length);
+
+      if (selectedNode.type === 'group') {
+        setVisibility(selectedNode.data.visibility ?? 'public');
+        setOwner(selectedNode.data.owner);
+      }
     }
   }, [selectedNode]);
 
   if (!selectedNode) return null;
 
   const isRelation = /^\d+$/.test(selectedNode.id);
+  const isSpace = selectedNode.type === 'group';
 
+  // Common description for Space label (same for dev & normie)
+  const spaceLabelDescription =
+    'Spaces encapsulate a self-contained knowledge graph along with its governance and access-control rules. They let communities or individuals manage who can read, write, and anchor edits under a consistent policy.';
+
+  // Common delete handler usable in all inspector modes
+  function handleDelete() {
+    if (selectedNode) {
+      onDelete(selectedNode.id, isRelation);
+    }
+  }
+
+  /* ---------- SPACE INSPECTOR ---------- */
+  if (isSpace) {
+    const canEditVisibility = owner && address && address.toLowerCase() === owner.toLowerCase();
+
+    return (
+      <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold">Space Inspector</h3>
+          <button onClick={onClose} className="btn btn-sm btn-ghost">&times;</button>
+        </div>
+
+        <div className="flex-1 space-y-6 overflow-y-auto">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <label className="block text-sm font-medium text-gray-400">Label</label>
+              <Info
+                className="w-4 h-4 text-gray-400 cursor-pointer"
+                data-tooltip-id="inspector-tooltip"
+                data-tooltip-content={spaceLabelDescription}
+              />
+            </div>
+            <input
+              className="input input-bordered w-full"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-1">Visibility</label>
+            <select
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              value={visibility}
+              disabled={!canEditVisibility}
+              onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}
+            >
+              <option value="public">Public</option>
+              <option value="private">Private</option>
+            </select>
+            {!canEditVisibility && (
+              <p className="text-xs text-gray-500 mt-1">Only the owner can change visibility</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-2">
+          <button
+            className="btn btn-primary w-full"
+            onClick={() => {
+              onSave(selectedNode.id, { label, visibility });
+            }}
+          >
+            Save Changes
+          </button>
+          <button className="btn btn-error btn-outline w-full" onClick={handleDelete}>Delete</button>
+        </div>
+        <Tooltip id="inspector-tooltip" className="z-50 max-w-xs" />
+      </aside>
+    );
+  }
+
+  /* ---------- TOPIC / RELATION INSPECTOR ---------- */
   const hasChanges = () => {
     const originalProperties = safeParseProperties(selectedNode.data.properties);
     const currentProperties = properties.reduce((acc, prop) => {
@@ -87,12 +173,6 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
 
   const handleRemoveProperty = (id: number) => {
     setProperties(properties.filter((p) => p.id !== id));
-  };
-
-  const handleDelete = () => {
-    if (selectedNode) {
-      onDelete(selectedNode.id, isRelation);
-    }
   };
 
   const topicDescription =

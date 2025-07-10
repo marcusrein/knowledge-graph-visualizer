@@ -20,12 +20,14 @@ const init = () => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nodeId TEXT,
       label TEXT,
-      type TEXT CHECK(type IN ('category', 'knowledge')),
+      type TEXT,
       userAddress TEXT,
       x REAL,
       y REAL,
       properties TEXT,
-      created_at TEXT
+      created_at TEXT,
+      parentId TEXT,
+      visibility TEXT DEFAULT 'public'
     );
 
     CREATE TABLE IF NOT EXISTS relations (
@@ -80,6 +82,26 @@ const init = () => {
   }
   try {
     db.prepare('ALTER TABLE relations ADD COLUMN properties TEXT').run();
+  } catch {
+    /* ignore: column already exists */
+  }
+  try {
+    db.prepare('ALTER TABLE entities ADD COLUMN parentId TEXT').run();
+  } catch {
+    /* ignore: column already exists */
+  }
+  try {
+    db.prepare("ALTER TABLE entities ADD COLUMN visibility TEXT DEFAULT 'public'").run();
+  } catch {
+    /* ignore: column exists */
+  }
+  try {
+    db.prepare('ALTER TABLE entities ADD COLUMN width REAL').run();
+  } catch {
+    /* ignore: column already exists */
+  }
+  try {
+    db.prepare('ALTER TABLE entities ADD COLUMN height REAL').run();
   } catch {
     /* ignore: column already exists */
   }
