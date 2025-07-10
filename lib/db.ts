@@ -46,41 +46,41 @@ const init = () => {
       entityId TEXT,
       role TEXT CHECK(role IN ('source','target')),
       created_at TEXT,
-      FOREIGN KEY(relationId) REFERENCES relations(id)
+      FOREIGN KEY(relationId) REFERENCES relations(id) ON DELETE CASCADE
     );
   `);
 
   // Add x and y columns if they were missing from an existing database
   try {
     db.prepare('ALTER TABLE entities ADD COLUMN x REAL').run();
-  } catch (e) {
+  } catch {
     /* ignore: column already exists */
   }
   try {
     db.prepare('ALTER TABLE entities ADD COLUMN y REAL').run();
-  } catch (e) {
+  } catch {
     /* ignore: column already exists */
   }
   try {
     db.prepare('ALTER TABLE entities ADD COLUMN properties TEXT').run();
-  } catch (e) {
+  } catch {
     /* ignore: column already exists */
   }
 
   // Add x and y columns to relations if they were missing
   try {
     db.prepare('ALTER TABLE relations ADD COLUMN x REAL').run();
-  } catch (e) {
+  } catch {
     /* ignore: column already exists */
   }
   try {
     db.prepare('ALTER TABLE relations ADD COLUMN y REAL').run();
-  } catch (e) {
+  } catch {
     /* ignore: column already exists */
   }
   try {
     db.prepare('ALTER TABLE relations ADD COLUMN properties TEXT').run();
-  } catch (e) {
+  } catch {
     /* ignore: column already exists */
   }
 };

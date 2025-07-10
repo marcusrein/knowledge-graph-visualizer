@@ -46,9 +46,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid relation ID' }, { status: 400 });
   }
 
-  // First remove associated links to satisfy FK constraint
-  db.prepare('DELETE FROM relation_links WHERE relationId = ?').run(relationId);
-
   const stmt = db.prepare('DELETE FROM relations WHERE id = ?');
   const info = stmt.run(relationId);
 

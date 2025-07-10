@@ -789,15 +789,15 @@ export default function GraphPage() {
 
         {(showWelcome || nodes.length === 0) && (
           <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-            <div className="text-center bg-gray-800 bg-opacity-80 p-8 rounded-lg max-w-lg pointer-events-auto">
-              {nodes.length !== 0 && (
-                <button
-                  className="absolute top-2 right-2 text-gray-400 hover:text-white"
-                  onClick={() => setShowWelcome(false)}
-                >
-                  &times;
-                </button>
-              )}
+            <div className="text-center bg-gray-800 bg-opacity-80 p-8 rounded-lg max-w-lg pointer-events-auto relative">
+              <button
+                className="absolute -top-3 -right-3 w-8 h-8 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded-full text-gray-300 hover:text-white"
+                onClick={() => {
+                  setShowWelcome(false);
+                }}
+              >
+                &times;
+              </button>
               <h2 className="text-2xl font-bold mb-2">Welcome to the Daily Knowledge Graph Visualizer</h2>
               <p className="text-gray-400 mb-6">
                 This is a mulitiplayer visualizer that demonstrates how Knowledge Graphs work! Use it to map ideas, projects, and people, and see how other people connect with your ideas in real time.

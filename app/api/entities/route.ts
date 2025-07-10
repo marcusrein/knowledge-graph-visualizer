@@ -64,12 +64,24 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Missing node ID' }, { status: 400 });
   }
 
+  console.log(`--- Deleting Entity: ${nodeId} ---`);
+
   const deleteTransaction = db.transaction((id: string) => {
-    const info = db.prepare('DELETE FROM entities WHERE nodeId = ?').run(id);
-    if (info.changes > 0) {
-      db.prepare('DELETE FROM relations WHERE sourceId = ? OR targetId = ?').run(id, id);
-      db.prepare('DELETE FROM relation_links WHERE entityId = ?').run(id);
+    const relationsToDelete = db
+      .prepare('SELECT id FROM relations WHERE sourceId = ? OR targetId = ?')
+      .all(id, id) as { id: number }[];
+
+    if (relationsToDelete.length > 0) {
+      const relationIds = relationsToDelete.map((r) => r.id);
+      console.log('Relations to delete (IDs):', relationIds);
+      const placeholders = relationIds.map(() => '?').join(',');
+
+      // With ON DELETE CASCADE, deleting from relations will also delete from relation_links
+      db.prepare(`DELETE FROM relations WHERE id IN (${placeholders})`).run(...relationIds);
     }
+
+    const info = db.prepare('DELETE FROM entities WHERE nodeId = ?').run(id);
+    console.log(`Deleted ${info.changes} entity.`);
     return info;
   });
 
