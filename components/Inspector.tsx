@@ -103,7 +103,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     }
   };
 
-  const entityDescription = "In a knowledge graph, a Topic represents an 'entity'—a unique person, place, idea, or concept. Think of it as a noun. You can connect Topics to show their relationships.";
+  const entityDescription = "Think of Topics as the nouns in your knowledge graph. They can be anything—ideas, projects, or people. Topics are the building blocks of your knowledge graph and can be linked with other Topics to form knowledge.";
   const relationDescription = "A Relation is the connection or 'edge' between two Topics. It describes how they're related, acting like a verb. For example, 'Ada Lovelace' (Topic) 'wrote' (Relation) 'the first algorithm' (Topic).";
 
   const commonRelations = [
@@ -148,7 +148,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
             <Info
               className="w-4 h-4 text-gray-400 cursor-pointer"
               data-tooltip-id="inspector-tooltip"
-              data-tooltip-content={isRelation ? "This is how the two Topics are related." : "Think of this as the 'noun' or proper name for your Topic (e.g., 'Ada Lovelace', 'Paris', 'Computer Science')."}
+              data-tooltip-content={isRelation ? "This is how the two Topics are related." : "This is the name for your Topic (e.g., 'Ada Lovelace', 'Paris', 'Computer Science')."}
             />
           </div>
           {isRelation ? (
@@ -212,7 +212,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
               data-tooltip-html={
                 isRelation
                   ? "Add properties to describe the connection itself. This is useful for capturing details that don't fit in the label.<br/><br/>For example, for a <b>'works at'</b> relation, you could add details like:<br/>- Attribute: 'Role', Value: 'Engineer'<br/>- Attribute: 'Start Date', Value: '2023-01-15'<br/><br/>This follows the GRC20 spec for 'Relation Entities'."
-                  : `Add specific details to your <i>Topic</i>. Each detail has an <i>Attribute</i> and a <i>Value</i>.<br/><br/>For example, a 'Person' Topic might have an attribute 'Born' with the value '1815'.`
+                  : `Add specific details to your <i>Topic</i>. Each detail has an <i>Attribute</i> and a <i>Value</i>.<br/><br/>For example, a 'Person' Topic might have an attribute 'Birth Year' with the value '1815'.`
               }
             />
           </div>

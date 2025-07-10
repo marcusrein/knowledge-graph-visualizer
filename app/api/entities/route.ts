@@ -68,6 +68,7 @@ export async function DELETE(req: NextRequest) {
     const info = db.prepare('DELETE FROM entities WHERE nodeId = ?').run(id);
     if (info.changes > 0) {
       db.prepare('DELETE FROM relations WHERE sourceId = ? OR targetId = ?').run(id, id);
+      db.prepare('DELETE FROM relation_links WHERE entityId = ?').run(id);
     }
     return info;
   });

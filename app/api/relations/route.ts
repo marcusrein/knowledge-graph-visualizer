@@ -25,6 +25,12 @@ export async function POST(req: NextRequest) {
     "INSERT INTO relations (sourceId, targetId, relationType, userAddress, x, y, created_at) VALUES (?,?,?,?,?,?,datetime('now'))"
   );
   const info = stmt.run(sourceId, targetId, relationType, userAddress ?? null, x, y);
+
+  // insert into relation_links table
+  const linkStmt = db.prepare("INSERT INTO relation_links (relationId, entityId, role, created_at) VALUES (?,?,?,datetime('now'))");
+  linkStmt.run(info.lastInsertRowid, sourceId, 'source');
+  linkStmt.run(info.lastInsertRowid, targetId, 'target');
+
   return NextResponse.json({ id: info.lastInsertRowid });
 } 
  
@@ -40,6 +46,9 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid relation ID' }, { status: 400 });
   }
 
+  // First remove associated links to satisfy FK constraint
+  db.prepare('DELETE FROM relation_links WHERE relationId = ?').run(relationId);
+
   const stmt = db.prepare('DELETE FROM relations WHERE id = ?');
   const info = stmt.run(relationId);
 
@@ -52,7 +61,7 @@ export async function DELETE(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { id, x, y, relationType, properties } = body;
+  const { id, x, y, relationType, properties, sourceId, targetId } = body;
   if (!id) {
     return NextResponse.json({ error: 'Missing relation ID' }, { status: 400 });
   }
@@ -72,6 +81,14 @@ export async function PATCH(req: NextRequest) {
 
   if (properties) {
     db.prepare('UPDATE relations SET properties=? WHERE id=?').run(JSON.stringify(properties), relationId);
+  }
+
+  if (sourceId) {
+    db.prepare('UPDATE relations SET sourceId=? WHERE id=?').run(sourceId, relationId);
+  }
+
+  if (targetId) {
+    db.prepare('UPDATE relations SET targetId=? WHERE id=?').run(targetId, relationId);
   }
 
   // Check if any update was successful to prevent false negatives

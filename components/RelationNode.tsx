@@ -8,7 +8,7 @@ const RelationNode = ({ data }: NodeProps) => {
       {/* Tooltip icon */}
       <span
         data-tooltip-id="kg-node-tip"
-        data-tooltip-content="A Relation describes how two Topics are connected."
+        data-tooltip-content="This is a Relation. Relations describe how two Topics are connected."
         className="absolute top-1/2 -translate-y-1/2 right-1 cursor-help"
       >
         <HelpCircle size={14} />

@@ -263,6 +263,21 @@ export default function GraphPage() {
     },
   });
 
+  const addRelationLink = useMutation({
+    mutationFn: async (payload: { relationId: string; entityId: string; role: 'source' | 'target' }) => {
+      const res = await fetch('/api/relation-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Failed to add relation link');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['relationLinks', selectedDate] });
+    },
+  });
+
   // fetch nodes and edges
   const entitiesQuery = useQuery({
     queryKey: ['entities', selectedDate],
@@ -276,6 +291,14 @@ export default function GraphPage() {
     queryKey: ['relations', selectedDate],
     queryFn: async () => {
       const res = await fetch(`/api/relations?date=${selectedDate}`);
+      return res.json();
+    },
+  });
+
+  const linksQuery = useQuery({
+    queryKey: ['relationLinks', selectedDate],
+    queryFn: async () => {
+      const res = await fetch('/api/relation-links');
       return res.json();
     },
   });
@@ -331,6 +354,7 @@ export default function GraphPage() {
         completeStep('create-connection');
       }
       queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['relationLinks', selectedDate] });
     },
   });
 
@@ -340,7 +364,7 @@ export default function GraphPage() {
   /* ---------- mutations ---------- */
   // map API to React Flow
   useEffect(() => {
-    if (entitiesQuery.data && relationsQuery.data) {
+    if (entitiesQuery.data && relationsQuery.data && linksQuery.data) {
       const entityNodes = entitiesQuery.data.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; }) => {
         const selection = selections.find(s => s.nodeId === e.nodeId);
         return {
@@ -376,37 +400,30 @@ export default function GraphPage() {
         };
       });
 
-      const newEdges = relationsQuery.data.flatMap((r: { sourceId: string; id: number; targetId: string; }) => [
-        {
-          id: `${r.sourceId}-${r.id}`,
-          source: r.sourceId,
-          target: String(r.id),
-          type: 'smoothstep',
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 30,
-            height: 30,
-            color: '#fff',
-          },
-        },
-        {
-          id: `${r.id}-${r.targetId}`,
-          source: String(r.id),
-          target: r.targetId,
-          type: 'smoothstep',
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 30,
-            height: 30,
-            color: '#fff',
-          },
-        },
-      ]);
+      const newEdges = linksQuery.data.map((l: { id: number; relationId: number; entityId: string; role: string; }) => {
+        if (l.role === 'source') {
+          return {
+            id: `${l.entityId}-${l.relationId}-${l.id}`,
+            source: l.entityId,
+            target: String(l.relationId),
+            type: 'smoothstep',
+            markerEnd: { type: MarkerType.ArrowClosed, width: 30, height: 30, color: '#fff' },
+          };
+        } else {
+          return {
+            id: `${l.relationId}-${l.entityId}-${l.id}`,
+            source: String(l.relationId),
+            target: l.entityId,
+            type: 'smoothstep',
+            markerEnd: { type: MarkerType.ArrowClosed, width: 30, height: 30, color: '#fff' },
+          };
+        }
+      });
 
       setNodes([...entityNodes, ...relationNodes]);
       setEdges(newEdges);
     }
-  }, [entitiesQuery.data, relationsQuery.data, selections]);
+  }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections]);
 
   const onConnect = useCallback(
     (params: Connection | Edge) => {
@@ -419,19 +436,44 @@ export default function GraphPage() {
       const targetNode = nodes.find(n => n.id === params.target);
       if (!sourceNode || !targetNode) return;
 
-      const x = (sourceNode.position.x + targetNode.position.x) / 2;
-      const y = (sourceNode.position.y + targetNode.position.y) / 2;
+      const isSourceRelation = sourceNode.type === 'relation';
+      const isTargetRelation = targetNode.type === 'relation';
 
-      addRelation.mutate({
-        sourceId: params.source,
-        targetId: params.target,
-        relationType: 'connected to',
-        x,
-        y,
-        date: selectedDate,
-      });
+      // Disallow Relation -> Relation connections
+      if (isSourceRelation && isTargetRelation) {
+        toast.error("Cannot connect a Relation to another Relation.");
+        return;
+      }
+
+      // Case 1: Topic -> Topic (Create a new relation)
+      if (!isSourceRelation && !isTargetRelation) {
+        const x = (sourceNode.position.x + targetNode.position.x) / 2;
+        const y = (sourceNode.position.y + targetNode.position.y) / 2;
+
+        addRelation.mutate({
+          sourceId: params.source,
+          targetId: params.target,
+          relationType: 'connected to',
+          x,
+          y,
+          date: selectedDate,
+        });
+        return;
+      }
+
+      // Case 2: Topic -> Relation : add source link
+      if (!isSourceRelation && isTargetRelation) {
+        addRelationLink.mutate({ relationId: targetNode.id, entityId: sourceNode.id, role: 'source' });
+        return;
+      }
+
+      // Case 3: Relation -> Topic : add target link
+      if (isSourceRelation && !isTargetRelation) {
+        addRelationLink.mutate({ relationId: sourceNode.id, entityId: targetNode.id, role: 'target' });
+        return;
+      }
     },
-    [nodes, addRelation, selectedDate]
+    [nodes, addRelation, selectedDate, addRelationLink]
   );
 
   const handleAddNode = () => {
@@ -608,6 +650,7 @@ export default function GraphPage() {
 
         {/* Default edge styling */}
         <ReactFlow
+          deleteKeyCode={null}
           defaultEdgeOptions={{
             type: 'smoothstep',
             markerEnd: { type: MarkerType.ArrowClosed, width: 30, height: 30, color: '#fff' },
@@ -683,7 +726,7 @@ export default function GraphPage() {
         />
       )}
       {/* Global tooltip for nodes */}
-      <Tooltip id="kg-node-tip" className="z-50" />
+      <Tooltip id="kg-node-tip" className="z-50 max-w-xs" />
     </div>
   );
 }

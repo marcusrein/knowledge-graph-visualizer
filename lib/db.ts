@@ -39,6 +39,15 @@ const init = () => {
       properties TEXT,
       created_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS relation_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      relationId INTEGER,
+      entityId TEXT,
+      role TEXT CHECK(role IN ('source','target')),
+      created_at TEXT,
+      FOREIGN KEY(relationId) REFERENCES relations(id)
+    );
   `);
 
   // Add x and y columns if they were missing from an existing database

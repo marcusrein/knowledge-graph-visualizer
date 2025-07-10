@@ -8,7 +8,7 @@ const TopicNode = ({ data }: NodeProps) => {
       <span>{data.label}</span>
       <span
         data-tooltip-id="kg-node-tip"
-        data-tooltip-content="A Topic (Entity) is a unique thing in the Knowledge Graph. Topics can be anything—ideas, projects, or people—and can be linked to form knowledge."
+        data-tooltip-content="This is a Topic. Topics can be anything—ideas, projects, or people—and can be linked with other Topics to form knowledge."
         className="inline-flex items-center ml-1.5 cursor-help"
       >
         <HelpCircle size={14} />
