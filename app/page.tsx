@@ -372,13 +372,20 @@ export default function GraphPage() {
     return true;
   }, [address]);
 
-  const addressToColor = useCallback((address: string) => {
+  const addressToColor = useCallback((addr: string) => {
+    // simple deterministic hash to hue
     let hash = 0;
-    for (let i = 0; i < address.length; i++) {
-      hash = address.charCodeAt(i) + ((hash << 5) - hash);
+    for (let i = 0; i < addr.length; i++) {
+      hash = addr.charCodeAt(i) + ((hash << 5) - hash);
     }
-    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
-    return `#${'00000'.substring(0, 6 - c.length)}${c}`;
+    let hue = Math.abs(hash) % 360;
+    // avoid blue/purple range (200-300)
+    if (hue >= 200 && hue <= 300) {
+      hue = (hue + 120) % 360;
+    }
+    const saturation = 70; // vivid
+    const lightness = 50;
+    return `hsl(${hue}deg ${saturation}% ${lightness}%)`;
   }, []);
 
   /* ---------- mutations ---------- */
@@ -399,8 +406,8 @@ export default function GraphPage() {
           draggable: hasWallet,
           style: selection ? {
             borderColor: addressToColor(selection.address),
-            borderWidth: 2,
-            boxShadow: `0 0 10px ${addressToColor(selection.address)}`,
+            borderWidth: 3,
+            boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
           } : undefined
         };
       });
@@ -422,7 +429,11 @@ export default function GraphPage() {
             y: r.y ?? Math.random() * 400,
           },
           draggable: hasWallet,
-          style: undefined // We'll handle styling inside the component
+          style: selection ? {
+            borderColor: addressToColor(selection.address),
+            borderWidth: 3,
+            boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
+          } : undefined
         };
       });
 
@@ -646,7 +657,7 @@ export default function GraphPage() {
           </button>
 
           <div className="flex items-center space-x-2">
-            {presentUsers.map(user => (
+            {presentUsers.filter(u => u.address !== address).map(user => (
               <Avatar key={user.id} address={user.address} />
             ))}
           </div>
@@ -659,10 +670,10 @@ export default function GraphPage() {
             </div>
           ) : address ? (
             <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-              <span className="text-sm font-mono">{`${address.slice(
-                0,
-                6
-              )}...${address.slice(-4)}`}</span>
+              <span className="flex items-center space-x-2">
+                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: addressToColor(address) }} />
+                <span className="text-sm font-mono">{`${address.slice(0,6)}...${address.slice(-4)}`}</span>
+              </span>
               <button
                 onClick={() => disconnect()}
                 className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs"

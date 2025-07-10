@@ -4,14 +4,19 @@ interface AvatarProps {
   address: string;
 }
 
-// Simple hashing function to get a color from the address
-const addressToColor = (address: string) => {
+// Deterministic color but avoid node blue/purple hues (200-300)
+const addressToColor = (addr: string) => {
   let hash = 0;
-  for (let i = 0; i < address.length; i++) {
-    hash = address.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < addr.length; i++) {
+    hash = addr.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const c = (hash & 0x00ffffff).toString(16).toUpperCase();
-  return `#${'00000'.substring(0, 6 - c.length)}${c}`;
+  let hue = Math.abs(hash) % 360;
+  if (hue >= 200 && hue <= 300) {
+    hue = (hue + 120) % 360;
+  }
+  const saturation = 70;
+  const lightness = 50;
+  return `hsl(${hue}deg ${saturation}% ${lightness}%)`;
 };
 
 const Avatar = ({ address }: AvatarProps) => {
