@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -80,6 +80,18 @@ export default function GraphPage() {
   const { disconnect } = useDisconnect();
   const { terms, isDevMode, toggleMode } = useTerminology();
   const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as HTMLElement)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
   const [showWelcome, setShowWelcome] = useState(true);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -282,29 +294,15 @@ export default function GraphPage() {
 
       // First update edges and compute connected relation IDs based on the latest edge state
       setEdges((prevEdges) => {
-        const connectedRelationIds = prevEdges
-          .map((e) => {
-            if (e.source === deletedNodeId) return e.target;
-            if (e.target === deletedNodeId) return e.source;
-            return null;
-          })
-          .filter((id): id is string => id !== null && isNumeric(id));
-
-        // Remove the entity node and any connected relation nodes
-        setNodes((prevNodes) =>
-          prevNodes.filter(
-            (n) => n.id !== deletedNodeId && !connectedRelationIds.includes(n.id)
-          )
+        // Remove only edges connected to the deleted entity
+        const filtered = prevEdges.filter(
+          (e) => e.source !== deletedNodeId && e.target !== deletedNodeId
         );
 
-        // Finally, filter out edges connected to the deleted entity or its related relations
-        return prevEdges.filter(
-          (e) =>
-            e.source !== deletedNodeId &&
-            e.target !== deletedNodeId &&
-            !connectedRelationIds.includes(e.source) &&
-            !connectedRelationIds.includes(e.target)
-        );
+        // Update nodes state in the same callback to avoid stale state
+        setNodes((prevNodes) => prevNodes.filter((n) => n.id !== deletedNodeId));
+
+        return filtered;
       });
 
       setSelectedNode(null);
@@ -673,12 +671,11 @@ export default function GraphPage() {
       <div className="flex-1 h-screen relative">
         <div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
           <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-            <div
-              className="relative"
-              onMouseEnter={() => setShowMenu(true)}
-              onMouseLeave={() => setShowMenu(false)}
-            >
-              <button className="flex items-center space-x-2">
+            <div ref={menuRef} className="relative">
+              <button
+                className="flex items-center space-x-2"
+                onClick={() => setShowMenu(prev => !prev)}
+              >
                 <img src="/file.svg" alt="File" className="w-6 h-6" />
                 <span className="text-sm font-mono">GRC-20</span>
                 <span className="text-xs">▼</span>

@@ -74,20 +74,14 @@ export async function DELETE(req: NextRequest) {
     log('DELETE nodeId', nodeId);
 
     const deleteTransaction = db.transaction((id: string) => {
-      const relationsToDelete = db
-        .prepare('SELECT id FROM relations WHERE sourceId = ? OR targetId = ?')
-        .all(id, id) as { id: number }[];
+      // Remove relation_links rows that reference this entity
+      db.prepare('DELETE FROM relation_links WHERE entityId = ?').run(id);
 
-      if (relationsToDelete.length > 0) {
-        const relationIds = relationsToDelete.map((r) => r.id);
-        log('Relations to delete', relationIds);
-        const placeholders = relationIds.map(() => '?').join(',');
-
-        // First remove relation_links that reference these relations to satisfy FK constraints in older DBs
-        db.prepare(`DELETE FROM relation_links WHERE relationId IN (${placeholders})`).run(...relationIds);
-
-        // Now remove the relations themselves
-        db.prepare(`DELETE FROM relations WHERE id IN (${placeholders})`).run(...relationIds);
+      // Nullify sourceId/targetId in relations that referenced this entity, keeping the relation node intact
+      const infoSrc = db.prepare('UPDATE relations SET sourceId = NULL WHERE sourceId = ?').run(id);
+      const infoTgt = db.prepare('UPDATE relations SET targetId = NULL WHERE targetId = ?').run(id);
+      if (infoSrc.changes || infoTgt.changes) {
+        log('Nullified source/target in relations', { sourceCleared: infoSrc.changes, targetCleared: infoTgt.changes });
       }
 
       const info = db.prepare('DELETE FROM entities WHERE nodeId = ?').run(id);
