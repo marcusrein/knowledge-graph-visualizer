@@ -3,7 +3,6 @@ import { Node } from 'reactflow';
 import { Info } from 'lucide-react';
 import { Tooltip } from 'react-tooltip';
 import { deepEqual } from '@/lib/utils'; // We will create this utility function
-import { useTerminology } from '@/lib/TerminologyContext';
 
 interface InspectorProps {
   selectedNode: Node | null;
@@ -12,56 +11,70 @@ interface InspectorProps {
   onDelete: (nodeId: string, isRelation: boolean) => void;
 }
 
+interface Property {
+  id: number;
+  key: string;
+  value: string;
+}
+
 const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) => {
-  const { getTerm } = useTerminology();
   const [label, setLabel] = useState('');
-  const [properties, setProperties] = useState<Record<string, string>>({});
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [nextId, setNextId] = useState(0);
 
   useEffect(() => {
     if (selectedNode) {
       setLabel(selectedNode.data.label);
-      setProperties(JSON.parse(selectedNode.data.properties || '{}'));
+      const propsObject = JSON.parse(selectedNode.data.properties || '{}');
+      const propsArray = Object.entries(propsObject).map(([key, value], index) => ({
+        id: index,
+        key,
+        value: String(value)
+      }));
+      setProperties(propsArray);
+      setNextId(propsArray.length);
     }
   }, [selectedNode]);
 
   if (!selectedNode) return null;
 
   const isRelation = /^\d+$/.test(selectedNode.id);
-  const hasChanges =
-    label !== selectedNode.data.label ||
-    !deepEqual(properties, JSON.parse(selectedNode.data.properties || '{}'));
+
+  const hasChanges = () => {
+    const originalProperties = JSON.parse(selectedNode.data.properties || '{}');
+    const currentProperties = properties.reduce((acc, prop) => {
+      if (prop.key) acc[prop.key] = prop.value;
+      return acc;
+    }, {} as Record<string, string>);
+    return label !== selectedNode.data.label || !deepEqual(originalProperties, currentProperties);
+  }
 
   const handleSave = () => {
+    const propertiesObject = properties.reduce((acc, prop) => {
+      if (prop.key) { // Ignore properties with empty keys
+        acc[prop.key] = prop.value;
+      }
+      return acc;
+    }, {} as Record<string, string>);
     onSave(selectedNode.id, {
       label,
-      properties,
+      properties: propertiesObject,
     });
   };
 
-  const handlePropertyChange = (index: number, part: 'key' | 'value', value: string) => {
-    setProperties(currentProperties => {
-      const entries = Object.entries(currentProperties);
-      const [currentKey, currentValue] = entries[index];
-
-      if (part === 'key') {
-        entries[index] = [value, currentValue];
-      } else {
-        entries[index] = [currentKey, value];
-      }
-      
-      return Object.fromEntries(entries);
-    });
+  const handlePropertyChange = (id: number, part: 'key' | 'value', value: string) => {
+    setProperties(currentProperties =>
+      currentProperties.map(p => p.id === id ? { ...p, [part]: value } : p)
+    );
   };
 
   const handleAddProperty = () => {
-    const newKey = `newProperty${Object.keys(properties).length + 1}`;
-    setProperties({ ...properties, [newKey]: '' });
+    setProperties([...properties, { id: nextId, key: '', value: '' }]);
+    setNextId(nextId + 1);
   };
 
-  const handleRemoveProperty = (key: string) => {
-    const newProperties = { ...properties };
-    delete newProperties[key];
-    setProperties(newProperties);
+  const handleRemoveProperty = (id: number) => {
+    setProperties(properties.filter(p => p.id !== id));
   };
 
   const handleDelete = () => {
@@ -105,13 +118,16 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
 
       <div className="flex-1 space-y-6 overflow-y-auto">
         <div>
-          <label
-            className="block text-sm font-medium text-gray-400 mb-1"
-            data-tooltip-id="inspector-tooltip"
-            data-tooltip-content={isRelation ? "Describe the relationship between the two Topics. Examples: 'is a friend of', 'works at', 'is located in'. Keep it descriptive!" : "Give your Topic a clear, concise name. This label is how you'll see and identify this piece of knowledge on the knowledge graph."}
-          >
-            {isRelation ? "How Topics Relate" : "Label"}
-          </label>
+          <div className="flex items-center gap-2 mb-1">
+            <label className="block text-sm font-medium text-gray-400">
+              {isRelation ? "How Topics Relate" : "Label"}
+            </label>
+            <Info
+              className="w-4 h-4 text-gray-400 cursor-pointer"
+              data-tooltip-id="inspector-tooltip"
+              data-tooltip-content={isRelation ? "This is the 'verb' that connects two Topics. It describes the action or relationship between them (e.g., 'wrote', 'visited', 'is a type of')." : "Think of this as the 'noun' or proper name for your Topic (e.g., 'Ada Lovelace', 'Paris', 'Computer Science')."}
+            />
+          </div>
           {isRelation ? (
             <select
               className="select select-bordered w-full"
@@ -135,55 +151,57 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
           )}
         </div>
 
-        <div className="divider">{getTerm('PROPERTIES')}</div>
-
-        <div className="space-y-2">
-          {Object.entries(properties).map(([key, value], index) => (
-            <div key={index} className="flex items-center gap-2">
-              <input
-                type="text"
-                className="input input-bordered input-sm w-full"
-                value={key}
-                placeholder="key"
-                onChange={(e) => handlePropertyChange(index, 'key', e.target.value)}
-                data-tooltip-id="inspector-tooltip"
-                data-tooltip-content={`Add a custom property to the '${label}' ${isRelation ? 'Relation' : 'Topic'}. The 'key' is the name of the data field, like 'Date of Birth' or 'Website'.`}
-              />
-              <input
-                type="text"
-                className="input input-bordered input-sm w-full"
-                value={value}
-                placeholder="value"
-                onChange={(e) => handlePropertyChange(index, 'value', e.target.value)}
-                data-tooltip-id="inspector-tooltip"
-                data-tooltip-content={`Provide a value for the custom property. For a 'Website' key, this would be the URL.`}
-              />
-              <button onClick={() => handleRemoveProperty(key)} className="btn btn-ghost btn-sm">
-                &times;
-              </button>
-            </div>
-          ))}
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="block text-sm font-medium text-gray-400">Details</span>
+            <Info
+              className="w-4 h-4 text-gray-400 cursor-pointer"
+              data-tooltip-id="inspector-tooltip"
+              data-tooltip-html={`Add specific details to your <i>${isRelation ? 'Relation' : 'Topic'}</i>. Each detail has a set of <i>Attributes</i> and <i>Values</i>. For example, a common <i>Attribute</i> might be "Size" and the <i>Value</i> might be "Small". Another common <i>Attribute</i> might be "Color" and the <i>Value</i> might be "Red". Add as many details as you want!`}
+            />
+          </div>
+          <div className="space-y-2">
+            {properties.map((prop) => (
+              <div key={prop.id} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  value={prop.key}
+                  placeholder="Attribute"
+                  onChange={(e) => handlePropertyChange(prop.id, 'key', e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  value={prop.value}
+                  placeholder="Value"
+                  onChange={(e) => handlePropertyChange(prop.id, 'value', e.target.value)}
+                />
+                <button onClick={() => handleRemoveProperty(prop.id)} className="btn btn-ghost btn-sm">
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         <button
           onClick={handleAddProperty}
           className="btn btn-sm btn-outline mt-2 w-full"
-          data-tooltip-id="inspector-tooltip"
-          data-tooltip-content={`Enrich your '${label}' ${isRelation ? 'Relation' : 'Topic'} with extra details. Each property is a key-value pair, adding more semantic meaning and context.`}
         >
-          + Add Property
+          + Add Details
         </button>
       </div>
 
       <div className="mt-6 space-y-2">
-        <button className="btn btn-primary w-full" disabled={!hasChanges} onClick={handleSave}>
+        <button className="btn btn-primary w-full" disabled={!hasChanges()} onClick={handleSave}>
           Save Changes
         </button>
         <button className="btn btn-error btn-outline w-full" onClick={handleDelete}>
           Delete
         </button>
       </div>
-      <Tooltip id="inspector-tooltip" className="z-50" />
+      <Tooltip id="inspector-tooltip" className="z-50 max-w-xs" />
     </aside>
   );
 };
