@@ -107,6 +107,7 @@ export default function GraphPage() {
   const [showChecklist, setShowChecklist] = useState(false);
   const [connecting, setConnecting] = useState(true);
 
+  const dragStartPos = useRef<Record<string, { x: number; y: number }>>({});
 
   const socket = usePartySocket({
     host: process.env.NEXT_PUBLIC_PARTY_HOST || 'localhost:1999',
@@ -562,16 +563,35 @@ export default function GraphPage() {
           const idStr = String(r.id);
           const selection = selections.find(s => s.nodeId === idStr);
           const hasWallet = !!address;
+
+          // Determine if relation visually inside any space
+          let relPos = positionMap.get(idStr) ?? { x: r.x ?? Math.random() * 400, y: r.y ?? Math.random() * 400 };
+          let parentId: string | undefined = undefined;
+          for (const sp of groupNodes) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const sW = ((sp.style as any)?.width ?? 400) as number;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const sH = ((sp.style as any)?.height ?? 300) as number;
+            const withinX = relPos.x >= sp.position.x && relPos.x <= sp.position.x + sW;
+            const withinY = relPos.y >= sp.position.y && relPos.y <= sp.position.y + sH;
+            if (withinX && withinY) {
+              parentId = sp.id;
+              relPos = { x: relPos.x - sp.position.x, y: relPos.y - sp.position.y };
+              break;
+            }
+          }
+
           return {
             id: idStr,
             type: 'relation',
+            parentId,
             data: {
               label: r.relationType,
               properties: r.properties,
               selectionColor: selection ? addressToColor(selection.address) : null,
               selectingAddress: selection ? selection.address : null
             },
-            position: positionMap.get(idStr) ?? { x: r.x ?? Math.random() * 400, y: r.y ?? Math.random() * 400 },
+            position: relPos,
             draggable: hasWallet,
             style: selection ? {
               borderColor: addressToColor(selection.address),
@@ -664,15 +684,46 @@ export default function GraphPage() {
   const handleAddNode = () => {
     if (!requireWallet()) return;
     console.log('Creating a new topic...');
-    // Generate a unique client-side identifier for the new topic
+
+    // --- helper: find first non-overlapping spot ---
+    const TOPIC_W = 180;
+    const TOPIC_H = 60;
+    const PADDING = 20;
+    const STEP = 40; // grid step when scanning for space
+
+    const doesOverlap = (x: number, y: number): boolean => {
+      for (const n of nodes) {
+        // Approximate dimensions
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nW = ((n.style as any)?.width ?? (n.type === 'group' ? 400 : TOPIC_W)) as number;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nH = ((n.style as any)?.height ?? (n.type === 'group' ? 300 : TOPIC_H)) as number;
+        const overlapX = x + TOPIC_W + PADDING > n.position.x && n.position.x + nW + PADDING > x;
+        const overlapY = y + TOPIC_H + PADDING > n.position.y && n.position.y + nH + PADDING > y;
+        if (overlapX && overlapY) return true;
+      }
+      return false;
+    };
+
+    let posX = 50;
+    let posY = 50;
+    const MAX_RANGE = 2000; // search bounds
+    while (doesOverlap(posX, posY) && posY < MAX_RANGE) {
+      posX += STEP;
+      if (posX > MAX_RANGE) {
+        posX = 50;
+        posY += STEP;
+      }
+    }
+
     const nodeId = crypto.randomUUID();
 
     addEntity.mutate({
-      nodeId, // required by the API
+      nodeId,
       label: 'New Topic',
       type: 'knowledge',
-      x: 200,
-      y: 150,
+      x: posX,
+      y: posY,
       properties: {},
       date: selectedDate,
       userAddress: address!,
@@ -708,9 +759,21 @@ export default function GraphPage() {
     },
   });
 
+  const onNodeDragStart = useCallback((_: React.MouseEvent, node: Node) => {
+    dragStartPos.current[node.id] = { x: node.position.x, y: node.position.y };
+  }, []);
+
   const onNodeDragStop = useCallback(
     (_: React.MouseEvent, node: Node) => {
       if (!requireWallet()) return;
+
+      // Relation nodes remain global; no toast needed on simple drag.
+
+      // Ignore trivial movement (<2px)
+      const start = dragStartPos.current[node.id];
+      if (start && Math.hypot(start.x - node.position.x, start.y - node.position.y) < 2) {
+        return; // treat as click, not drag
+      }
 
       // Helper: find enclosing Space (group) for a point (using center of node for more predictable behavior)
       const findEnclosingSpace = (nodeId: string, x: number, y: number): string | null => {
@@ -760,15 +823,87 @@ export default function GraphPage() {
       // Determine new parentId if this is an Entity (non-relation, non-space)
       let newParentId: string | null = node.parentId ?? null;
       if (!isNumeric(node.id) && node.type !== 'group') {
-        newParentId = findEnclosingSpace(node.id, node.position.x, node.position.y);
+        const getGlobalPos = (nd: Node) => {
+          if (nd.parentId) {
+            const sp = nodes.find((n) => n.id === nd.parentId);
+            if (sp) {
+              return { x: nd.position.x + sp.position.x, y: nd.position.y + sp.position.y };
+            }
+          }
+          return nd.position;
+        };
 
-        // Update local state optimistically if parent changed
+        const globalPos = getGlobalPos(node);
+
+        newParentId = findEnclosingSpace(node.id, globalPos.x, globalPos.y);
+
+        // If currently inside a space and still within its bounds, keep parentId
+        if (node.parentId) {
+          const currentSpace = nodes.find((n) => n.id === node.parentId);
+          if (currentSpace) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const sW = ((currentSpace.style as any)?.width ?? 400) as number;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const sH = ((currentSpace.style as any)?.height ?? 300) as number;
+            const cx = globalPos.x + 90; // half TOPIC_W approx centre adjustment
+            const cy = globalPos.y + 30; // half TOPIC_H approx
+            const insideX = cx >= currentSpace.position.x && cx <= currentSpace.position.x + sW;
+            const insideY = cy >= currentSpace.position.y && cy <= currentSpace.position.y + sH;
+            if (insideX && insideY) {
+              newParentId = currentSpace.id;
+            }
+          }
+        }
+
+        // If parent is changing, convert between absolute and relative coords
         if (newParentId !== node.parentId) {
+          let adjustedX = node.position.x;
+          let adjustedY = node.position.y;
+
+          if (newParentId) {
+            // Moving INTO a space → convert to coordinates relative to the space
+            const space = nodes.find((n) => n.id === newParentId);
+            if (space) {
+              adjustedX = node.position.x - space.position.x;
+              adjustedY = node.position.y - space.position.y;
+            }
+          } else if (node.parentId) {
+            // Moving OUT of a space → convert back to global coords
+            const oldSpace = nodes.find((n) => n.id === node.parentId);
+            if (oldSpace) {
+              adjustedX = node.position.x + oldSpace.position.x;
+              adjustedY = node.position.y + oldSpace.position.y;
+            }
+          }
+
+          // Update local state optimistically with new parent + converted coords
           setNodes((prev) =>
             prev.map((n) =>
-              n.id === node.id ? { ...n, parentId: newParentId ?? undefined } : n
+              n.id === node.id
+                ? { ...n, parentId: newParentId ?? undefined, position: { x: adjustedX, y: adjustedY } }
+                : n
             )
           );
+
+          // Persist converted position
+          updateEntityPatch.mutate({
+            nodeId: node.id,
+            x: adjustedX,
+            y: adjustedY,
+            parentId: newParentId,
+          });
+
+          // Toast feedback
+          if (newParentId) {
+            const spaceNode = nodes.find((n) => n.id === newParentId);
+            const spaceName = spaceNode?.data?.label || 'Space';
+            toast.success(`Moved to ${spaceName}`);
+          } else {
+            toast.success('Removed from Space');
+          }
+
+          // skip the later patch below to avoid duplicate if we already handled
+          return;
         }
       }
 
@@ -785,10 +920,19 @@ export default function GraphPage() {
 
       // Persist change to DB
       if (isNumeric(node.id)) {
+        let relX = node.position.x;
+        let relY = node.position.y;
+        if (node.parentId) {
+          const sp = nodes.find((n) => n.id === node.parentId);
+          if (sp) {
+            relX += sp.position.x;
+            relY += sp.position.y;
+          }
+        }
         updateRelationPosition.mutate({
           id: node.id,
-          x: node.position.x,
-          y: node.position.y,
+          x: relX,
+          y: relY,
         });
       } else {
         updateEntityPatch.mutate({
@@ -810,34 +954,95 @@ export default function GraphPage() {
   // --- Auto-layout using Dagre ---
   const handleAutoLayout = () => {
     if (!requireWallet()) return;
-    const g = new dagre.graphlib.Graph();
-    g.setDefaultEdgeLabel(() => ({}));
-    g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 100 });
 
-    // give each node a size; if custom style width exists use it
-    nodes.forEach((node) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const width = (node.style as any)?.width || 180;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const height = (node.style as any)?.height || 60;
-      g.setNode(node.id, { width, height });
+    // helper to run dagre on a subset and return new positions
+    const runLayout = (
+      subsetNodes: Node[],
+      subsetEdges: Edge[],
+      offsetX = 0,
+      offsetY = 0
+    ) => {
+      const g = new dagre.graphlib.Graph();
+      g.setDefaultEdgeLabel(() => ({}));
+      g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 80 });
+
+      subsetNodes.forEach((n) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = (n.style as any)?.width || 180;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const h = (n.style as any)?.height || 60;
+        g.setNode(n.id, { width: w, height: h });
+      });
+
+      subsetEdges.forEach((e) => g.setEdge(e.source, e.target));
+
+      dagre.layout(g);
+
+      const posMap = new Map<string, { x: number; y: number }>();
+      subsetNodes.forEach((n) => {
+        const nodeWithPos = g.node(n.id);
+        if (nodeWithPos) {
+          posMap.set(n.id, { x: nodeWithPos.x + offsetX, y: nodeWithPos.y + offsetY });
+        }
+      });
+      return posMap;
+    };
+
+    setNodes((curr) => {
+      let next = [...curr];
+
+      // 1) Global layout (nodes without parentId)
+      const globalNodes = next.filter((n) => !n.parentId);
+      const globalNodeIds = new Set(globalNodes.map((n) => n.id));
+      const globalEdges = edges.filter(
+        (e) => globalNodeIds.has(e.source.toString()) && globalNodeIds.has(e.target.toString())
+      );
+      const globalPos = runLayout(globalNodes, globalEdges);
+      next = next.map((n) => (globalPos.has(n.id) ? { ...n, position: globalPos.get(n.id)! } : n));
+
+      // 2) Per-space layout
+      const spaces = next.filter((n) => n.type === 'group');
+      spaces.forEach((space) => {
+        const children = next.filter((c) => c.parentId === space.id);
+        if (!children.length) return;
+
+        const childIds = new Set(children.map((c) => c.id));
+        const childEdges = edges.filter(
+          (e) => childIds.has(e.source.toString()) && childIds.has(e.target.toString())
+        );
+
+        // Give kids some padding inside space (20px)
+        const posInsideRaw = runLayout(children, childEdges, 20, 20);
+
+        // Clamp to stay within Space bounds
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sWidth = ((space.style as any)?.width ?? 400) as number;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sHeight = ((space.style as any)?.height ?? 300) as number;
+
+        const clamped = new Map<string, { x: number; y: number }>();
+        children.forEach((child) => {
+          const raw = posInsideRaw.get(child.id);
+          if (!raw) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const cW = ((child.style as any)?.width ?? 180) as number;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const cH = ((child.style as any)?.height ?? 60) as number;
+          const maxX = Math.max(0, sWidth - cW - 20);
+          const maxY = Math.max(0, sHeight - cH - 20);
+          clamped.set(child.id, {
+            x: Math.min(Math.max(raw.x, 20), maxX),
+            y: Math.min(Math.max(raw.y, 20), maxY),
+          });
+        });
+
+        next = next.map((n) =>
+          clamped.has(n.id) ? { ...n, position: clamped.get(n.id)! } : n
+        );
+      });
+
+      return next;
     });
-
-    edges.forEach((edge) => {
-      g.setEdge(edge.source, edge.target);
-    });
-
-    dagre.layout(g);
-
-    setNodes((nds) =>
-      nds.map((node) => {
-        const n = g.node(node.id);
-        return {
-          ...node,
-          position: { x: n.x, y: n.y },
-        };
-      })
-    );
   };
 
   const handleCenterView = () => {
@@ -855,7 +1060,7 @@ export default function GraphPage() {
     [setEdges]
   );
 
-  const handleNodeClick = (_: React.MouseEvent, node: Node) => {
+  const handleNodeClick = (e: React.MouseEvent, node: Node) => {
     if (!requireWallet()) return;
     if (node.type === 'group') {
       const gData = node.data as { visibility?: string; owner?: string };
@@ -868,6 +1073,15 @@ export default function GraphPage() {
         return; // non-owner cannot inspect private space
       }
     }
+    if (e.altKey) {
+      // Toggle orientation property
+      const currentOrientation = (node.data.properties?.orientation as string | undefined) ?? 'vertical';
+      const newOrientation = currentOrientation === 'horizontal' ? 'vertical' : 'horizontal';
+      const newProps = { ...(node.data.properties ?? {}), orientation: newOrientation };
+      updateNodeData.mutate({ nodeId: node.id, data: { properties: newProps } });
+      return; // don't open inspector on alt-click
+    }
+
     setSelectedNode(node);
     socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
   };
@@ -1084,6 +1298,7 @@ export default function GraphPage() {
           onConnect={onConnect}
           onPaneClick={handlePaneClick}
           onNodeClick={handleNodeClick}
+          onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           connectionLineType={ConnectionLineType.SmoothStep}

@@ -3,11 +3,21 @@ import { Handle, Position, NodeProps } from 'reactflow';
 import { HelpCircle } from 'lucide-react';
 import Avatar from './Avatar';
 
-const RelationNode = ({ data }: NodeProps<{ label: string; selectionColor?: string | null; selectingAddress?: string | null }>) => {
+interface RelationData {
+  label: string;
+  selectionColor?: string | null;
+  selectingAddress?: string | null;
+  properties?: Record<string, unknown>;
+}
+
+const RelationNode = ({ data }: NodeProps<RelationData>) => {
   const style = data.selectionColor ? {
     borderColor: data.selectionColor,
     boxShadow: `0 0 10px ${data.selectionColor}`,
   } : {};
+
+  const orientation = (data.properties as Record<string, string> | undefined)?.orientation ?? 'vertical';
+  const vertical = orientation !== 'horizontal';
 
   return (
     <div
@@ -28,9 +38,19 @@ const RelationNode = ({ data }: NodeProps<{ label: string; selectionColor?: stri
         <HelpCircle size={14} />
       </span>
 
-      <Handle type="target" position={Position.Top} className="w-11 !bg-purple-500" />
-      <div className="text-center">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} className="w-11 !bg-purple-500" />
+      {vertical ? (
+        <>
+          <Handle type="target" position={Position.Top} className="w-11 !bg-purple-500" />
+          <div className="text-center">{data.label}</div>
+          <Handle type="source" position={Position.Bottom} className="w-11 !bg-purple-500" />
+        </>
+      ) : (
+        <>
+          <Handle type="target" position={Position.Left} className="h-11 !bg-purple-500" />
+          <div className="text-center">{data.label}</div>
+          <Handle type="source" position={Position.Right} className="h-11 !bg-purple-500" />
+        </>
+      )}
     </div>
   );
 };

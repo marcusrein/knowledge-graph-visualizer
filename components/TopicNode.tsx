@@ -3,7 +3,15 @@ import { Handle, Position, NodeProps } from 'reactflow';
 import { HelpCircle } from 'lucide-react';
 import Avatar from './Avatar';
 
-const TopicNode = ({ data }: NodeProps<{ label: string; selectingAddress?: string }>) => {
+interface TopicData {
+  label: string;
+  selectingAddress?: string;
+  properties?: Record<string, unknown>;
+}
+
+const TopicNode = ({ data }: NodeProps<TopicData>) => {
+  const orientation = (data.properties as Record<string, string> | undefined)?.orientation ?? 'vertical';
+  const vertical = orientation !== 'horizontal';
   return (
     <div className="px-4 py-3 rounded-md bg-blue-600 text-white text-base shadow relative">
       {data.selectingAddress && (
@@ -21,8 +29,17 @@ const TopicNode = ({ data }: NodeProps<{ label: string; selectingAddress?: strin
       </span>
 
       {/* Connection handles */}
-      <Handle type="target" position={Position.Top} style={{ background: 'transparent' }} />
-      <Handle type="source" position={Position.Bottom} style={{ background: 'transparent' }} />
+      {vertical ? (
+        <>
+          <Handle type="target" position={Position.Top} style={{ background: 'transparent' }} />
+          <Handle type="source" position={Position.Bottom} style={{ background: 'transparent' }} />
+        </>
+      ) : (
+        <>
+          <Handle type="target" position={Position.Left} style={{ background: 'transparent' }} />
+          <Handle type="source" position={Position.Right} style={{ background: 'transparent' }} />
+        </>
+      )}
     </div>
   );
 };

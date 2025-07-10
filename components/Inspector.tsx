@@ -5,6 +5,7 @@ import { Node } from 'reactflow';
 import { Info } from 'lucide-react';
 import { Tooltip } from 'react-tooltip';
 import { deepEqual } from '@/lib/utils';
+import { useReactFlow } from 'reactflow';
 
 interface InspectorProps {
   selectedNode: Node | null;
@@ -37,9 +38,11 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const [label, setLabel] = useState('');
   const [properties, setProperties] = useState<Property[]>([]);
   const [nextId, setNextId] = useState(0);
+  const [orientation, setOrientation] = useState<'vertical' | 'horizontal'>('vertical');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [owner, setOwner] = useState<string | undefined>(undefined);
   const { address } = useAccount();
+  const rf = useReactFlow();
 
   useEffect(() => {
     if (selectedNode) {
@@ -154,10 +157,14 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
       }
       return acc;
     }, {} as Record<string, string>);
+
+    // include orientation field
+    propertiesObject.orientation = orientation;
     onSave(selectedNode.id, {
       label,
       properties: propertiesObject,
     });
+    rf.setNodes((nds)=>[...nds]);
   };
 
   const handlePropertyChange = (id: number, part: 'key' | 'value', value: string) => {
@@ -175,6 +182,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     setProperties(properties.filter((p) => p.id !== id));
   };
 
+  const orientationDescription = 'Choose how connection points appear for this node.';
   const topicDescription =
     'Topics are the core concepts or objects in your knowledge graph. They can be anything—ideas, projects, or people.';
   const relationDescription =
@@ -269,6 +277,40 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
           <button onClick={handleAddProperty} className="btn btn-sm btn-outline mt-2 w-full">
             {terms.inspectorAddProperty}
           </button>
+        </div>
+
+        {/* Orientation toggle */}
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <label className="block text-sm font-medium text-gray-400">Orientation</label>
+            <Info
+              className="w-4 h-4 text-gray-400 cursor-pointer"
+              data-tooltip-id="inspector-tooltip"
+              data-tooltip-content={orientationDescription}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              className={`btn btn-sm ${orientation==='vertical'?'btn-primary':'btn-ghost'}`}
+              onClick={()=>{
+                setOrientation('vertical');
+                const propsObject = properties.reduce((acc, prop) => { if (prop.key) acc[prop.key]=prop.value; return acc; }, {} as Record<string,string>);
+                propsObject.orientation='vertical';
+                onSave(selectedNode.id,{ properties: propsObject });
+                rf.setNodes((nds)=>[...nds]);
+              }}
+            >Top/Bottom</button>
+            <button
+              className={`btn btn-sm ${orientation==='horizontal'?'btn-primary':'btn-ghost'}`}
+              onClick={()=>{
+                setOrientation('horizontal');
+                const propsObject = properties.reduce((acc, prop) => { if (prop.key) acc[prop.key]=prop.value; return acc; }, {} as Record<string,string>);
+                propsObject.orientation='horizontal';
+                onSave(selectedNode.id,{ properties: propsObject });
+                rf.setNodes((nds)=>[...nds]);
+              }}
+            >Left/Right</button>
+          </div>
         </div>
       </div>
 
