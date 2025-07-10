@@ -26,6 +26,8 @@ import Inspector from '@/components/Inspector';
 import { useTerminology } from '@/lib/TerminologyContext';
 import Avatar from '@/components/Avatar';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
+import TopicNode from '@/components/TopicNode';
+import { Tooltip } from 'react-tooltip';
 
 interface PresentUser {
   id: string;
@@ -39,6 +41,7 @@ interface Selection {
 
 const nodeTypes = {
   relation: RelationNode,
+  topic: TopicNode,
 };
 
 // A more robust check for numeric strings (for relation IDs)
@@ -280,7 +283,15 @@ export default function GraphPage() {
   });
 
   const addEntity = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: {
+      nodeId: string;
+      label: string;
+      type: 'knowledge' | 'category';
+      x: number;
+      y: number;
+      properties: Record<string, unknown>;
+      date: string;
+    }) => {
       const res = await fetch('/api/entities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -288,13 +299,14 @@ export default function GraphPage() {
       });
       return res.json();
     },
-    onSuccess: (newNodeData) => {
+    onSuccess: (_data, variables) => {
       completeStep('create-topic');
       // Add the new node to the state optimistically
       const newNode = {
-        id: newNodeData.id,
+        // Use the same nodeId we sent to the server to keep client and server in sync
+        id: variables.nodeId,
         position: { x: 200, y: 150 },
-        data: { label: newNodeData.label || 'New Topic' },
+        data: { label: variables.label || 'New Topic' },
         style: {
           backgroundColor: '#fff',
           color: '#000',
@@ -412,9 +424,14 @@ export default function GraphPage() {
   );
 
   const handleAddNode = () => {
+    console.log('Creating a new topic...');
+    // Generate a unique client-side identifier for the new topic
+    const nodeId = crypto.randomUUID();
+
     addEntity.mutate({
+      nodeId, // required by the API
       label: 'New Topic',
-      type: 'topic',
+      type: 'knowledge',
       x: 200,
       y: 150,
       properties: {},
@@ -492,6 +509,15 @@ export default function GraphPage() {
             />
           </div>
 
+          <button
+            onClick={handleAddNode}
+            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+            data-tooltip-id="kg-node-tip"
+            data-tooltip-content="Create a new Topic"
+          >
+            +
+          </button>
+
           <div className="flex items-center space-x-2">
             {presentUsers.map(user => (
               <Avatar key={user.id} address={user.address} />
@@ -543,24 +569,38 @@ export default function GraphPage() {
         >
           <Background />
           <Controls />
-          {nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center bg-gray-800 bg-opacity-80 p-8 rounded-lg pointer-events-auto">
-                <h2 className="text-2xl font-bold mb-2">Welcome to your Knowledge Graph</h2>
-                <p className="text-gray-400 mb-6">
-                  Map ideas, projects, and people to see how they connect.
-                </p>
-                <button
-                  onClick={handleAddNode}
-                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-                >
-                  Create your first Topic
-                </button>
-              </div>
-            </div>
-          )}
         </ReactFlow>
 
+        {nodes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+            <div className="text-center bg-gray-800 bg-opacity-80 p-8 rounded-lg max-w-lg pointer-events-auto">
+              <h2 className="text-2xl font-bold mb-2">Welcome to the Daily Knowledge Graph Visualizer</h2>
+              <p className="text-gray-400 mb-6">
+                This is a mulitiplayer visualizer that demonstrates how Knowledge Graphs work! Use it to map ideas, projects, and people, and see how other people connect with your ideas in real time.
+              </p>
+              <p className="text-gray-400 mb-6">
+                The data is cleared every day at midnight UTC as this is simply demonstrating how Knowledge Graphs work.
+              </p>
+              <p className="text-gray-400 mb-6 font-bold">
+                To get started, create a new Topic by clicking the + button.
+              </p>
+              <button
+                onClick={handleAddNode}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+              >
+                Create your first Topic
+              </button>
+              <div className="mt-8 text-md text-gray-500">
+                <p>Learn more about the standards and technologies behind this app:</p>
+                <div className="flex justify-center gap-4 mt-2">
+                  <a href="https://thegraph.com" target="_blank" rel="noopener noreferrer" className="hover:text-white">The Graph</a>
+                  <a href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md" target="_blank" rel="noopener noreferrer" className="hover:text-white">GRC-20 Spec</a>
+                  <a href="https://github.com/graphprotocol/hypergraph" target="_blank" rel="noopener noreferrer" className="hover:text-white">Hypergraph</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       <Inspector
         selectedNode={selectedNode}
@@ -573,7 +613,6 @@ export default function GraphPage() {
           }
         }}
         onClose={() => setSelectedNode(null)}
-        getTerm={getTerm}
       />
       {showChecklist && (
         <OnboardingChecklist
@@ -584,6 +623,8 @@ export default function GraphPage() {
           onDismiss={dismissChecklist}
         />
       )}
+      {/* Global tooltip for nodes */}
+      <Tooltip id="kg-node-tip" className="z-50" />
     </div>
   );
 }

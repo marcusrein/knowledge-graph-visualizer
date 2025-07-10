@@ -1,19 +1,21 @@
 import { memo, useState, useEffect } from 'react';
 import { Node } from 'reactflow';
+import { Info } from 'lucide-react';
+import { Tooltip } from 'react-tooltip';
 import { deepEqual } from '@/lib/utils'; // We will create this utility function
 import { useTerminology } from '@/lib/TerminologyContext';
 
 interface InspectorProps {
   selectedNode: Node | null;
   onClose: () => void;
-  onSave: (nodeId: string, data: { label?: string; properties?: any }) => void;
+  onSave: (nodeId: string, data: { label?: string; properties?: Record<string, string> }) => void;
   onDelete: (nodeId: string, isRelation: boolean) => void;
 }
 
 const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) => {
   const { getTerm } = useTerminology();
   const [label, setLabel] = useState('');
-  const [properties, setProperties] = useState<Record<string, any>>({});
+  const [properties, setProperties] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (selectedNode) {
@@ -69,12 +71,20 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     }
   };
 
+  const entityDescription = "In a knowledge graph, a Topic represents an 'entity'—a unique person, place, idea, or concept. Think of it as a noun. You can connect Topics to show their relationships.";
+  const relationDescription = "A Relation is the connection or 'edge' between two Topics. It describes how they're related, acting like a verb. For example, 'Ada Lovelace' (Topic) 'wrote' (Relation) 'the first algorithm' (Topic).";
+
 
   return (
     <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold">
-          {isRelation ? getTerm('RELATION') : getTerm('ENTITY')} Details
+        <h3 className="text-xl font-bold flex items-center gap-2">
+          {isRelation ? 'Relation' : 'Topic'} Inspector
+          <Info
+            className="w-4 h-4 text-gray-400 cursor-pointer"
+            data-tooltip-id="kg-node-tip"
+            data-tooltip-content={isRelation ? relationDescription : entityDescription}
+          />
         </h3>
         <button onClick={onClose} className="btn btn-sm btn-ghost">
           &times;
@@ -83,7 +93,13 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
 
       <div className="flex-1 space-y-6 overflow-y-auto">
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">Label</label>
+          <label
+            className="block text-sm font-medium text-gray-400 mb-1"
+            data-tooltip-id="inspector-tooltip"
+            data-tooltip-content={isRelation ? "Describe the relationship between the two Topics. Examples: 'is a friend of', 'works at', 'is located in'. Keep it descriptive!" : "Give your Topic a clear, concise name. This label is how you'll see and identify this piece of knowledge on the knowledge graph."}
+          >
+            Label
+          </label>
           <input
             type="text"
             className="input input-bordered w-full"
@@ -93,7 +109,13 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-1">Type</label>
+          <label
+            className="block text-sm font-medium text-gray-400 mb-1"
+            data-tooltip-id="inspector-tooltip"
+            data-tooltip-content="This shows whether you're inspecting a Topic (an entity) or a Relation (a connection). In knowledge graphs, everything is either a node (Topic) or an edge (Relation)."
+          >
+            Type
+          </label>
           <input
             type="text"
             className="input input-bordered w-full"
@@ -113,6 +135,8 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                 value={key}
                 placeholder="key"
                 onChange={(e) => handlePropertyChange(index, 'key', e.target.value)}
+                data-tooltip-id="inspector-tooltip"
+                data-tooltip-content="Add custom data to your Topic or Relation. The 'key' is the name of the data field, like 'Date of Birth' or 'Website'."
               />
               <input
                 type="text"
@@ -120,6 +144,8 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                 value={value}
                 placeholder="value"
                 onChange={(e) => handlePropertyChange(index, 'value', e.target.value)}
+                data-tooltip-id="inspector-tooltip"
+                data-tooltip-content="This is the value for the property you defined in the 'key'. For a 'Website' key, this would be the URL."
               />
               <button onClick={() => handleRemoveProperty(key)} className="btn btn-ghost btn-sm">
                 &times;
@@ -128,7 +154,12 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
           ))}
         </div>
 
-        <button onClick={handleAddProperty} className="btn btn-sm btn-outline mt-2 w-full">
+        <button
+          onClick={handleAddProperty}
+          className="btn btn-sm btn-outline mt-2 w-full"
+          data-tooltip-id="inspector-tooltip"
+          data-tooltip-content="Enrich your Topics and Relations with extra details. Each property is a key-value pair, adding more semantic meaning and context."
+        >
           + Add Property
         </button>
       </div>
@@ -141,6 +172,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
           Delete
         </button>
       </div>
+      <Tooltip id="inspector-tooltip" className="z-50" />
     </aside>
   );
 };
