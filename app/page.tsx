@@ -13,7 +13,9 @@ import ReactFlow, {
   applyEdgeChanges,
   EdgeChange,
   MarkerType,
+  ConnectionLineType,
 } from 'reactflow';
+import * as dagre from 'dagre';
 import 'reactflow/dist/style.css';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
@@ -379,11 +381,11 @@ export default function GraphPage() {
           id: `${r.sourceId}-${r.id}`,
           source: r.sourceId,
           target: String(r.id),
-          type: 'straight',
+          type: 'smoothstep',
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            width: 17,
-            height: 17,
+            width: 30,
+            height: 30,
             color: '#fff',
           },
         },
@@ -391,11 +393,11 @@ export default function GraphPage() {
           id: `${r.id}-${r.targetId}`,
           source: String(r.id),
           target: r.targetId,
-          type: 'straight',
+          type: 'smoothstep',
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            width: 17,
-            height: 17,
+            width: 30,
+            height: 30,
             color: '#fff',
           },
         },
@@ -478,6 +480,38 @@ export default function GraphPage() {
     socket.send(JSON.stringify({ type: 'selection', nodeId: null }));
   };
 
+  // --- Auto-layout using Dagre ---
+  const handleAutoLayout = () => {
+    const g = new dagre.graphlib.Graph();
+    g.setDefaultEdgeLabel(() => ({}));
+    g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 100 });
+
+    // give each node a size; if custom style width exists use it
+    nodes.forEach((node) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const width = (node.style as any)?.width || 180;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const height = (node.style as any)?.height || 60;
+      g.setNode(node.id, { width, height });
+    });
+
+    edges.forEach((edge) => {
+      g.setEdge(edge.source, edge.target);
+    });
+
+    dagre.layout(g);
+
+    setNodes((nds) =>
+      nds.map((node) => {
+        const n = g.node(node.id);
+        return {
+          ...node,
+          position: { x: n.x, y: n.y },
+        };
+      })
+    );
+  };
+
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
     []
@@ -527,6 +561,15 @@ export default function GraphPage() {
             +
           </button>
 
+          <button
+            onClick={handleAutoLayout}
+            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+            data-tooltip-id="kg-node-tip"
+            data-tooltip-content="Tidy up layout"
+          >
+            ⇆
+          </button>
+
           <div className="flex items-center space-x-2">
             {presentUsers.map(user => (
               <Avatar key={user.id} address={user.address} />
@@ -563,7 +606,13 @@ export default function GraphPage() {
           )}
         </div>
 
+        {/* Default edge styling */}
         <ReactFlow
+          defaultEdgeOptions={{
+            type: 'smoothstep',
+            markerEnd: { type: MarkerType.ArrowClosed, width: 30, height: 30, color: '#fff' },
+            style: { strokeWidth: 2, stroke: '#AAA' },
+          }}
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
@@ -573,6 +622,7 @@ export default function GraphPage() {
           onNodeClick={handleNodeClick}
           onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
+          connectionLineType={ConnectionLineType.SmoothStep}
           fitView
           className="bg-gray-900"
         >
