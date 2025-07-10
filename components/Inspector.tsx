@@ -17,6 +17,17 @@ interface Property {
   value: string;
 }
 
+// Safely parse a JSON string; if parsing fails or value is falsy, return an empty object
+const safeParseProperties = (value: unknown): Record<string, string> => {
+  if (!value) return {};
+  if (typeof value !== 'string') return value as Record<string, string>;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+};
+
 const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) => {
   const [label, setLabel] = useState('');
   const [properties, setProperties] = useState<Property[]>([]);
@@ -26,7 +37,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   useEffect(() => {
     if (selectedNode) {
       setLabel(selectedNode.data.label);
-      const propsObject = JSON.parse(selectedNode.data.properties || '{}');
+      const propsObject = safeParseProperties(selectedNode.data.properties);
       const propsArray = Object.entries(propsObject).map(([key, value], index) => ({
         id: index,
         key,
@@ -49,7 +60,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const isRelation = /^\d+$/.test(selectedNode.id);
 
   const hasChanges = () => {
-    const originalProperties = JSON.parse(selectedNode.data.properties || '{}');
+    const originalProperties = safeParseProperties(selectedNode.data.properties);
     const currentProperties = properties.reduce((acc, prop) => {
       if (prop.key) acc[prop.key] = prop.value;
       return acc;

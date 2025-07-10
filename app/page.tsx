@@ -345,7 +345,7 @@ export default function GraphPage() {
         const selection = selections.find(s => s.nodeId === e.nodeId);
         return {
           id: e.nodeId,
-          type: 'default',
+          type: 'topic',
           data: { label: e.label, properties: e.properties },
           position: {
             x: e.x ?? Math.random() * 400,

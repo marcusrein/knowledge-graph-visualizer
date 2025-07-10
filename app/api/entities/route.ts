@@ -22,6 +22,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
   }
 
+  // Prevent duplicate nodeId entries – if a node with the same nodeId exists, return it instead of inserting a duplicate
+  const existing = db.prepare('SELECT id FROM entities WHERE nodeId = ?').get(nodeId) as { id: number } | undefined;
+  if (existing) {
+    return NextResponse.json({ id: existing.id, duplicated: true });
+  }
+
   const stmt = db.prepare(
     "INSERT INTO entities (nodeId, label, type, userAddress, x, y, created_at) VALUES (?,?,?,?,?,?,datetime('now'))"
   );
