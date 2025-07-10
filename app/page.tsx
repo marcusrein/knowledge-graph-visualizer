@@ -21,6 +21,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import toast from 'react-hot-toast';
 import usePartySocket from 'partysocket/react';
+import { Menu } from 'lucide-react';
 
 import RelationNode from '@/components/RelationNode';
 import Inspector from '@/components/Inspector';
@@ -71,6 +72,8 @@ export default function GraphPage() {
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [showChecklist, setShowChecklist] = useState(false);
   const [connecting, setConnecting] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const socket = usePartySocket({
     host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || '127.0.0.1:1999',
@@ -626,8 +629,50 @@ export default function GraphPage() {
       <div className="flex-1 h-screen relative">
         <div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
           <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-            <img src="/file.svg" alt="File" className="w-6 h-6" />
-            <span className="font-mono text-lg">GRC-20</span>
+            <div className="relative">
+              <button onClick={() => setMenuOpen(prev => !prev)} className="btn btn-ghost btn-circle btn-sm">
+                <Menu className="h-5 w-5" />
+              </button>
+              {menuOpen && (
+                <ul className="absolute left-0 mt-2 menu menu-sm z-[25] p-2 shadow bg-base-200 rounded-box w-52">
+                  <li>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setShowWelcome(true);
+                      }}
+                    >
+                      Welcome / Help
+                    </button>
+                  </li>
+                  <li>
+                    <a href="https://thegraph.com/" target="_blank" rel="noopener noreferrer">
+                      The Graph
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://thegraph.com/blog/grc20-knowledge-graph/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      GRC-20 Blog Post
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href="https://github.com/graphprotocol/hypergraph"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Hypergraph Repo
+                    </a>
+                  </li>
+                </ul>
+              )}
+            </div>
+
+            <span className="font-mono text-lg">The Knowledge Graph Visualizer</span>
             <span className="font-mono text-lg text-gray-400">/</span>
             <img src="/globe.svg" alt="Globe" className="w-6 h-6" />
             <input
@@ -635,6 +680,8 @@ export default function GraphPage() {
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-sm"
+              data-tooltip-id="kg-node-tip"
+              data-tooltip-content="Select a date to view the knowledge graph for that day. The knowledge graph is ephemeral and resets daily."
             />
           </div>
 
@@ -740,9 +787,17 @@ export default function GraphPage() {
           <Controls />
         </ReactFlow>
 
-        {nodes.length === 0 && (
+        {(showWelcome || nodes.length === 0) && (
           <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
             <div className="text-center bg-gray-800 bg-opacity-80 p-8 rounded-lg max-w-lg pointer-events-auto">
+              {nodes.length !== 0 && (
+                <button
+                  className="absolute top-2 right-2 text-gray-400 hover:text-white"
+                  onClick={() => setShowWelcome(false)}
+                >
+                  &times;
+                </button>
+              )}
               <h2 className="text-2xl font-bold mb-2">Welcome to the Daily Knowledge Graph Visualizer</h2>
               <p className="text-gray-400 mb-6">
                 This is a mulitiplayer visualizer that demonstrates how Knowledge Graphs work! Use it to map ideas, projects, and people, and see how other people connect with your ideas in real time.
@@ -757,7 +812,7 @@ export default function GraphPage() {
                 onClick={handleAddNode}
                 className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
               >
-                Create your first Topic
+                Create a Topic
               </button>
               <div className="mt-8 text-md text-gray-500">
                 <p>Learn more about the standards and technologies behind this app:</p>
