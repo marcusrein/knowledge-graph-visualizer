@@ -12,6 +12,7 @@ import ReactFlow, {
   NodeChange,
   applyEdgeChanges,
   EdgeChange,
+  MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -379,12 +380,24 @@ export default function GraphPage() {
           source: r.sourceId,
           target: String(r.id),
           type: 'straight',
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 17,
+            height: 17,
+            color: '#fff',
+          },
         },
         {
           id: `${r.id}-${r.targetId}`,
           source: String(r.id),
           target: r.targetId,
           type: 'straight',
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 17,
+            height: 17,
+            color: '#fff',
+          },
         },
       ]);
 
