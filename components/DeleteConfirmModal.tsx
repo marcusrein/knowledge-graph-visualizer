@@ -79,15 +79,28 @@ export default function DeleteConfirmModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-base-300 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
         <h3 className="text-lg font-bold mb-4">Delete {itemType}</h3>
-        <p className="mb-6">
+        <p className="mb-4">
           Are you sure you want to delete this {itemType.toLowerCase()}?{' '}
           <span className="font-semibold">&ldquo;{itemName}&rdquo;</span> will be permanently removed.
         </p>
+        <p className="text-sm text-gray-400 mb-6">
+          <kbd className="kbd kbd-sm">Enter</kbd> to confirm • <kbd className="kbd kbd-sm">Esc</kbd> to cancel • <kbd className="kbd kbd-sm">Tab</kbd> to navigate
+        </p>
         <div className="flex justify-end gap-3">
-          <button className="btn btn-ghost" onClick={onClose}>
+          <button 
+            ref={cancelButtonRef}
+            className="btn btn-ghost" 
+            onClick={onClose}
+            tabIndex={0}
+          >
             Cancel
           </button>
-          <button className="btn btn-error" onClick={onConfirm}>
+          <button 
+            ref={deleteButtonRef}
+            className="btn btn-error" 
+            onClick={onConfirm}
+            tabIndex={0}
+          >
             Delete
           </button>
         </div>
