@@ -903,6 +903,13 @@ export default function GraphPage() {
     }
   }, [showWelcome]);
 
+  // Auto-close welcome modal when nodes are present
+  useEffect(() => {
+    if (showWelcome && nodes.length > 0) {
+      setShowWelcome(false);
+    }
+  }, [showWelcome, nodes.length]);
+
   const addressToColor = useCallback((addr: string) => {
     // simple deterministic hash to hue
     let hash = 0;
@@ -2290,7 +2297,7 @@ export default function GraphPage() {
 					connectionLineType={ConnectionLineType.SmoothStep}
 					fitView
 					className={`bg-gray-900 ${
-						showWelcome || (nodes.length === 0 && showWelcome !== false)
+						showWelcome
 							? "pointer-events-none opacity-10"
 							: ""
 					}`}
