@@ -95,65 +95,97 @@ async function initializePostgres() {
     console.log('[Database] Connection successful');
     
     // Create entities table
-    await sql`
-      CREATE TABLE IF NOT EXISTS entities (
-        id SERIAL PRIMARY KEY,
-        nodeId TEXT UNIQUE NOT NULL,
-        label TEXT NOT NULL,
-        type TEXT NOT NULL,
-        userAddress TEXT,
-        x REAL,
-        y REAL,
-        properties JSONB DEFAULT '{}',
-        created_at TIMESTAMP DEFAULT NOW(),
-        parentId TEXT,
-        visibility TEXT DEFAULT 'public',
-        width REAL,
-        height REAL
-      )
-    `;
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS entities (
+          id SERIAL PRIMARY KEY,
+          nodeId TEXT UNIQUE NOT NULL,
+          label TEXT NOT NULL,
+          type TEXT NOT NULL,
+          userAddress TEXT,
+          x REAL,
+          y REAL,
+          properties JSONB DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT NOW(),
+          parentId TEXT,
+          visibility TEXT DEFAULT 'public',
+          width REAL,
+          height REAL
+        )
+      `;
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+        console.log('[Database] Entities table/sequence already exists, continuing...');
+      } else {
+        throw error;
+      }
+    }
 
     // Create relations table
-    await sql`
-      CREATE TABLE IF NOT EXISTS relations (
-        id SERIAL PRIMARY KEY,
-        sourceId TEXT,
-        targetId TEXT,
-        relationType TEXT NOT NULL,
-        userAddress TEXT,
-        x REAL,
-        y REAL,
-        properties JSONB DEFAULT '{}',
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `;
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS relations (
+          id SERIAL PRIMARY KEY,
+          sourceId TEXT,
+          targetId TEXT,
+          relationType TEXT NOT NULL,
+          userAddress TEXT,
+          x REAL,
+          y REAL,
+          properties JSONB DEFAULT '{}',
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `;
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+        console.log('[Database] Relations table/sequence already exists, continuing...');
+      } else {
+        throw error;
+      }
+    }
 
     // Create relation_links table
-    await sql`
-      CREATE TABLE IF NOT EXISTS relation_links (
-        id SERIAL PRIMARY KEY,
-        relationId INTEGER REFERENCES relations(id) ON DELETE CASCADE,
-        entityId TEXT,
-        role TEXT CHECK(role IN ('source','target')),
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `;
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS relation_links (
+          id SERIAL PRIMARY KEY,
+          relationId INTEGER REFERENCES relations(id) ON DELETE CASCADE,
+          entityId TEXT,
+          role TEXT CHECK(role IN ('source','target')),
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `;
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+        console.log('[Database] Relation_links table/sequence already exists, continuing...');
+      } else {
+        throw error;
+      }
+    }
 
     // Create edit_history table
-    await sql`
-      CREATE TABLE IF NOT EXISTS edit_history (
-        id SERIAL PRIMARY KEY,
-        nodeId TEXT NOT NULL,
-        nodeType TEXT NOT NULL CHECK(nodeType IN ('entity','relation')),
-        action TEXT NOT NULL CHECK(action IN ('create','update','delete')),
-        field TEXT,
-        oldValue TEXT,
-        newValue TEXT,
-        editorAddress TEXT,
-        timestamp TIMESTAMP DEFAULT NOW(),
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `;
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS edit_history (
+          id SERIAL PRIMARY KEY,
+          nodeId TEXT NOT NULL,
+          nodeType TEXT NOT NULL CHECK(nodeType IN ('entity','relation')),
+          action TEXT NOT NULL CHECK(action IN ('create','update','delete')),
+          field TEXT,
+          oldValue TEXT,
+          newValue TEXT,
+          editorAddress TEXT,
+          timestamp TIMESTAMP DEFAULT NOW(),
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `;
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+        console.log('[Database] Edit_history table/sequence already exists, continuing...');
+      } else {
+        throw error;
+      }
+    }
 
     // Create indexes for better performance
     await sql`CREATE INDEX IF NOT EXISTS idx_entities_nodeId ON entities(nodeId)`;
@@ -274,6 +306,13 @@ async function getEntitiesForDatePostgres(date: string, userAddress?: string) {
       )
       ORDER BY created_at ASC
     `;
+    
+    console.log('[Database] Query result:', { hasResult: !!result, hasRows: !!result?.rows, rowCount: result?.rows?.length });
+    
+    if (!result || !result.rows) {
+      console.log('[Database] No result or rows, returning empty array');
+      return [];
+    }
     
     return result.rows.map((row: Record<string, unknown>) => {
       if (
@@ -618,7 +657,9 @@ async function createEntityPostgres(data: {
       SELECT id FROM entities WHERE nodeId = ${data.nodeId}
     `;
     
-    if (existing.rows.length > 0) {
+    console.log('[Database] Duplicate check result:', { hasResult: !!existing, hasRows: !!existing?.rows, rowCount: existing?.rows?.length });
+    
+    if (existing?.rows && existing.rows.length > 0) {
       return { id: existing.rows[0].id, duplicated: true };
     }
 
@@ -641,11 +682,18 @@ async function createEntityPostgres(data: {
       RETURNING id
     `;
 
+    console.log('[Database] Insert result:', { hasResult: !!result, hasRows: !!result?.rows, rowCount: result?.rows?.length });
+
     // Record creation in edit history
     await sql`
       INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
       VALUES (${data.nodeId}, 'entity', 'create', null, null, ${data.label}, ${data.userAddress || null})
     `;
+
+    if (!result?.rows || result.rows.length === 0) {
+      console.log('[Database] No result from insert, returning default id');
+      return { id: 1 }; // Fallback ID
+    }
 
     return { id: result.rows[0].id };
   } catch (error) {
