@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -44,13 +44,7 @@ interface Selection {
   nodeId: string | null;
 }
 
-// Move nodeTypes outside or memoize to fix React Flow warnings
-const nodeTypes = {
-  relation: RelationNode,
-  topic: TopicNode,
-  knowledge: TopicNode, // alias to silence React Flow warnings
-  group: SpaceNode,
-};
+// nodeTypes will be defined inside the component to fix React Flow warnings
 
 // A more robust check for numeric strings (for relation IDs)
 function isNumeric(str: string) {
@@ -119,10 +113,20 @@ export default function GraphPage() {
   const optimisticOperations = useRef<Map<string, { type: string; rollback: () => void }>>(new Map());
   const positionDebounceRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
+  // Memoized nodeTypes to fix React Flow warnings
+  const nodeTypes = useMemo(() => ({
+    relation: RelationNode,
+    topic: TopicNode,
+    knowledge: TopicNode, // alias to silence React Flow warnings
+    group: SpaceNode,
+  }), []);
+
   // Real-time sync event handlers
   const handleRecentEventsSync = useCallback((events: unknown[]) => {
     // Process recent events for initial sync - helps new users catch up
-    console.log('Processing recent events for sync:', events.length);
+    if (events.length > 0) {
+      console.log('Processing recent events for sync:', events.length);
+    }
     // This could trigger a full refetch or selective updates
     queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
     queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
@@ -130,7 +134,10 @@ export default function GraphPage() {
   }, [queryClient, selectedDate]);
 
   const handleDataSyncEvent = useCallback((event: { type: string; data: Record<string, unknown> }) => {
-    console.log('Received data sync event:', event);
+    // Only log important sync events to reduce noise
+    if (event.type === 'entity-delete' || event.type === 'relation-delete') {
+      console.log('Received data sync event:', event);
+    }
     
     // Apply the remote change to local state
     switch (event.type) {
@@ -265,8 +272,11 @@ export default function GraphPage() {
   const handleConflictResolution = useCallback((resolution: any) => {
     console.log('Conflict resolved:', resolution);
     
-    // Show notification about conflict resolution
-    if (resolution.resolution === 'last-write-wins') {
+    // Only show toast for conflicts that actually impact the user
+    // Skip automatic position sync conflicts as they're handled seamlessly
+    if (resolution.resolution === 'last-write-wins' && 
+        resolution.loserEventId && 
+        optimisticOperations.current.has(resolution.loserEventId)) {
       toast('Conflict resolved: most recent change was kept');
     }
   }, []);
@@ -526,17 +536,34 @@ export default function GraphPage() {
     onSuccess: (data, variables) => {
       const deletedNodeId = variables.nodeId;
 
-      // First update edges and compute connected relation IDs based on the latest edge state
+      // Check if the deleted node was a space (group) and handle child nodes
+      setNodes((prevNodes) => {
+        const deletedNode = prevNodes.find(n => n.id === deletedNodeId);
+        const isSpace = deletedNode?.type === 'group';
+        
+        if (isSpace) {
+          // If deleting a space, also remove all child nodes that have this space as parent
+          // This prevents the "Parent node not found" error in React Flow
+          const filteredNodes = prevNodes.filter((n) => {
+            if (n.id === deletedNodeId) return false; // Remove the space itself
+            if (n.parentNode === deletedNodeId) return false; // Remove child nodes
+            return true;
+          });
+          
+          console.log(`[Delete Space] Removed space ${deletedNodeId} and its ${prevNodes.filter(n => n.parentNode === deletedNodeId).length} child nodes`);
+          return filteredNodes;
+        } else {
+          // For non-space nodes, just remove the node itself
+          return prevNodes.filter((n) => n.id !== deletedNodeId);
+        }
+      });
+
+      // Update edges to remove any connected to the deleted node(s)
       setEdges((prevEdges) => {
-        // Remove only edges connected to the deleted entity
-        const filtered = prevEdges.filter(
-          (e) => e.source !== deletedNodeId && e.target !== deletedNodeId
-        );
-
-        // Update nodes state in the same callback to avoid stale state
-        setNodes((prevNodes) => prevNodes.filter((n) => n.id !== deletedNodeId));
-
-        return filtered;
+        return prevEdges.filter((e) => {
+          // Keep edges that are not connected to the deleted node
+          return e.source !== deletedNodeId && e.target !== deletedNodeId;
+        });
       });
 
       setSelectedNode(null);
@@ -1187,13 +1214,7 @@ export default function GraphPage() {
       if (isNumeric(node.id)) {
         // Check if relation is currently inside any space
         const spaces = nodes.filter(n => n.type === 'group');
-        console.log(`[Relation Toast] Found ${spaces.length} spaces:`, spaces.map(s => ({
-          id: s.id,
-          label: s.data.label,
-          position: s.position,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          size: { width: (s.style as any)?.width || 400, height: (s.style as any)?.height || 300 }
-        })));
+        // Debug logging reduced to minimize console noise
         
         // Get absolute position (convert from relative if inside a space)
         let absoluteX = node.position.x;
@@ -1204,22 +1225,13 @@ export default function GraphPage() {
           if (parentSpace) {
             absoluteX += parentSpace.position.x;
             absoluteY += parentSpace.position.y;
-            console.log(`[Relation Toast] Converting relative to absolute:`, {
-              relative: node.position,
-              parentPos: parentSpace.position,
-              absolute: { x: absoluteX, y: absoluteY }
-            });
+            // Position conversion logging reduced
           }
         }
         
         const relationCenterX = absoluteX + 90; // approximate relation node center
         const relationCenterY = absoluteY + 30;
-        console.log(`[Relation Toast] Relation position:`, {
-          raw: node.position,
-          absolute: { x: absoluteX, y: absoluteY },
-          center: { x: relationCenterX, y: relationCenterY },
-          hasParent: !!node.parentId
-        });
+        // Relation position logging reduced
         
         const isInsideSpace = nodes.some(spaceNode => {
           if (spaceNode.type !== 'group') return false;
@@ -1247,11 +1259,7 @@ export default function GraphPage() {
                           relationCenterY >= spaceTop && 
                           relationCenterY <= spaceBottom;
           
-          console.log(`[Relation Toast] Space ${spaceNode.id} check:`, {
-            spaceBounds: { left: spaceLeft, right: spaceRight, top: spaceTop, bottom: spaceBottom },
-            relationCenter: { x: relationCenterX, y: relationCenterY },
-            isInside
-          });
+          // Space boundary check logging reduced
           
           return isInside;
         });
@@ -1260,12 +1268,7 @@ export default function GraphPage() {
         const wasInsideSpace = relationSpaceStateRef.current.get(node.id) || false;
         const boundaryChanged = wasInsideSpace !== isInsideSpace;
         
-        console.log(`[Relation Toast] Node ${node.id}:`, {
-          wasInsideSpace,
-          isInsideSpace, 
-          boundaryChanged,
-          direction: boundaryChanged ? (isInsideSpace ? 'INTO space' : 'OUT OF space') : 'no change'
-        });
+        // Only log when boundary actually changes
         
         if (boundaryChanged) {
           const now = Date.now();

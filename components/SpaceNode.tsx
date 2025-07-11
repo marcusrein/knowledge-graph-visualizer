@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { NodeProps } from 'reactflow';
 import { Tooltip } from 'react-tooltip';
 import { useAccount } from 'wagmi';
@@ -18,15 +18,43 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
   const { label, visibility = 'public', onResize, owner } = data;
   const { address } = useAccount();
   
-  const isOwner = Boolean(owner && address && owner.toLowerCase() === address.toLowerCase());
+  // Stable owner detection to prevent flashing
+  const isOwner = useMemo(() => {
+    if (!owner || !address) return false;
+    
+    return (
+      owner.toLowerCase() === address.toLowerCase() || 
+      owner === address ||
+      // Handle case where owner might be stored without checksumming
+      owner.replace(/^0x/, '').toLowerCase() === address.replace(/^0x/, '').toLowerCase()
+    );
+  }, [owner, address]);
+  
   const isPrivate = visibility === 'private';
-  const isPrivateNonOwner = isPrivate && !isOwner;
+  
+  // Safety fallback: if there's no clear owner set, assume current user can see content
+  // This prevents accidentally hiding content from legitimate users
+  const shouldHideContent = useMemo(() => {
+    return isPrivate && !isOwner && Boolean(owner) && Boolean(address);
+  }, [isPrivate, isOwner, owner, address]);
+
+  const ownerDisplayName = owner ? `${owner.slice(0, 6)}...${owner.slice(-4)}` : 'Unknown';
+  
+  const privacyLabel = isPrivate
+    ? isOwner 
+      ? 'Your Private Space'
+      : `${ownerDisplayName}'s Private Space`
+    : isOwner
+      ? 'Your Public Space'
+      : `${ownerDisplayName}'s Public Space`;
 
   const tooltipText = isPrivate
     ? isOwner 
       ? 'Your Private Space – only you can view and edit its contents'
-      : 'Private Space – contents are hidden from other users'
-    : 'Public Space – everyone can view its contents';
+      : `Private Space owned by ${ownerDisplayName} – contents are hidden from other users`
+    : isOwner
+      ? 'Your Public Space – everyone can view its contents'
+      : `Public Space owned by ${ownerDisplayName} – everyone can view its contents`;
 
   // Helper to adjust size by a delta
   const adjustSize = useCallback(
@@ -88,16 +116,14 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
 
   return (
     <div
-      className={`w-full h-full rounded border relative flex items-start justify-start p-1 select-none ${
+      className={`w-full h-full rounded border relative flex items-start justify-start p-1 select-none bg-transparent ${
         isPrivate 
-          ? 'bg-purple-200/30 border-purple-400' 
-          : 'bg-purple-100/40 border-purple-300'
+          ? 'border-purple-400' 
+          : 'border-purple-300'
       }`}
-      data-tooltip-id="space-visibility-tip"
-      data-tooltip-content={tooltipText}
     >
       {/* Privacy Overlay for Non-Owners */}
-      {isPrivateNonOwner && (
+      {shouldHideContent && (
         <div className="absolute inset-0 rounded bg-gray-900/70 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none z-10">
           <div className="text-center space-y-2 px-4">
             <div className="text-2xl">🔒</div>
@@ -113,34 +139,28 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
       )}
 
       {/* Space Header */}
-      <div className="flex items-start justify-between w-full">
-        <div className="flex-1">
-          {/* Space Label */}
-          <span className={`text-xs font-semibold ${
-            isPrivate ? 'text-purple-900' : 'text-purple-800'
-          }`}>
-            {label}
-          </span>
-          
-          {/* Ownership Badge for Private Spaces */}
-          {isPrivate && isOwner && (
-            <div className="flex items-center space-x-1 mt-1">
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-green-500/20 text-green-800 border border-green-300">
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span>
-                Your Private Space
-              </span>
-            </div>
-          )}
-        </div>
+      <div className="flex items-center justify-between w-full">
+        {/* Space Name */}
+        <h3 className={`text-sm font-semibold truncate px-2 py-1 rounded ${
+          isPrivate 
+            ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+            : 'bg-blue-50 text-blue-700 border border-blue-200'
+        }`}>
+          {label}
+        </h3>
 
-        {/* Privacy Icon */}
-        <div className="flex items-center space-x-1">
-          <span className={`text-[10px] cursor-default ${
-            isPrivate ? 'text-purple-800' : 'text-purple-700'
-          }`}>
-            {isPrivate ? '🔒' : '🌍'}
-          </span>
-        </div>
+        {/* Privacy State */}
+        <span 
+          className={`text-xs font-medium px-2 py-1 rounded ${
+            isPrivate 
+              ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+              : 'bg-blue-50 text-blue-700 border border-blue-200'
+          }`}
+          data-tooltip-id="space-visibility-tip"
+          data-tooltip-content={tooltipText}
+        >
+          {privacyLabel}
+        </span>
       </div>
 
       {/* Resize Controls (only for owners) */}
