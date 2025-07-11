@@ -115,16 +115,176 @@ export default function GraphPage() {
   const relationSpaceStateRef = useRef<Map<string, boolean>>(new Map()); // tracks if relation is inside a space
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const nodeToDeleteRef = useRef<Node | null>(null);
+  const pendingOperations = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const optimisticOperations = useRef<Map<string, { type: string; rollback: () => void }>>(new Map());
+  const positionDebounceRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
+  // Real-time sync event handlers
+  const handleRecentEventsSync = useCallback((events: unknown[]) => {
+    // Process recent events for initial sync - helps new users catch up
+    console.log('Processing recent events for sync:', events.length);
+    // This could trigger a full refetch or selective updates
+    queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
+    queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
+    queryClient.invalidateQueries({ queryKey: ['relationLinks', selectedDate] });
+  }, [queryClient, selectedDate]);
+
+  const handleDataSyncEvent = useCallback((event: { type: string; data: Record<string, unknown> }) => {
+    console.log('Received data sync event:', event);
+    
+    // Apply the remote change to local state
+    switch (event.type) {
+      case 'entity-create':
+        setNodes(prev => {
+          // Check if node already exists to avoid duplicates
+          if (prev.find(n => n.id === event.data.nodeId)) return prev;
+          
+          const newNode: Node = {
+            id: event.data.nodeId,
+            type: event.data.type === 'group' ? 'group' : 'topic',
+            position: { x: event.data.x || 0, y: event.data.y || 0 },
+            data: { 
+              label: event.data.label || 'Untitled',
+              properties: event.data.properties || {},
+              owner: event.data.userAddress,
+              visibility: event.data.visibility || 'public'
+            },
+            draggable: true
+          };
+          
+          if (event.data.type === 'group') {
+            newNode.style = {
+              width: event.data.width || 400,
+              height: event.data.height || 300,
+              backgroundColor: 'rgba(208, 192, 247, 0.2)',
+              borderColor: '#D0C0F7',
+            };
+          }
+          
+          return [...prev, newNode];
+        });
+        break;
+
+      case 'entity-update':
+        if (event.data.operationType === 'move') {
+          // Handle real-time node movement
+          setNodes(prev => 
+            prev.map(n => 
+              n.id === event.data.nodeId 
+                ? { ...n, position: event.data.position }
+                : n
+            )
+          );
+        } else {
+          // Handle other updates (label, properties, etc.)
+          setNodes(prev => 
+            prev.map(n => 
+              n.id === event.data.nodeId 
+                ? { ...n, data: { ...n.data, ...event.data } }
+                : n
+            )
+          );
+        }
+        break;
+
+      case 'entity-delete':
+        setNodes(prev => prev.filter(n => n.id !== event.data.nodeId));
+        setEdges(prev => prev.filter(e => e.source !== event.data.nodeId && e.target !== event.data.nodeId));
+        break;
+
+      case 'relation-create':
+        // Add new relation node
+        setNodes(prev => {
+          if (prev.find(n => n.id === String(event.data.id))) return prev;
+          
+          const newRelationNode: Node = {
+            id: String(event.data.id),
+            type: 'relation',
+            position: { x: event.data.x || 0, y: event.data.y || 0 },
+            data: {
+              label: event.data.relationType || 'relation',
+              properties: event.data.properties || {},
+              selectionColor: null,
+              selectingAddress: null
+            },
+            draggable: true,
+          };
+          
+          return [...prev, newRelationNode];
+        });
+        // Invalidate relation links to get the new edges
+        queryClient.invalidateQueries({ queryKey: ['relationLinks', selectedDate] });
+        break;
+
+      case 'relation-update':
+        setNodes(prev => 
+          prev.map(n => 
+            n.id === String(event.data.id) 
+              ? { ...n, data: { ...n.data, ...event.data } }
+              : n
+          )
+        );
+        break;
+
+      case 'relation-delete':
+        setNodes(prev => prev.filter(n => n.id !== String(event.data.id)));
+        setEdges(prev => prev.filter(e => e.source !== String(event.data.id) && e.target !== String(event.data.id)));
+        break;
+
+      case 'relation-link-create':
+        queryClient.invalidateQueries({ queryKey: ['relationLinks', selectedDate] });
+        break;
+    }
+  }, [queryClient, selectedDate]);
+
+  const handleDataAcknowledgment = useCallback((ack: any) => {
+    console.log('Received acknowledgment:', ack);
+    
+    // Clear pending operation
+    const timeout = pendingOperations.current.get(ack.eventId);
+    if (timeout) {
+      clearTimeout(timeout);
+      pendingOperations.current.delete(ack.eventId);
+    }
+
+    // Handle successful operations
+    if (ack.status === 'success') {
+      optimisticOperations.current.delete(ack.eventId);
+    } else if (ack.status === 'conflict-resolved') {
+      // Handle conflict resolution
+      const op = optimisticOperations.current.get(ack.eventId);
+      if (op && ack.resolution.loserEventId === ack.eventId) {
+        // Our operation lost, rollback
+        op.rollback();
+        optimisticOperations.current.delete(ack.eventId);
+        toast('Your change was overridden by a more recent edit', { duration: 4000 });
+      }
+    }
+  }, []);
+
+  const handleConflictResolution = useCallback((resolution: any) => {
+    console.log('Conflict resolved:', resolution);
+    
+    // Show notification about conflict resolution
+    if (resolution.resolution === 'last-write-wins') {
+      toast('Conflict resolved: most recent change was kept');
+    }
+  }, []);
 
   const socket = usePartySocket({
     host: process.env.NEXT_PUBLIC_PARTY_HOST || 'localhost:1999',
     room: selectedDate,
     onMessage(event) {
       const message = JSON.parse(event.data);
+      
       if (message.type === 'sync') {
         setPresentUsers(message.users);
+        // Handle initial sync with recent events
+        if (message.recentEvents) {
+          handleRecentEventsSync(message.recentEvents);
+        }
       }
+      
       if (message.type === 'selection') {
         const { address, nodeId } = message;
         setSelections(prev => {
@@ -135,6 +295,7 @@ export default function GraphPage() {
           return otherSelections;
         });
       }
+      
       if (message.type === 'node-move') {
         setNodes((nds) =>
           nds.map((n) =>
@@ -144,8 +305,48 @@ export default function GraphPage() {
           )
         );
       }
+
+      // Handle real-time data synchronization
+      if (message.type === 'data-sync') {
+        handleDataSyncEvent(message.event);
+      }
+
+      // Handle acknowledgments from server
+      if (message.type === 'data-ack') {
+        handleDataAcknowledgment(message);
+      }
+
+      // Handle conflict resolutions
+      if (message.type === 'conflict-resolution') {
+        handleConflictResolution(message.resolution);
+      }
     },
   });
+
+  // Debounced position update broadcaster (defined after socket)
+  const broadcastPositionUpdate = useCallback((nodeId: string, position: { x: number; y: number }) => {
+    // Clear existing timeout for this node
+    const existingTimeout = positionDebounceRef.current.get(nodeId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    // Set new timeout
+    const timeout = setTimeout(() => {
+      if (socket) {
+        const eventId = `position-update-${nodeId}-${Date.now()}`;
+        socket.send(JSON.stringify({
+          type: 'entity-update',
+          timestamp: Date.now(),
+          data: { nodeId, position, operationType: 'move' },
+          eventId
+        }));
+      }
+      positionDebounceRef.current.delete(nodeId);
+    }, 300); // 300ms debounce
+
+    positionDebounceRef.current.set(nodeId, timeout);
+  }, [socket]);
 
   useEffect(() => {
     if (address && socket) {
@@ -229,6 +430,18 @@ export default function GraphPage() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Failed to save node data');
+      
+      // Broadcast the change to other users
+      if (socket && res.ok) {
+        const eventId = `entity-update-${nodeId}-${Date.now()}`;
+        socket.send(JSON.stringify({
+          type: isRelation ? 'relation-update' : 'entity-update',
+          timestamp: Date.now(),
+          data: { nodeId, ...data, id: isRelation ? nodeId : undefined },
+          eventId
+        }));
+      }
+      
       return res.json();
     },
     onSuccess: (data, variables) => {
@@ -297,6 +510,17 @@ export default function GraphPage() {
         toast.error(error.error || 'Failed to delete node');
         console.error('Delete entity error', error);
         throw new Error(error.error || 'Failed to delete node');
+      }
+      
+      // Broadcast the change to other users
+      if (socket && (res.ok || res.status === 404)) {
+        const eventId = `entity-delete-${payload.nodeId}-${Date.now()}`;
+        socket.send(JSON.stringify({
+          type: 'entity-delete',
+          timestamp: Date.now(),
+          data: { nodeId: payload.nodeId },
+          eventId
+        }));
       }
     },
     onSuccess: (data, variables) => {
@@ -381,6 +605,18 @@ export default function GraphPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      
+      // Broadcast the change to other users
+      if (socket && res.ok) {
+        const eventId = `entity-create-${payload.nodeId}-${Date.now()}`;
+        socket.send(JSON.stringify({
+          type: 'entity-create',
+          timestamp: Date.now(),
+          data: payload,
+          eventId
+        }));
+      }
+      
       return res.json();
     },
     onSuccess: (_data, variables) => {
@@ -424,6 +660,20 @@ export default function GraphPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      
+      // Broadcast the change to other users
+      if (socket && res.ok) {
+        const data = await res.json();
+        const eventId = `relation-create-${data.id}-${Date.now()}`;
+        socket.send(JSON.stringify({
+          type: 'relation-create',
+          timestamp: Date.now(),
+          data: { ...payload, id: data.id },
+          eventId
+        }));
+        return data;
+      }
+      
       return res.json();
     },
     onSuccess: (data, variables) => {
@@ -1177,16 +1427,8 @@ export default function GraphPage() {
         }
       }
 
-      // Broadcast movement to other clients
-      socket.send(
-        JSON.stringify({
-          type: 'node-move',
-          payload: {
-            nodeId: node.id,
-            position: node.position,
-          },
-        })
-      );
+      // Broadcast movement to other clients using debounced function
+      broadcastPositionUpdate(node.id, node.position);
 
       // Persist change to DB
       if (isNumeric(node.id)) {
@@ -1204,7 +1446,7 @@ export default function GraphPage() {
         });
       }
     },
-    [nodes, socket, updateEntityPatch, updateRelationPosition, requireWallet, terms]
+    [nodes, updateEntityPatch, updateRelationPosition, requireWallet, terms, broadcastPositionUpdate]
   );
 
   const handlePaneClick = () => {
