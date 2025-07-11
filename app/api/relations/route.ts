@@ -125,65 +125,91 @@ export async function DELETE(req: NextRequest) {
 } 
 
 export async function PATCH(req: NextRequest) {
-  const body = await req.json();
-  const { id, x, y, relationType, properties, sourceId, targetId, editorAddress } = body;
-  log('PATCH payload', body);
-  if (!id) {
-    return NextResponse.json({ error: 'Missing relation ID' }, { status: 400 });
-  }
-
-  const relationId = parseInt(id, 10);
-  if (isNaN(relationId)) {
-    return NextResponse.json({ error: 'Invalid relation ID' }, { status: 400 });
-  }
-
-  // Get current values for history tracking
-  const current = db.prepare('SELECT * FROM relations WHERE id = ?').get(relationId) as RelationRow | undefined;
-  if (!current) {
-    return NextResponse.json({ error: 'Relation not found' }, { status: 404 });
-  }
-
-  // Helper function to record edit history
-  const recordEdit = (field: string, oldValue: string | number | null, newValue: string | number | null) => {
-    if (oldValue !== newValue) {
-      db.prepare(`
-        INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(String(relationId), 'relation', 'update', field, String(oldValue || ''), String(newValue || ''), editorAddress || null);
+  try {
+    const body = await req.json();
+    const { id, x, y, relationType, properties, sourceId, targetId, editorAddress } = body;
+    log('PATCH payload', body);
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Missing relation ID' }, { status: 400 });
     }
-  };
 
-  // Position updates (don't track in history for noise reduction)
-  if (x !== undefined && y !== undefined) {
-    db.prepare('UPDATE relations SET x=?, y=? WHERE id=?').run(x, y, relationId);
-  }
-
-  // Relation type updates (track in history)
-  if (relationType && relationType !== current.relationType) {
-    recordEdit('relationType', current.relationType, relationType);
-    db.prepare('UPDATE relations SET relationType=? WHERE id=?').run(relationType, relationId);
-  }
-
-  // Properties updates (track in history)
-  if (properties) {
-    const oldProps = current.properties || '{}';
-    const newProps = JSON.stringify(properties);
-    if (oldProps !== newProps) {
-      recordEdit('properties', oldProps, newProps);
-      db.prepare('UPDATE relations SET properties=? WHERE id=?').run(newProps, relationId);
+    const relationId = parseInt(id, 10);
+    if (isNaN(relationId)) {
+      return NextResponse.json({ error: 'Invalid relation ID' }, { status: 400 });
     }
-  }
 
-  // Source/target updates (track in history)
-  if (sourceId && sourceId !== current.sourceId) {
-    recordEdit('sourceId', current.sourceId, sourceId);
-    db.prepare('UPDATE relations SET sourceId=? WHERE id=?').run(sourceId, relationId);
-  }
+    // Validate with protection system
+    const operation: DatabaseOperation = {
+      type: 'update',
+      table: 'relations',
+      userAddress: editorAddress,
+      payload: { id, x, y, relationType, properties, sourceId, targetId }
+    };
 
-  if (targetId && targetId !== current.targetId) {
-    recordEdit('targetId', current.targetId, targetId);
-    db.prepare('UPDATE relations SET targetId=? WHERE id=?').run(targetId, relationId);
-  }
+    const validation = await dbProtection.validateOperation(operation);
+    if (!validation.allowed) {
+      return NextResponse.json({ 
+        error: validation.reason || 'Operation not allowed',
+        retryAfter: validation.retryAfter 
+      }, { status: 429 });
+    }
 
-  return NextResponse.json({ success: true });
+    // Sanitize input data
+    const sanitizedData = dbProtection.sanitizeInput({ relationType, properties, sourceId, targetId });
+
+    // Get current values for history tracking
+    const current = db.prepare('SELECT * FROM relations WHERE id = ?').get(relationId) as RelationRow | undefined;
+    if (!current) {
+      return NextResponse.json({ error: 'Relation not found' }, { status: 404 });
+    }
+
+    // Helper function to record edit history
+    const recordEdit = (field: string, oldValue: string | number | null, newValue: string | number | null) => {
+      if (oldValue !== newValue) {
+        db.prepare(`
+          INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(String(relationId), 'relation', 'update', field, String(oldValue || ''), String(newValue || ''), editorAddress || null);
+      }
+    };
+
+    // Position updates (don't track in history for noise reduction)
+    if (x !== undefined && y !== undefined) {
+      db.prepare('UPDATE relations SET x=?, y=? WHERE id=?').run(x, y, relationId);
+    }
+
+    // Relation type updates (track in history)
+    if (sanitizedData.relationType && sanitizedData.relationType !== current.relationType) {
+      recordEdit('relationType', current.relationType, String(sanitizedData.relationType));
+      db.prepare('UPDATE relations SET relationType=? WHERE id=?').run(sanitizedData.relationType, relationId);
+    }
+
+    // Properties updates (track in history)
+    if (sanitizedData.properties) {
+      const oldProps = current.properties || '{}';
+      const newProps = JSON.stringify(sanitizedData.properties);
+      if (oldProps !== newProps) {
+        recordEdit('properties', oldProps, newProps);
+        db.prepare('UPDATE relations SET properties=? WHERE id=?').run(newProps, relationId);
+      }
+    }
+
+    // Source/target updates (track in history)
+    if (sanitizedData.sourceId && sanitizedData.sourceId !== current.sourceId) {
+      recordEdit('sourceId', current.sourceId, String(sanitizedData.sourceId));
+      db.prepare('UPDATE relations SET sourceId=? WHERE id=?').run(sanitizedData.sourceId, relationId);
+    }
+
+    if (sanitizedData.targetId && sanitizedData.targetId !== current.targetId) {
+      recordEdit('targetId', current.targetId, String(sanitizedData.targetId));
+      db.prepare('UPDATE relations SET targetId=? WHERE id=?').run(sanitizedData.targetId, relationId);
+    }
+
+    return NextResponse.json({ success: true });
+
+  } catch (error) {
+    log('Error updating relation', error);
+    return NextResponse.json({ error: 'Internal server error', details: String(error) }, { status: 500 });
+  }
 } 
