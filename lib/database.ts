@@ -8,8 +8,20 @@ import { dbProtection, DatabaseOperation } from './databaseProtection';
 import { errorLogger } from './errorHandler';
 
 // Determine which SQL client to use
-const isSupabase = process.env.SUPABASE_URL || (process.env.DATABASE_URL?.includes('supabase.co'));
-const sql = isSupabase ? (postgres(process.env.DATABASE_URL!, { ssl: 'require' }) as unknown as typeof vercelSql) : vercelSql;
+const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const isSupabase = process.env.SUPABASE_URL || (databaseUrl?.includes('supabase.co'));
+
+// Create SQL client based on database type
+let sql: typeof vercelSql;
+if (isSupabase) {
+  sql = postgres(databaseUrl!, { ssl: 'require' }) as unknown as typeof vercelSql;
+} else if (process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+  // If we have POSTGRES_URL but not DATABASE_URL, use postgres driver
+  sql = postgres(process.env.POSTGRES_URL, { ssl: 'require' }) as unknown as typeof vercelSql;
+} else {
+  // Use Vercel's built-in PostgreSQL client
+  sql = vercelSql;
+}
 
 // Environment detection
 const isProduction = process.env.NODE_ENV === 'production';
@@ -20,6 +32,9 @@ console.log(`[Database] Environment detection:`);
 console.log(`  - NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`  - DATABASE_URL exists: ${Boolean(process.env.DATABASE_URL)}`);
 console.log(`  - POSTGRES_URL exists: ${Boolean(process.env.POSTGRES_URL)}`);
+console.log(`  - SUPABASE_URL exists: ${Boolean(process.env.SUPABASE_URL)}`);
+console.log(`  - databaseUrl: ${databaseUrl ? `${databaseUrl.substring(0, 20)}...` : 'undefined'}`);
+console.log(`  - isSupabase: ${isSupabase}`);
 console.log(`  - isProduction: ${isProduction}`);
 console.log(`  - hasVercelDB: ${hasVercelDB}`);
 console.log(`  - usePostgres: ${usePostgres}`);
