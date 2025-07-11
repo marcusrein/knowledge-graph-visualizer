@@ -7,7 +7,9 @@
     "partykit:dev": "partykit dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:db": "node scripts/test-database.mjs",
+    "migrate": "node scripts/migrate-data.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.81.5",
