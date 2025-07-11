@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { format } from 'date-fns';
+import { dbProtection, DatabaseOperation } from '@/lib/databaseProtection';
 
 // Database types
 interface RelationRow {
@@ -32,31 +33,64 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { sourceId, targetId, relationType, userAddress, x, y } = body;
-  log('POST payload', body);
-  if (!sourceId || !targetId || !relationType || x === undefined || y === undefined) {
-    return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+  try {
+    const body = await req.json();
+    const { sourceId, targetId, relationType, userAddress, x, y } = body;
+    log('POST payload', body);
+    
+    if (!sourceId || !targetId || !relationType || x === undefined || y === undefined) {
+      return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+    }
+
+    // Validate with protection system
+    const operation: DatabaseOperation = {
+      type: 'create',
+      table: 'relations',
+      userAddress: userAddress ?? undefined,
+      payload: { sourceId, targetId, relationType, x, y }
+    };
+
+    const validation = await dbProtection.validateOperation(operation);
+    if (!validation.allowed) {
+      return NextResponse.json({ 
+        error: validation.reason || 'Operation not allowed',
+        retryAfter: validation.retryAfter 
+      }, { status: 429 });
+    }
+
+    // Sanitize input data
+    const sanitizedData = dbProtection.sanitizeInput({ sourceId, targetId, relationType, x, y });
+
+    const stmt = db.prepare(
+      "INSERT INTO relations (sourceId, targetId, relationType, userAddress, x, y, created_at) VALUES (?,?,?,?,?,?,datetime('now'))"
+    );
+    const info = stmt.run(
+      sanitizedData.sourceId, 
+      sanitizedData.targetId, 
+      sanitizedData.relationType, 
+      userAddress ?? null, 
+      sanitizedData.x, 
+      sanitizedData.y
+    );
+    log('POST created', { id: info.lastInsertRowid, sourceId, targetId, relationType });
+
+    // Record creation in edit history
+    db.prepare(`
+      INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(String(info.lastInsertRowid), 'relation', 'create', null, null, String(sanitizedData.relationType), userAddress ?? null);
+
+    // insert into relation_links table
+    const linkStmt = db.prepare("INSERT INTO relation_links (relationId, entityId, role, created_at) VALUES (?,?,?,datetime('now'))");
+    linkStmt.run(info.lastInsertRowid, sanitizedData.sourceId, 'source');
+    linkStmt.run(info.lastInsertRowid, sanitizedData.targetId, 'target');
+
+    return NextResponse.json({ id: info.lastInsertRowid });
+
+  } catch (error) {
+    log('Error creating relation', error);
+    return NextResponse.json({ error: 'Internal server error', details: String(error) }, { status: 500 });
   }
-
-  const stmt = db.prepare(
-    "INSERT INTO relations (sourceId, targetId, relationType, userAddress, x, y, created_at) VALUES (?,?,?,?,?,?,datetime('now'))"
-  );
-  const info = stmt.run(sourceId, targetId, relationType, userAddress ?? null, x, y);
-  log('POST created', { id: info.lastInsertRowid, sourceId, targetId, relationType });
-
-  // Record creation in edit history
-  db.prepare(`
-    INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(String(info.lastInsertRowid), 'relation', 'create', null, null, relationType, userAddress ?? null);
-
-  // insert into relation_links table
-  const linkStmt = db.prepare("INSERT INTO relation_links (relationId, entityId, role, created_at) VALUES (?,?,?,datetime('now'))");
-  linkStmt.run(info.lastInsertRowid, sourceId, 'source');
-  linkStmt.run(info.lastInsertRowid, targetId, 'target');
-
-  return NextResponse.json({ id: info.lastInsertRowid });
 } 
  
 export async function DELETE(req: NextRequest) {
