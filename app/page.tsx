@@ -97,6 +97,8 @@ export default function GraphPage() {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
+
+
   const [showWelcome, setShowWelcome] = useState(true);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -108,6 +110,8 @@ export default function GraphPage() {
   const [mounted, setMounted] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
   const [connecting, setConnecting] = useState(true);
+  const relationToastCooldownRef = useRef<number>(0);
+  const relationSpaceStateRef = useRef<Map<string, boolean>>(new Map()); // tracks if relation is inside a space
 
 
   const socket = usePartySocket({
@@ -461,6 +465,56 @@ export default function GraphPage() {
     }
     return true;
   }, [address]);
+
+  // Keyboard delete functionality
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (selectedNode && 
+            (event.target as HTMLElement)?.tagName !== 'INPUT' && 
+            (event.target as HTMLElement)?.tagName !== 'TEXTAREA') {
+          event.preventDefault();
+          
+          const isRelation = /^\d+$/.test(selectedNode.id);
+          const isSpace = selectedNode.type === 'group';
+          const itemType = isSpace ? 'Space' : isRelation ? 'Relation' : 'Topic';
+          const itemName = selectedNode.data.label || 'Untitled';
+          
+          const confirmMessage = `Are you sure you want to delete this ${itemType}? "${itemName}" will be permanently removed.`;
+          
+          if (window.confirm(confirmMessage)) {
+            if (isRelation) {
+              deleteRelation.mutate({ id: selectedNode.id });
+            } else {
+              deleteEntity.mutate({ nodeId: selectedNode.id });
+            }
+            setSelectedNode(null);
+          }
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedNode, deleteRelation, deleteEntity]);
+
+  // Escape key to close welcome modal
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape' && showWelcome) {
+        setShowWelcome(false);
+      }
+    }
+
+    if (showWelcome) {
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('keydown', handleEscape);
+      };
+    }
+  }, [showWelcome]);
 
   const addressToColor = useCallback((addr: string) => {
     // simple deterministic hash to hue
@@ -875,12 +929,52 @@ export default function GraphPage() {
     (_: React.MouseEvent, node: Node) => {
       if (!requireWallet()) return;
 
-      // Show toast for relation movement to explain global scope
+      // Show toast for relation movement only when crossing space boundaries
       if (isNumeric(node.id)) {
-        toast(terms.relationSpaceToast, {
-          icon: '🌐',
-          duration: 4000,
+        // Check if relation is currently inside any space
+        const isInsideSpace = nodes.some(spaceNode => {
+          if (spaceNode.type !== 'group') return false;
+          
+          const spaceData = spaceNode.data as { visibility?: string; owner?: string };
+          if (spaceData.visibility === 'private' && 
+              spaceData.owner && address && 
+              spaceData.owner.toLowerCase() !== address.toLowerCase()) {
+            return false; // skip private spaces not owned by current user
+          }
+          
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sWidth = (spaceNode.style as any)?.width || 400;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sHeight = (spaceNode.style as any)?.height || 300;
+          
+          const relationCenterX = node.position.x + 90; // approximate relation node center
+          const relationCenterY = node.position.y + 30;
+          
+          return relationCenterX >= spaceNode.position.x && 
+                 relationCenterX <= spaceNode.position.x + sWidth &&
+                 relationCenterY >= spaceNode.position.y && 
+                 relationCenterY <= spaceNode.position.y + sHeight;
         });
+        
+        // Check previous state and show toast only if boundary was crossed
+        const wasInsideSpace = relationSpaceStateRef.current.get(node.id) || false;
+        const boundaryChanged = wasInsideSpace !== isInsideSpace;
+        
+        if (boundaryChanged) {
+          const now = Date.now();
+          const cooldownPeriod = 5000; // 5 seconds cooldown for boundary changes
+          
+          if (now - relationToastCooldownRef.current > cooldownPeriod) {
+            toast(terms.relationSpaceToast, {
+              icon: '🌐',
+              duration: 4000,
+            });
+            relationToastCooldownRef.current = now;
+          }
+        }
+        
+        // Update the stored state
+        relationSpaceStateRef.current.set(node.id, isInsideSpace);
       }
 
       // Helper: find enclosing Space (group) for a point (using center of node for more predictable behavior)
@@ -1508,10 +1602,23 @@ export default function GraphPage() {
 						}}
 						onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
 						onDelete={(nodeId, isRelation) => {
-							if (isRelation) {
-								deleteRelation.mutate({ id: nodeId });
-							} else {
-								deleteEntity.mutate({ nodeId });
+							const node = nodes.find((n) => n.id === nodeId);
+							const isSpace = node?.type === "group";
+							const itemType = isSpace
+								? "Space"
+								: isRelation
+								? "Relation"
+								: "Topic";
+							const itemName = node?.data?.label || "Untitled";
+
+							const confirmMessage = `Are you sure you want to delete this ${itemType}? "${itemName}" will be permanently removed.`;
+
+							if (window.confirm(confirmMessage)) {
+								if (isRelation) {
+									deleteRelation.mutate({ id: nodeId });
+								} else {
+									deleteEntity.mutate({ nodeId });
+								}
 							}
 						}}
 					/>
@@ -1539,12 +1646,35 @@ export default function GraphPage() {
 					<div className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-2xl mx-4 shadow-2xl border border-gray-700">
 						<div className="space-y-3">
 							<h2 className="text-3xl font-extrabold text-white">
-								Welcome to the Knowledge Graph Visualizer
+								Welcome to the {terms.knowledgeGraph}
 							</h2>
 							<p className="text-gray-300 text-lg leading-relaxed">
 								Map concepts, ideas, and data into an interactive graph you can
 								expand and explore collaboratively.
 							</p>
+							
+							{/* Mode Toggle */}
+							<div className="flex justify-center pt-2">
+								<div
+									onClick={toggleMode}
+									className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1"
+								>
+									<div
+										className={`px-3 py-1 rounded-full transition-colors duration-300 ${
+											!isDevMode ? "bg-blue-600 text-white" : "text-gray-400"
+										}`}
+									>
+										Normie Mode
+									</div>
+									<div
+										className={`px-3 py-1 rounded-full transition-colors duration-300 ${
+											isDevMode ? "bg-green-600 text-white" : "text-gray-400"
+										}`}
+									>
+										Dev Mode
+									</div>
+								</div>
+							</div>
 						</div>
 
 						<div className="grid md:grid-cols-2 gap-6 text-left">
@@ -1556,23 +1686,33 @@ export default function GraphPage() {
 									<li className="flex items-start space-x-2">
 										<span className="text-blue-400 font-bold">+</span>
 										<span>
-											<span className="font-semibold text-blue-400">
-												Create Topics
-											</span>{" "}
-											to represent key ideas
+											Create a <span className="font-semibold text-purple-400">{terms.topic}</span> to represent key ideas
 										</span>
 									</li>
 									<li className="flex items-start space-x-2">
 										<span className="text-purple-400 font-bold">□</span>
 										<span>
+											Group{" "}
 											<span className="font-semibold text-purple-400">
-												Group Topics </span> <span>into public or private <span className="font-bold text-green-400">Spaces</span></span> for organization
-											</span>
+												{terms.topics}
+											</span>{" "}
+											<span>
+												into public or private{" "}
+												<span className="font-bold text-green-400">Spaces</span>
+											</span>{" "}
+											for organization
+										</span>
 									</li>
 									<li className="flex items-start space-x-2">
 										<span className="text-green-400">🔗</span>
 										<span>
-											Draw <span className="font-bold text-orange-400">Relations</span> between Topics to show how different ideas connect
+											Draw{" "}
+											<span className="font-bold text-orange-400">
+												{terms.relations}
+											</span>{" "}
+											between{" "}
+											<span className="font-bold text-purple-400">{terms.topics}</span>{" "}
+											to show how different ideas connect
 										</span>
 									</li>
 								</ul>
@@ -1583,10 +1723,7 @@ export default function GraphPage() {
 									About This App
 								</h3>
 								<ul className="text-sm text-gray-300 space-y-2">
-									<li>
-										• Collaborative visualizer for exploring knowledge graph
-										concepts
-									</li>
+				
 									<li>
 										• Multiple users can connect wallets and build together in
 										real-time
@@ -1605,7 +1742,7 @@ export default function GraphPage() {
 										Key Insight
 									</div>
 									<div className="text-white font-medium text-lg leading-relaxed">
-										When two Topics are connected by a relationship, we now have{" "}
+										When two <span className="font-semibold text-purple-400">{terms.topics}</span> are connected by a relationship, we now have{" "}
 										<span className="text-blue-300 font-bold">Knowledge</span>{" "}
 										in our knowledge graph!
 									</div>
@@ -1640,6 +1777,17 @@ export default function GraphPage() {
 							>
 								Start Building
 							</button>
+							<p className="text-xs text-gray-500 mt-4">
+								Built by{" "}
+								<a
+									href="https://github.com/marcusrein"
+									target="_blank"
+									rel="noopener noreferrer"
+									className="text-gray-400 hover:text-gray-300 underline transition-colors"
+								>
+									Marcus Rein
+								</a>
+							</p>
 						</div>
 					</div>
 				</div>

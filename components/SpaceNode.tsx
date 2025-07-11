@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react';
 import { NodeProps } from 'reactflow';
 import { Tooltip } from 'react-tooltip';
+import { useTerminology } from '@/lib/TerminologyContext';
 
 interface SpaceData {
   label: string;
@@ -18,7 +19,7 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
 
   const tooltipText =
     visibility === 'private'
-      ? 'Private Space – only the creator (or invited members) can view its contents'
+      ? 'Private Space – only the creator can view its useTerminology '
       : 'Public Space – everyone can view its contents';
 
   // Helper to adjust size by a delta

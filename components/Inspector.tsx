@@ -52,7 +52,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const [nextId, setNextId] = useState(0);
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [owner, setOwner] = useState<string | undefined>(undefined);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
   const { address } = useAccount();
 
   // Fetch edit history for the selected node

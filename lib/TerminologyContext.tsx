@@ -32,7 +32,7 @@ const normie: Terminology = {
   inspectorAddProperty: '+ Add Detail',
   inspectorPropertyKey: 'Attribute',
   inspectorPropertyValue: 'Value',
-  relationSpaceToast: 'Relations are always accessible to everyone, regardless of which Space they appear in. Moving them doesn\'t change their visibility.',
+  relationSpaceToast: 'Relations are always accessible to everyone, regardless of which Space they appear in.\n\n Moving them inside a private space doesn\'t change their visibility.',
 };
 
 const dev: Terminology = {
