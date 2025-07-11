@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
+export const runtime = 'nodejs';
 
 // Verbose logging helper
 const log = (...args: unknown[]) => console.log('[EditHistory]', new Date().toISOString(), ...args);

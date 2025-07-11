@@ -9,6 +9,8 @@ import {
   deleteEntity 
 } from '@/lib/database';
 
+export const runtime = 'nodejs';
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Verbose logging helper
 const log = (...args: unknown[]) => console.log('[Entities]', new Date().toISOString(), ...args);

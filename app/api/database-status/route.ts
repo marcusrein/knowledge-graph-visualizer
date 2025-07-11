@@ -4,6 +4,8 @@ import { cleanupScheduler } from '@/lib/databaseCleanup';
 import { getDatabaseSize } from '@/lib/database';
 import { errorLogger } from '@/lib/errorHandler';
 
+export const runtime = 'nodejs';
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);

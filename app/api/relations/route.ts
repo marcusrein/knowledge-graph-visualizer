@@ -3,6 +3,8 @@ import db from '@/lib/db';
 import { format } from 'date-fns';
 import { dbProtection, DatabaseOperation } from '@/lib/databaseProtection';
 
+export const runtime = 'nodejs';
+
 // Database types
 interface RelationRow {
   id: number;
