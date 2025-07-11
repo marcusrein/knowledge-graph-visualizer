@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/Providers';
 import { Toaster } from 'react-hot-toast';
+import SafeGraphPage from '@/components/SafeGraphPage';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -20,7 +21,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <Providers>
-          {children}
+          <SafeGraphPage>
+            {children}
+          </SafeGraphPage>
           <Toaster />
         </Providers>
       </body>

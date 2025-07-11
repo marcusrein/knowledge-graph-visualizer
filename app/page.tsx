@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -33,6 +33,16 @@ import TopicNode from '@/components/TopicNode';
 import { Tooltip } from 'react-tooltip';
 import { useTerminology } from '@/lib/TerminologyContext';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { errorLogger, safeAsync, safeSetState, retryOperation } from '@/lib/errorHandler';
+
+// Define nodeTypes outside component to fix React Flow warnings
+const nodeTypes = {
+  relation: RelationNode,
+  topic: TopicNode,
+  knowledge: TopicNode, // alias to silence React Flow warnings
+  group: SpaceNode,
+};
 
 interface PresentUser {
   id: string;
@@ -43,8 +53,6 @@ interface Selection {
   address: string;
   nodeId: string | null;
 }
-
-// nodeTypes will be defined inside the component to fix React Flow warnings
 
 // A more robust check for numeric strings (for relation IDs)
 function isNumeric(str: string) {
@@ -113,13 +121,7 @@ export default function GraphPage() {
   const optimisticOperations = useRef<Map<string, { type: string; rollback: () => void }>>(new Map());
   const positionDebounceRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  // Memoized nodeTypes to fix React Flow warnings
-  const nodeTypes = useMemo(() => ({
-    relation: RelationNode,
-    topic: TopicNode,
-    knowledge: TopicNode, // alias to silence React Flow warnings
-    group: SpaceNode,
-  }), []);
+
 
   // Real-time sync event handlers
   const handleRecentEventsSync = useCallback((events: unknown[]) => {
@@ -818,8 +820,9 @@ export default function GraphPage() {
   useEffect(() => {
     if (entitiesQuery.data && relationsQuery.data && linksQuery.data) {
       const buildNodes = () => {
-        // Build new nodes preserving positions
-        const positionMap = new Map(nodes.map(n => [n.id, n.position]));
+        try {
+          // Build new nodes preserving positions
+          const positionMap = new Map(nodes.map(n => [n.id, n.position]));
 
         // --- first pass: Spaces (groups) ---
         const groupEntities = entitiesQuery.data.filter((e: { type: string }) => e.type === 'group');
@@ -960,13 +963,19 @@ export default function GraphPage() {
             draggable: hasWallet,
           };
 
-          if (e.parentId && groupIds.has(e.parentId)) {
-            const gInfo = groupInfoMap.get(e.parentId)!;
-            const isOwnerOfGroup = gInfo.owner && address && gInfo.owner.toLowerCase() === address.toLowerCase();
-            if (gInfo.visibility === 'private' && !isOwnerOfGroup) {
-              return null; // skip topics hidden inside private space
+          if (e.parentId) {
+            if (groupIds.has(e.parentId)) {
+              const gInfo = groupInfoMap.get(e.parentId)!;
+              const isOwnerOfGroup = gInfo.owner && address && gInfo.owner.toLowerCase() === address.toLowerCase();
+              if (gInfo.visibility === 'private' && !isOwnerOfGroup) {
+                return null; // skip topics hidden inside private space
+              }
+              node.parentId = e.parentId;
+            } else {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn(`Topic ${e.nodeId} has orphaned parentId ${e.parentId}`);
+              }
             }
-            node.parentId = e.parentId;
           }
 
           if (selection) {
@@ -1002,7 +1011,15 @@ export default function GraphPage() {
             const srcNode = entitiesQuery.data.find((e: { nodeId: string }) => e.nodeId === endpoints.source);
             const tgtNode = entitiesQuery.data.find((e: { nodeId: string }) => e.nodeId === endpoints.target);
             if (srcNode?.parentId && srcNode.parentId === tgtNode?.parentId) {
-              parentId = srcNode.parentId;
+              // Validate that the parent actually exists in the group nodes
+              const parentExists = groupIds.has(srcNode.parentId);
+              if (parentExists) {
+                parentId = srcNode.parentId;
+              } else {
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn(`Relation ${idStr} tried to reference non-existent parent ${srcNode.parentId}`);
+                }
+              }
             }
           }
 
@@ -1032,7 +1049,26 @@ export default function GraphPage() {
           return relNode;
         });
 
-        return [...groupNodes, ...topicNodes.filter(Boolean), ...relationNodes];
+          const allNodes = [...groupNodes, ...topicNodes.filter(Boolean), ...relationNodes];
+          
+          // Final safety check: remove any nodes with orphaned parent references
+          const validParentIds = new Set(groupNodes.map((n: Node) => n.id));
+          const safeNodes = allNodes.filter(node => {
+            if (node.parentId && !validParentIds.has(node.parentId)) {
+              // Only log orphaned nodes in development
+              if (process.env.NODE_ENV === 'development') {
+                console.warn(`Removing orphaned node ${node.id} with invalid parentId ${node.parentId}`);
+              }
+              return false;
+            }
+            return true;
+          });
+          
+          return safeNodes;
+        } catch (error) {
+          errorLogger.logError(error instanceof Error ? error : new Error(String(error)), 'BuildNodes failed', address);
+          return []; // Return empty array as fallback
+        }
       };
 
       const newEdges = linksQuery.data.map((l: { id: number; relationId: number; entityId: string; role: string; }) => {

@@ -6,30 +6,41 @@ import { format } from 'date-fns';
 const log = (...args: unknown[]) => console.log('[Entities]', new Date().toISOString(), ...args);
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const dateParam = searchParams.get('date');
-  const date = dateParam ?? format(new Date(), 'yyyy-MM-dd');
+  try {
+    const { searchParams } = new URL(req.url);
+    const dateParam = searchParams.get('date');
+    const date = dateParam ?? format(new Date(), 'yyyy-MM-dd');
 
-  const addressParam = searchParams.get('address');
-  const rows = db
-    .prepare(`SELECT * FROM entities WHERE date(created_at)=? AND (type='group' OR visibility='public' OR userAddress IS NULL OR userAddress=? )`)
-    .all(date, addressParam ?? '');
+    const addressParam = searchParams.get('address');
+    
+    try {
+      const rows = db
+        .prepare(`SELECT * FROM entities WHERE date(created_at)=? AND (type='group' OR visibility='public' OR userAddress IS NULL OR userAddress=? )`)
+        .all(date, addressParam ?? '');
 
-  // Redact private Space labels for non-owners
-  const sanitized = (rows as unknown[]).map((row) => {
-    const r = row as { [key: string]: any };
-    if (
-      r.type === 'group' &&
-      r.visibility === 'private' &&
-      r.userAddress &&
-      r.userAddress.toLowerCase() !== (addressParam ?? '').toLowerCase()
-    ) {
-      return { ...r, label: '', properties: '{}' };
+      // Redact private Space labels for non-owners
+      const sanitized = (rows as unknown[]).map((row) => {
+        const r = row as { [key: string]: any };
+        if (
+          r.type === 'group' &&
+          r.visibility === 'private' &&
+          r.userAddress &&
+          r.userAddress.toLowerCase() !== (addressParam ?? '').toLowerCase()
+        ) {
+          return { ...r, label: '', properties: '{}' };
+        }
+        return r;
+      });
+      log('GET', { date, rows: sanitized.length });
+      return NextResponse.json(sanitized);
+    } catch (dbError) {
+      console.error('Database error in entities GET:', dbError);
+      return NextResponse.json([], { status: 200 }); // Return empty array instead of failing
     }
-    return r;
-  });
-  log('GET', { date, rows: sanitized.length });
-  return NextResponse.json(sanitized);
+  } catch (error) {
+    console.error('Entities GET route error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
