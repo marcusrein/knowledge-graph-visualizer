@@ -76,13 +76,13 @@ const Inspector = ({ selectedNode, onSave, onDelete }: InspectorProps) => {
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
-  // Get inspector collapsed state from localStorage, default to false (expanded)
+  // Get inspector collapsed state from localStorage, default to true (collapsed)
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('inspector-collapsed');
-      return saved ? JSON.parse(saved) : false;
+      return saved ? JSON.parse(saved) : true;
     }
-    return false;
+    return true;
   });
 
   // Save collapsed state to localStorage whenever it changes
