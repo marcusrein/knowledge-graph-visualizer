@@ -135,8 +135,8 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
     <div
       className={`w-full h-full rounded border relative flex items-start justify-start p-1 select-none bg-transparent ${
         isPrivate 
-          ? 'border-purple-400' 
-          : 'border-purple-300'
+          ? 'border-blue-400' 
+          : 'border-blue-300'
       }`}
     >
       {/* Privacy Overlay for Non-Owners */}
@@ -160,7 +160,7 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
         {/* Space Name */}
         <h3 className={`text-sm font-semibold truncate px-2 py-1 rounded ${
           isPrivate 
-            ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+            ? 'bg-blue-100 text-blue-700 border border-blue-200' 
             : 'bg-blue-50 text-blue-700 border border-blue-200'
         }`}>
           {label}
@@ -170,7 +170,7 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
         <span 
           className={`text-xs font-medium px-2 py-1 rounded ${
             isPrivate 
-              ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+              ? 'bg-blue-100 text-blue-700 border border-blue-200' 
               : 'bg-blue-50 text-blue-700 border border-blue-200'
           }`}
           data-tooltip-id="space-visibility-tip"
@@ -185,7 +185,7 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
         <div className="absolute bottom-1 right-1 flex flex-col space-y-0.5 items-center">
           {/* Smaller (minus) button on top */}
           <button
-            className="w-5 h-5 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs leading-none shadow-sm transition-colors"
+            className="w-5 h-5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs leading-none shadow-sm transition-colors"
             onMouseDown={(e) => {
               e.stopPropagation();
               e.preventDefault();
@@ -197,7 +197,7 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
           </button>
           {/* Larger (plus) button on bottom */}
           <button
-            className="w-5 h-5 bg-purple-400 hover:bg-purple-500 text-white rounded text-xs leading-none shadow-sm transition-colors"
+            className="w-5 h-5 bg-blue-400 hover:bg-blue-500 text-white rounded text-xs leading-none shadow-sm transition-colors"
             onMouseDown={(e) => {
               e.stopPropagation();
               e.preventDefault();

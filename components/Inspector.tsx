@@ -10,7 +10,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface InspectorProps {
   selectedNode: Node | null;
-  onClose: () => void;
   onSave: (
     nodeId: string,
     data: { label?: string; properties?: Record<string, string>; visibility?: 'public' | 'private' }
@@ -68,7 +67,7 @@ const safeParseProperties = (value: unknown): Record<string, string> => {
   }
 };
 
-const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) => {
+const Inspector = ({ selectedNode, onSave, onDelete }: InspectorProps) => {
   const { address } = useAccount();
   const { terms, isDevMode } = useTerminology();
   const queryClient = useQueryClient();
@@ -77,7 +76,21 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
-  const [isCollapsed, setIsCollapsed] = useState(!selectedNode);
+  // Get inspector collapsed state from localStorage, default to false (expanded)
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('inspector-collapsed');
+      return saved ? JSON.parse(saved) : false;
+    }
+    return false;
+  });
+
+  // Save collapsed state to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('inspector-collapsed', JSON.stringify(isCollapsed));
+    }
+  }, [isCollapsed]);
 
   // Resize functionality
   const { size: inspectorWidth, isResizing, handleMouseDown, handleTouchStart } = useResizable({
@@ -102,11 +115,6 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     refetchOnWindowFocus: true,
     staleTime: 1000, // Consider data stale after 1 second
   });
-
-  // Handle collapsed state based on selectedNode
-  useEffect(() => {
-    setIsCollapsed(!selectedNode);
-  }, [selectedNode]);
 
   // Initialize state when selectedNode changes
   useEffect(() => {
@@ -205,10 +213,10 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
 
   const spaceLabelDescription = 'The name of your Space - a container for organizing related Topics and their relationships.';
 
-  // Handle collapsed state - show minimal tab when no node selected
+  // Handle collapsed state - show minimal tab
   if (isCollapsed) {
     return (
-      <aside className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-10 flex flex-col w-12">
+      <aside className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-60 flex flex-col w-12">
         {/* Collapsed handle/tab */}
         <div 
           className="flex flex-col items-center justify-center h-full cursor-pointer hover:bg-gray-700 transition-colors group"
@@ -229,7 +237,54 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const visibilityDescription = `Choose who can see this Space:<br/><br/><strong>Public:</strong> Anyone can view this Space and its contents<br/><br/><strong>Private:</strong> Only you (the creator) can see this Space and its contents`;
   const visibilityDevDescription = `Controls access permissions for this Space entity:<br/><br/><strong>Public:</strong> Space is visible to all users and indexed by the system<br/><br/><strong>Private:</strong> Space is only accessible to the owner's wallet address, filtered from public queries`;
 
-  if (!selectedNode) return null;
+  // Handle no selection state
+  if (!selectedNode) {
+    return (
+      <aside 
+        className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-60 flex flex-col transition-all duration-200"
+        style={{ width: `${inspectorWidth}px` }}
+      >
+        {/* Header with collapse button */}
+        <div className="flex items-center justify-between p-3 border-b border-gray-600 bg-gray-800">
+          <h2 className="text-sm font-semibold text-gray-300">Inspector</h2>
+          <button 
+            onClick={() => setIsCollapsed(true)}
+            className="text-gray-400 hover:text-white focus:ring-2 focus:ring-blue-300 transition-all duration-200 rounded p-1"
+            tabIndex={0}
+            aria-label="Collapse inspector panel"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* No selection content */}
+        <div className="flex-1 p-4 flex flex-col items-center justify-center text-center">
+          <div className="text-gray-400 mb-4">
+            <Info className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <h3 className="text-lg font-semibold mb-2">No Selection</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Click on a {terms.topic}, Space, or Relation to view and edit its properties.
+            </p>
+            <div className="text-xs text-gray-600">
+              <p className="mb-2">You can:</p>
+              <ul className="space-y-1 text-left">
+                <li>• Click the + button to create a new {terms.topic}</li>
+                <li>• Click the □ button to create a new Space</li>
+                <li>• Drag between nodes to create Relations</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Resize handle */}
+        <div 
+          className="absolute top-0 left-0 w-1 h-full cursor-ew-resize bg-gray-600 hover:bg-gray-500 transition-colors"
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+        />
+      </aside>
+    );
+  }
 
   /* ---------- SPACE INSPECTOR ---------- */
   if (isSpace) {
@@ -256,7 +311,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     return (
       <>
         <aside 
-          className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-10 flex flex-col"
+          className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-60 flex flex-col"
           style={{ width: `${inspectorWidth}px` }}
         >
           {/* Resize handle */}
@@ -275,12 +330,12 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold">Space Inspector</h3>
               <button 
-                onClick={onClose} 
-                className="btn btn-sm btn-ghost focus:ring-2 focus:ring-blue-300 transition-all duration-200"
+                onClick={() => setIsCollapsed(true)} 
+                className="text-gray-400 hover:text-white focus:ring-2 focus:ring-blue-300 transition-all duration-200 rounded p-1"
                 tabIndex={0}
-                aria-label="Close inspector"
+                aria-label="Collapse inspector"
               >
-                &times;
+                <ChevronRight className="w-5 h-5" />
               </button>
             </div>
 
@@ -423,7 +478,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   return (
     <>
       <aside 
-        className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-10 flex flex-col"
+        className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-60 flex flex-col"
         style={{ width: `${inspectorWidth}px` }}
       >
         {/* Resize handle */}
@@ -457,12 +512,12 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
               />
             </h3>
             <button 
-              onClick={onClose} 
-              className="btn btn-sm btn-ghost focus:ring-2 focus:ring-blue-300 transition-all duration-200"
+              onClick={() => setIsCollapsed(true)} 
+              className="text-gray-400 hover:text-white focus:ring-2 focus:ring-blue-300 transition-all duration-200 rounded p-1"
               tabIndex={0}
-              aria-label="Close inspector"
+              aria-label="Collapse inspector"
             >
-              &times;
+              <ChevronRight className="w-5 h-5" />
             </button>
           </div>
 

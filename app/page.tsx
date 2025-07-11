@@ -25,6 +25,7 @@ import Image from 'next/image';
 import 'reactflow/dist/style.css';
 import * as dagre from 'dagre';
 import { logger } from '@/lib/logger';
+import { HelpCircle, X } from 'lucide-react';
 
 import RelationNode from '@/components/RelationNode';
 import SpaceNode from '@/components/SpaceNode';
@@ -65,19 +66,19 @@ const ONBOARDING_STEPS = [
   {
     id: 'create-topic',
     title: 'Create your first Topic',
-    description: 'Click the + button in the top left to create your first topic.',
+    description: 'Click the + button to create your first Topic.',
     isCompleted: false,
   },
   {
     id: 'name-topic',
     title: 'Name your Topic',
-    description: 'Give your new topic a name in the inspector on the right.',
+    description: 'Give your new Topic a name in the inspector on the right.',
     isCompleted: false,
   },
   {
     id: 'create-connection',
-    title: 'Connect two topics',
-    description: 'Create another topic and connect it to the first one by dragging from one node to another.',
+    title: 'Connect two Topics',
+    description: 'Create another Topic and connect it to the first one by dragging from one node to another.',
     isCompleted: false,
   },
 ];
@@ -139,6 +140,47 @@ export default function GraphPage() {
   }, [selectedDate, today, address]);
 
   // Track user interactions
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      // Hidden keyboard command to clear all data for the day: Ctrl+Shift+D
+      if (event.ctrlKey && event.shiftKey && event.key === 'D') {
+        event.preventDefault();
+        const confirmed = window.confirm(`Are you sure you want to clear ALL data for ${selectedDate}? This action cannot be undone.`);
+        if (confirmed) {
+          // Clear all entities and relations for the current date
+          fetch('/api/entities', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clearAll: true, date: selectedDate }),
+          }).then(() => {
+            fetch('/api/relations', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ clearAll: true, date: selectedDate }),
+            }).then(() => {
+              // Clear local state
+              setNodes([]);
+              setEdges([]);
+              setSelectedNode(null);
+              setCompletedSteps([]);
+              localStorage.removeItem('kg_completed_steps');
+              localStorage.removeItem('kg_hide_checklist');
+              queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
+              queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
+              queryClient.invalidateQueries({ queryKey: ['relationLinks', selectedDate] });
+              toast.success(`All data cleared for ${selectedDate}`);
+            });
+          }).catch((error) => {
+            console.error('Error clearing data:', error);
+            toast.error('Failed to clear data');
+          });
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedDate, queryClient]);
 
 
 
@@ -405,18 +447,27 @@ export default function GraphPage() {
       setCompletedSteps(JSON.parse(completed));
     }
     const hide = localStorage.getItem('kg_hide_checklist');
-    // Show checklist if not all steps are completed and it hasn't been dismissed
+    // Show checklist initially only if not all steps are completed and it hasn't been dismissed
     if (completed && JSON.parse(completed).length === ONBOARDING_STEPS.length) {
       setShowChecklist(false);
     } else if (!hide) {
       setShowChecklist(true);
+    } else {
+      setShowChecklist(false);
     }
     setConnecting(false);
   }, []);
 
   const dismissChecklist = () => {
     setShowChecklist(false);
-    localStorage.setItem('kg_hide_checklist', '1');
+  };
+
+  const toggleChecklist = () => {
+    setShowChecklist(prev => !prev);
+    // If user manually shows it, clear the "hide forever" preference
+    if (!showChecklist) {
+      localStorage.removeItem('kg_hide_checklist');
+    }
   };
 
   const completeStep = (stepId: string) => {
@@ -424,11 +475,16 @@ export default function GraphPage() {
       if (prev.includes(stepId)) return prev;
       const newCompletedSteps = [...prev, stepId];
       localStorage.setItem('kg_completed_steps', JSON.stringify(newCompletedSteps));
-      if (newCompletedSteps.length === ONBOARDING_STEPS.length) {
-        setTimeout(() => setShowChecklist(false), 2000); // Hide after a delay
-      }
+      // Keep checklist visible when all steps are completed so users can see their success
+      // They can dismiss it manually if they want
       return newCompletedSteps;
     });
+  };
+
+  const resetChecklist = () => {
+    setCompletedSteps([]);
+    localStorage.removeItem('kg_completed_steps');
+    toast.success('Checklist progress reset! Try the steps again.');
   };
 
   const updateRelationPosition = useMutation({
@@ -691,8 +747,8 @@ export default function GraphPage() {
         newNode.style = {
           width: 400,
           height: 300,
-          backgroundColor: 'rgba(208, 192, 247, 0.2)',
-          borderColor: '#D0C0F7',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: '#3B82F6',
         };
         newNode.type = 'group';
         // Provide owner and visibility immediately so Inspector can allow editing
@@ -734,7 +790,9 @@ export default function GraphPage() {
       return res.json();
     },
     onSuccess: (data, variables) => {
-      if (nodes.filter(n => !isNumeric(n.id)).length > 1) {
+      // Check if this is the first connection between topics
+      const topicNodes = nodes.filter(n => !isNumeric(n.id)); // Get all topic nodes (non-relation nodes)
+      if (topicNodes.length >= 2) {
         completeStep('create-connection');
       }
       
@@ -1998,7 +2056,7 @@ export default function GraphPage() {
 
 					<button
 						onClick={handleAddNode}
-						className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+						className="bg-purple-500 hover:bg-purple-600 focus:bg-purple-600 focus:ring-2 focus:ring-purple-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
 						data-tooltip-id="kg-node-tip"
 						data-tooltip-content="Create Topic"
 						tabIndex={0}
@@ -2009,7 +2067,7 @@ export default function GraphPage() {
 
 					<button
 						onClick={handleAddSpace}
-						className="bg-purple-500 hover:bg-purple-600 focus:bg-purple-600 focus:ring-2 focus:ring-purple-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+						className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
 						data-tooltip-id="kg-node-tip"
 						data-tooltip-content="Create Space"
 						tabIndex={0}
@@ -2049,7 +2107,7 @@ export default function GraphPage() {
 					</div>
 				</div>
 
-				<div className="absolute top-4 right-4 z-10 flex flex-col items-end space-y-2">
+				<div className="absolute top-4 right-16 z-10 flex flex-col items-end space-y-2">
 					{/* Private Space Ownership Indicator */}
 					{selectedNode && selectedNode.type === 'group' && selectedNode.data?.visibility === 'private' && 
 					 selectedNode.data?.owner && address && selectedNode.data.owner.toLowerCase() === address.toLowerCase() && (
@@ -2177,10 +2235,6 @@ export default function GraphPage() {
 
 				<Inspector
 					selectedNode={selectedNode}
-					onClose={() => {
-						setSelectedNode(null);
-						socket.send(JSON.stringify({ type: "selection", nodeId: null }));
-					}}
 					onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
 					onDelete={(nodeId, isRelation) => {
 						const node = nodes.find((n) => n.id === nodeId);
@@ -2206,13 +2260,36 @@ export default function GraphPage() {
 
 				{showChecklist && (
 					<OnboardingChecklist
-						steps={ONBOARDING_STEPS.map((step) => ({
+						steps={ONBOARDING_STEPS.map(step => ({
 							...step,
-							isCompleted: completedSteps.includes(step.id),
+							isCompleted: completedSteps.includes(step.id)
 						}))}
 						onDismiss={dismissChecklist}
+						onTryAgain={resetChecklist}
 					/>
 				)}
+
+				{/* Bottom Right Button Layout - Well arranged according to design principles */}
+				{/* 
+					Layout from right to left:
+					1. Inspector panel (always visible, collapsible)
+					2. Debug drawer button (right-20)
+					3. Todo list toggle (right-[196px] hidden, right-[212px] shown) - moved 100px farther left
+					This creates proper visual hierarchy and spacing
+				*/}
+				<button
+					onClick={toggleChecklist}
+					className={`fixed z-30 p-3 rounded-full shadow-lg ${
+						showChecklist 
+							? 'bottom-4 right-[212px] bg-gray-600 text-gray-300' 
+							: 'bottom-4 right-[196px] bg-blue-600 text-white'
+					}`}
+					title={showChecklist ? 'Hide getting started guide' : 'Show getting started guide'}
+					tabIndex={0}
+					aria-label={showChecklist ? 'Hide getting started guide' : 'Show getting started guide'}
+				>
+					{showChecklist ? <X size={20} /> : <HelpCircle size={20} />}
+				</button>
 
 				<Tooltip
 					id="kg-node-tip"
@@ -2280,7 +2357,7 @@ export default function GraphPage() {
 										</span>
 									</li>
 									<li className="flex items-start space-x-2">
-										<span className="text-purple-400 font-bold">□</span>
+										<span className="text-blue-400 font-bold">□</span>
 										<span>
 											Group{" "}
 											<span className="font-semibold text-purple-400">
@@ -2288,13 +2365,13 @@ export default function GraphPage() {
 											</span>{" "}
 											<span>
 												into public or private{" "}
-												<span className="font-bold text-green-400">Spaces</span>
+												<span className="font-bold text-blue-400">Spaces</span>
 											</span>{" "}
 											for organization
 										</span>
 									</li>
 									<li className="flex items-start space-x-2">
-										<span className="text-green-400">🔗</span>
+										<span className="text-orange-400">🔗</span>
 										<span>
 											Draw{" "}
 											<span className="font-bold text-orange-400">

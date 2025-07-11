@@ -168,10 +168,10 @@ export default function DebugDrawer() {
 
   return (
     <>
-      {/* Debug toggle button */}
+      {/* Debug toggle button - Positioned between todo toggle and inspector */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-4 right-4 z-50 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-all duration-200 ${
+        className={`fixed bottom-4 right-20 z-50 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-all duration-200 ${
           isOpen ? 'bg-blue-600 hover:bg-blue-500' : ''
         }`}
         title="Toggle Debug Drawer"

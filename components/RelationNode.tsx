@@ -11,7 +11,7 @@ const RelationNode = ({ data }: NodeProps<{ label: string; selectionColor?: stri
 
   return (
     <div
-      className="pl-3 pr-6 py-1.5 shadow-md rounded-full bg-purple-600 text-white border-2 border-purple-300 relative text-sm"
+      className="pl-3 pr-6 py-1.5 shadow-md rounded-full bg-orange-600 text-white border-2 border-orange-300 relative text-sm"
       style={style}
     >
       {data.selectingAddress && (
@@ -28,9 +28,9 @@ const RelationNode = ({ data }: NodeProps<{ label: string; selectionColor?: stri
         <HelpCircle size={14} />
       </span>
 
-      <Handle type="target" position={Position.Top} className="w-11 !bg-purple-500" />
+      <Handle type="target" position={Position.Top} className="w-11 !bg-orange-500" />
       <div className="text-center">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} className="w-11 !bg-purple-500" />
+      <Handle type="source" position={Position.Bottom} className="w-11 !bg-orange-500" />
     </div>
   );
 };
