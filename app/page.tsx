@@ -37,6 +37,8 @@ import { Tooltip } from 'react-tooltip';
 import { useTerminology } from '@/lib/TerminologyContext';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal';
 import { errorLogger } from '@/lib/errorHandler';
+import { crashRecovery } from '@/lib/crashRecovery';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 interface PresentUser {
   id: string;
@@ -160,6 +162,14 @@ export default function GraphPage() {
   // Track user interactions
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      // Emergency recovery shortcut: Ctrl+Shift+R
+      if (event.ctrlKey && event.shiftKey && event.key === 'R') {
+        event.preventDefault();
+        console.log('🚨 Emergency recovery triggered by user');
+        crashRecovery.triggerEmergencyRecovery();
+        return;
+      }
+
       // Hidden keyboard command to clear all data for the day: Ctrl+Shift+D
       if (event.ctrlKey && event.shiftKey && event.key === 'D') {
         event.preventDefault();
@@ -1976,6 +1986,88 @@ export default function GraphPage() {
     socket.send(JSON.stringify({ type: 'selection', nodeId: node.id }));
   };
 
+  // Add WebSocket error recovery and crash recovery event listeners
+  useEffect(() => {
+    // Listen for WebSocket recovery requests from crash recovery
+    const handleWebSocketRecovery = () => {
+      console.log('🔌 WebSocket recovery requested by crash recovery service');
+      if (socket && socket.readyState !== WebSocket.OPEN) {
+        // Force reconnection by updating the socket dependency
+        setSelectedDate(prevDate => prevDate); // Trigger socket recreation
+      }
+    };
+
+    // Listen for cache clearing requests
+    const handleClearCache = () => {
+      console.log('🧹 Clearing non-essential cache...');
+      // Clear React Query cache of old data
+      queryClient.removeQueries({
+        predicate: (query) => {
+          // Keep current date queries, remove others
+          const isCurrentDate = query.queryKey.includes(selectedDate);
+          return !isCurrentDate;
+        }
+      });
+    };
+
+    // Listen for retry requests
+    const handleRetryOperations = () => {
+      console.log('🔄 Retrying failed operations...');
+      // Invalidate and refetch current queries
+      queryClient.invalidateQueries({ queryKey: ['entities', selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['relationLinks'] });
+    };
+
+    window.addEventListener('websocket-recovery-needed', handleWebSocketRecovery);
+    window.addEventListener('clear-non-essential-cache', handleClearCache);
+    window.addEventListener('retry-failed-operations', handleRetryOperations);
+
+    return () => {
+      window.removeEventListener('websocket-recovery-needed', handleWebSocketRecovery);
+      window.removeEventListener('clear-non-essential-cache', handleClearCache);
+      window.removeEventListener('retry-failed-operations', handleRetryOperations);
+    };
+  }, [socket, queryClient, selectedDate]);
+
+  // Enhanced WebSocket error handling
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleSocketError = () => {
+      console.warn('🔌 WebSocket connection error detected');
+      errorLogger.logError(
+        new Error('WebSocket connection failed'),
+        'WebSocket Connection Error',
+        address
+      );
+    };
+
+    const handleSocketClose = (event: CloseEvent) => {
+      console.warn('🔌 WebSocket connection closed', { code: event.code, reason: event.reason });
+      if (event.code !== 1000) { // Not a normal closure
+        errorLogger.logError(
+          new Error(`WebSocket closed unexpectedly: ${event.code} - ${event.reason}`),
+          'WebSocket Unexpected Close',
+          address
+        );
+      }
+    };
+
+    // Add error handlers if possible (usePartySocket might not expose these)
+    if (socket.addEventListener) {
+      socket.addEventListener('error', handleSocketError);
+      socket.addEventListener('close', handleSocketClose);
+    }
+
+    return () => {
+      if (socket.removeEventListener) {
+        socket.removeEventListener('error', handleSocketError);
+        socket.removeEventListener('close', handleSocketClose);
+      }
+    };
+  }, [socket, address]);
+
   if (!mounted) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900">
@@ -1987,564 +2079,386 @@ export default function GraphPage() {
   const hasWallet = !!address;
 
   return (
-		<div className="flex h-screen bg-gray-800 text-white overflow-hidden">
-			{/* Main Content Area */}
-			<div className="flex-1 h-screen relative">
-				{/* Top Navigation - Responsive and Non-overlapping */}
-				<div className="absolute top-4 left-4 right-64 z-20 flex items-center gap-6">
-					{/* Left Navigation Group */}
-					<div className="flex items-center space-x-2 lg:space-x-4 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg min-w-0 flex-shrink-0">
-						{/* Hamburger Menu */}
-						<div ref={menuRef} className="relative flex-shrink-0">
-							<button
-								className="flex items-center justify-center w-8 h-8 transition-transform duration-200 focus:ring-2 focus:ring-blue-300 rounded"
-								onClick={() => setShowMenu((prev) => !prev)}
-								tabIndex={0}
-								aria-label={`${showMenu ? 'Close' : 'Open'} navigation menu`}
-								aria-expanded={showMenu}
-							>
-								<div className={`flex flex-col space-y-1 transition-transform duration-300 ${showMenu ? 'rotate-90' : ''}`}>
-									<div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? 'rotate-45 translate-y-1.5' : ''}`}></div>
-									<div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? 'opacity-0' : ''}`}></div>
-									<div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? '-rotate-45 -translate-y-1.5' : ''}`}></div>
-								</div>
-							</button>
-							{showMenu && (
-								<ul className="absolute top-full left-0 mt-2 bg-gray-800 rounded-lg shadow-lg p-2 w-48 z-50">
-									<li>
-										<a
-											href="#"
-											onClick={() => setShowWelcome(true)}
-											className="block px-4 py-2 hover:bg-gray-700 rounded"
-										>
-											Help
-										</a>
-									</li>
-									<li>
-										<a
-											href="https://thegraph.com"
-											target="_blank"
-											rel="noopener noreferrer"
-											className="block px-4 py-2 hover:bg-gray-700 rounded"
-										>
-											The Graph
-										</a>
-									</li>
-									<li>
-										<a
-											href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md"
-											target="_blank"
-											rel="noopener noreferrer"
-											className="block px-4 py-2 hover:bg-gray-700 rounded"
-										>
-											GRC-20 Spec
-										</a>
-									</li>
-									<li>
-										<a
-											href="https://github.com/graphprotocol/hypergraph"
-											target="_blank"
-											rel="noopener noreferrer"
-											className="block px-4 py-2 hover:bg-gray-700 rounded"
-										>
-											Hypergraph Repo
-										</a>
-									</li>
-								</ul>
-							)}
-						</div>
+    <ErrorBoundary 
+      context="Main Application" 
+      enableAutoRestart={true}
+      autoRestartDelay={2000}
+    >
+      <div className="flex h-screen bg-gray-800 text-white overflow-hidden">
+        {/* Main Content Area */}
+        <div className="flex-1 h-screen relative">
+          <ErrorBoundary 
+            context="Navigation Bar" 
+            enableAutoRestart={true}
+            autoRestartDelay={1000}
+          >
+            {/* Top Navigation - Responsive and Non-overlapping */}
+            <div className="absolute top-4 left-4 right-64 z-20 flex items-center gap-6">
+              {/* Left Navigation Group */}
+              <div className="flex items-center space-x-2 lg:space-x-4 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg min-w-0 flex-shrink-0">
+                {/* Hamburger Menu */}
+                <div ref={menuRef} className="relative flex-shrink-0">
+                  <button
+                    className="flex items-center justify-center w-8 h-8 transition-transform duration-200 focus:ring-2 focus:ring-blue-300 rounded"
+                    onClick={() => setShowMenu((prev) => !prev)}
+                    tabIndex={0}
+                    aria-label={`${showMenu ? 'Close' : 'Open'} navigation menu`}
+                    aria-expanded={showMenu}
+                  >
+                    <div className={`flex flex-col space-y-1 transition-transform duration-300 ${showMenu ? 'rotate-90' : ''}`}>
+                      <div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? 'rotate-45 translate-y-1.5' : ''}`}></div>
+                      <div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? 'opacity-0' : ''}`}></div>
+                      <div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? '-rotate-45 -translate-y-1.5' : ''}`}></div>
+                    </div>
+                  </button>
 
-						{/* Mode Toggle */}
-						<button
-							onClick={toggleMode}
-							className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1 focus:ring-2 focus:ring-blue-300 transition-all duration-200 flex-shrink-0"
-							tabIndex={0}
-							aria-label={`Switch to ${isDevMode ? 'Normie' : 'Dev'} mode`}
-						>
-							<div
-								className={`px-3 py-1 rounded-full transition-colors duration-300 ${
-									!isDevMode ? "bg-blue-600 text-white" : "text-gray-400"
-								}`}
-							>
-								Normie Mode
-							</div>
-							<div
-								className={`px-3 py-1 rounded-full transition-colors duration-300 ${
-									isDevMode ? "bg-green-600 text-white" : "text-gray-400"
-								}`}
-							>
-								Dev Mode
-							</div>
-						</button>
+                  {/* Dropdown Menu */}
+                  <div className={`absolute top-full left-0 mt-2 w-72 bg-gray-800/95 backdrop-blur-sm border border-gray-600 rounded-lg shadow-xl transition-all duration-300 ${showMenu ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2'}`}>
+                    <div className="p-4 space-y-4">
+                      {/* Date Picker */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2 text-gray-300">
+                          📅 Date
+                        </label>
+                        <input
+                          type="date"
+                          value={selectedDate}
+                          onChange={(e) => {
+                            setSelectedDate(e.target.value);
+                            setShowMenu(false);
+                          }}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:ring-2 focus:ring-blue-300 focus:border-blue-300 text-white"
+                        />
+                      </div>
 
-						{/* App Title and Date - Responsive */}
-						<div className="hidden md:flex items-center space-x-2 min-w-0 border-l border-gray-600 pl-4">
-							<div className="flex items-center space-x-2 min-w-0">
-								<span className="font-mono text-lg truncate">{terms.knowledgeGraph}</span>
-								<span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full border border-orange-200 dark:border-orange-700/50 flex-shrink-0">
-									BETA
-								</span>
-							</div>
-							<span className="font-mono text-lg text-gray-400 flex-shrink-0">/</span>
-							<Image src="/globe.svg" alt="Globe" width={24} height={24} className="flex-shrink-0" />
-							<input
-								type="date"
-								value={selectedDate}
-								onChange={(e) => setSelectedDate(e.target.value)}
-								className="bg-gray-600 border border-gray-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 rounded px-2 py-1 text-sm transition-all duration-200 min-w-0 flex-shrink"
-								data-tooltip-id="kg-node-tip"
-								data-tooltip-content={`Select a date to view the ${terms.knowledgeGraph} for that day. \n\n As this app is multiplayer, you can see how daily collaborative knowledge graphs are built over time.`}
-								tabIndex={0}
-								aria-label="Select date for knowledge graph"
-							/>
-						</div>
-					</div>
+                      {/* Action Buttons */}
+                      <div className="space-y-2">
+                        <button
+                          onClick={() => {
+                            handleAddNode();
+                            setShowMenu(false);
+                          }}
+                          disabled={!hasWallet}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition-colors duration-200 text-sm"
+                        >
+                          + Add {terms.topic}
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleAddSpace();
+                            setShowMenu(false);
+                          }}
+                          disabled={!hasWallet}
+                          className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition-colors duration-200 text-sm"
+                        >
+                          □ Add Space
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleAutoLayout();
+                            setShowMenu(false);
+                          }}
+                          disabled={!hasWallet}
+                          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition-colors duration-200 text-sm"
+                        >
+                          ✨ Tidy Up
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleCenterView();
+                            setShowMenu(false);
+                          }}
+                          disabled={!hasWallet}
+                          className="w-full bg-gray-600 hover:bg-gray-700 disabled:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition-colors duration-200 text-sm"
+                        >
+                          🎯 Center View
+                        </button>
+                      </div>
 
-					{/* Action Buttons Group */}
-					<div className="flex items-center space-x-3 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg flex-shrink-0">
-						<button
-							onClick={handleAddNode}
-							className="bg-purple-500 hover:bg-purple-600 focus:bg-purple-600 focus:ring-2 focus:ring-purple-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-							data-tooltip-id="kg-node-tip"
-							data-tooltip-content="Create Topic"
-							tabIndex={0}
-							aria-label="Create Topic"
-						>
-							+
-						</button>
+                      {/* Settings */}
+                      <div className="border-t border-gray-600 pt-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-300">Developer Mode</span>
+                          <button
+                            onClick={toggleMode}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                              isDevMode ? 'bg-blue-600' : 'bg-gray-600'
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                isDevMode ? 'translate-x-6' : 'translate-x-1'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-						<button
-							onClick={handleAddSpace}
-							className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-							data-tooltip-id="kg-node-tip"
-							data-tooltip-content="Create Space"
-							tabIndex={0}
-							aria-label="Create Space"
-						>
-							□
-						</button>
+                {/* Help Button */}
+                <button 
+                  onClick={toggleChecklist}
+                  className="text-gray-300 hover:text-white transition-colors duration-200 flex-shrink-0"
+                  title="Show/hide getting started checklist"
+                >
+                  <HelpCircle size={20} />
+                </button>
 
-						{/* Layout Tools - Hide on smaller screens */}
-						<div className="hidden lg:flex items-center space-x-2 border-l border-gray-600 pl-3">
-							<button
-								onClick={handleAutoLayout}
-								className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-								data-tooltip-id="kg-node-tip"
-								data-tooltip-content="Tidy up layout"
-								tabIndex={0}
-								aria-label="Tidy up layout"
-							>
-								⇆
-							</button>
+                {/* Present Users Avatars */}
+                <div className="flex items-center space-x-1 overflow-hidden">
+                  <div className="flex -space-x-2">
+                    {presentUsers.slice(0, 5).map((user) => (
+                      <Avatar
+                        key={user.id}
+                        address={user.address}
+                      />
+                    ))}
+                    {presentUsers.length > 5 && (
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-600 border-2 border-gray-700 text-xs font-medium text-white">
+                        +{presentUsers.length - 5}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-							<button
-								onClick={handleCenterView}
-								className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-								data-tooltip-id="kg-node-tip"
-								data-tooltip-content="Center view"
-								tabIndex={0}
-								aria-label="Center view"
-							>
-								☉
-							</button>
-						</div>
-					</div>
+              {/* Right Side - Show only when wallet is connected */}
+              {hasWallet && (
+                <div className="flex items-center space-x-4 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                  <span className="text-sm text-gray-300">
+                    {selectedDate === today ? 'Today' : selectedDate}
+                  </span>
+                </div>
+              )}
+            </div>
+          </ErrorBoundary>
 
-					{/* User Avatars Section */}
-					<div className="flex items-center space-x-2 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg flex-shrink-0">
-						{presentUsers
-							.filter((u) => u.address !== address)
-							.slice(0, 3)
-							.map((user) => (
-								<Avatar key={user.id} address={user.address} />
-							))}
-						{presentUsers.filter((u) => u.address !== address).length > 3 && (
-							<span className="text-xs text-gray-400 bg-gray-600 rounded-full w-6 h-6 flex items-center justify-center">
-								+{presentUsers.filter((u) => u.address !== address).length - 3}
-							</span>
-						)}
-						{presentUsers.filter((u) => u.address !== address).length === 0 && (
-							<span className="text-xs text-gray-400 px-2">No other users</span>
-						)}
-					</div>
-				</div>
+          {/* Wallet Connection Status */}
+          <ErrorBoundary context="Wallet Connection" enableAutoRestart={false}>
+            <div className="absolute top-4 right-4 z-30">
+              <div className="flex items-center space-x-2">
+                {connecting ? (
+                  <div className="flex items-center space-x-3 bg-gray-800/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-xl border border-gray-600">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-medium text-gray-200">Connecting...</span>
+                  </div>
+                ) : address ? (
+                  <div className="flex items-center space-x-3 bg-gradient-to-r from-gray-800/95 to-gray-700/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-xl border border-gray-600">
+                    <div className="flex items-center space-x-2">
+                      <span
+                        className="w-3 h-3 rounded-full bg-emerald-400 shadow-emerald-400/50"
+                        style={{ 
+                          boxShadow: '0 0 12px rgba(52, 211, 153, 0.8)'
+                        }}
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-emerald-300 uppercase tracking-wide">Connected</span>
+                        <span className="text-sm font-mono text-white">{`${address.slice(0, 6)}...${address.slice(-4)}`}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => disconnect()}
+                      className="bg-red-500/90 hover:bg-red-500 focus:bg-red-500 focus:ring-2 focus:ring-red-300 text-white font-medium py-1.5 px-3 rounded-lg text-xs transition-all duration-200 shadow-md hover:shadow-lg"
+                      tabIndex={0}
+                      aria-label="Disconnect wallet"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    {connectors.map((connector) => (
+                      <button
+                        key={connector.uid}
+                        onClick={() => connect({ connector })}
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 focus:from-blue-600 focus:to-blue-700 focus:ring-2 focus:ring-blue-300 text-white font-medium py-3 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl border border-blue-400/30"
+                        tabIndex={0}
+                        aria-label={`Connect with ${connector.name}`}
+                      >
+                        <span className="flex items-center space-x-2">
+                          <span>🔌</span>
+                          <span>{connector.name}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </ErrorBoundary>
 
-				{/* Wallet Status Panel - Top Right Corner */}
-				<div className="absolute top-4 right-4 flex flex-col items-end space-y-3 w-60 z-status">
-					{/* Private Space Ownership Indicator */}
-					{selectedNode && selectedNode.type === 'group' && selectedNode.data?.visibility === 'private' && 
-					 selectedNode.data?.owner && address && selectedNode.data.owner.toLowerCase() === address.toLowerCase() && (
-						<div className="bg-gradient-to-r from-green-600/90 to-emerald-600/90 backdrop-blur-sm p-3 rounded-lg border border-green-400/30 shadow-lg">
-							<div className="flex items-center space-x-2">
-								<div className="flex items-center space-x-1">
-									<span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-									<span className="text-green-100 text-sm font-semibold">Your Private Space</span>
-								</div>
-								<span className="text-xl">🔒</span>
-							</div>
-							<div className="text-green-200 text-xs mt-1">
-								Only you can view and edit this space&apos;s contents
-							</div>
-						</div>
-					)}
+          {/* Wallet Guard Overlay */}
+          {!hasWallet && (
+            <ErrorBoundary context="Wallet Guard">
+              <div className="absolute inset-0 z-overlay flex items-center justify-center backdrop-blur-xs">
+                <div className="bg-gray-800/90 rounded-lg px-6 py-4 flex flex-col items-center space-y-4">
+                  <p className="text-white text-lg font-medium text-center">
+                    The Knowledge Graph Visualizer
+                  </p>
 
-					{/* Wallet Connection Status */}
-					<div className="flex items-center space-x-2">
-						{connecting ? (
-							<div className="flex items-center space-x-3 bg-gray-800/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-xl border border-gray-600">
-								<div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-								<span className="text-sm font-medium text-gray-200">Connecting...</span>
-							</div>
-						) : address ? (
-							<div className="flex items-center space-x-3 bg-gradient-to-r from-gray-800/95 to-gray-700/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-xl border border-gray-600">
-								<div className="flex items-center space-x-2">
-									<span
-										className="w-3 h-3 rounded-full bg-emerald-400 shadow-emerald-400/50"
-										style={{ 
-											boxShadow: '0 0 12px rgba(52, 211, 153, 0.8)'
-										}}
-									/>
-									<div className="flex flex-col">
-										<span className="text-xs font-medium text-emerald-300 uppercase tracking-wide">Connected</span>
-										<span className="text-sm font-mono text-white">{`${address.slice(0, 6)}...${address.slice(-4)}`}</span>
-									</div>
-								</div>
-								<button
-									onClick={() => disconnect()}
-									className="bg-red-500/90 hover:bg-red-500 focus:bg-red-500 focus:ring-2 focus:ring-red-300 text-white font-medium py-1.5 px-3 rounded-lg text-xs transition-all duration-200 shadow-md hover:shadow-lg"
-									tabIndex={0}
-									aria-label="Disconnect wallet"
-								>
-									Disconnect
-								</button>
-							</div>
-						) : (
-							<div className="flex items-center space-x-2">
-								{connectors.map((connector) => (
-									<button
-										key={connector.uid}
-										onClick={() => connect({ connector })}
-										className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 focus:from-blue-600 focus:to-blue-700 focus:ring-2 focus:ring-blue-300 text-white font-medium py-3 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl border border-blue-400/30"
-										tabIndex={0}
-										aria-label={`Connect with ${connector.name}`}
-									>
-										<span className="flex items-center space-x-2">
-											<span>🔌</span>
-											<span>{connector.name}</span>
-										</span>
-									</button>
-								))}
-							</div>
-						)}
-					</div>
-				</div>
+                  <button
+                    onClick={() =>
+                      connectors[0] && connect({ connector: connectors[0] })
+                    }
+                    className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+                    tabIndex={0}
+                    aria-label="Connect with MetaMask"
+                  >
+                    Connect with MetaMask
+                  </button>
+                </div>
+              </div>
+            </ErrorBoundary>
+          )}
 
-				{!hasWallet && (
-					<div className="absolute inset-0 z-overlay flex items-center justify-center backdrop-blur-xs">
-						<div className="bg-gray-800/90 rounded-lg px-6 py-4 flex flex-col items-center space-y-4">
-							<p className="text-white text-lg font-medium text-center">
-								The Knowledge Graph Visualizer
-							</p>
+          {/* ReactFlow - Main Canvas */}
+          <ErrorBoundary 
+            context="Graph Canvas" 
+            enableAutoRestart={true}
+            autoRestartDelay={3000}
+          >
+            <ReactFlow
+              onInit={setRfInstance}
+              deleteKeyCode={null}
+              defaultEdgeOptions={{
+                type: "smoothstep",
+                markerEnd: {
+                  type: MarkerType.ArrowClosed,
+                  width: 30,
+                  height: 30,
+                  color: "#fff",
+                },
+                style: { strokeWidth: 2, stroke: "#AAA" },
+              }}
+              panOnDrag={hasWallet}
+              panOnScroll={hasWallet}
+              zoomOnScroll={hasWallet}
+              zoomOnPinch={hasWallet}
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onPaneClick={handlePaneClick}
+              onNodeClick={handleNodeClick}
+              onNodeDragStop={onNodeDragStop}
+              nodeTypes={nodeTypes}
+              connectionLineType={ConnectionLineType.SmoothStep}
+              fitView
+              className={`bg-gray-900 ${
+                showWelcome || (nodes.length === 0 && showWelcome !== false)
+                  ? "pointer-events-none opacity-10"
+                  : ""
+              }`}
+            >
+              <Background />
+              <Controls />
+            </ReactFlow>
+          </ErrorBoundary>
 
-							<button
-								onClick={() =>
-									connectors[0] && connect({ connector: connectors[0] })
-								}
-								className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-								tabIndex={0}
-								aria-label="Connect with MetaMask"
-							>
-								Connect with MetaMask
-							</button>
-						</div>
-					</div>
-				)}
+          {/* Inspector Panel - Right Side */}
+          <ErrorBoundary 
+            context="Inspector Panel" 
+            enableAutoRestart={true}
+            autoRestartDelay={2000}
+          >
+            <Inspector
+              selectedNode={selectedNode}
+              onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
+              onDelete={(nodeId, isRelation) => {
+                const node = nodes.find((n) => n.id === nodeId);
+                const isSpace = node?.type === "group";
+                const itemType = isSpace
+                  ? "Space"
+                  : isRelation
+                  ? "Relation"
+                  : "Topic";
+                const itemName = node?.data?.label || "Untitled";
 
-				{/* ReactFlow - Main Canvas */}
-				<ReactFlow
-					onInit={setRfInstance}
-					deleteKeyCode={null}
-					defaultEdgeOptions={{
-						type: "smoothstep",
-						markerEnd: {
-							type: MarkerType.ArrowClosed,
-							width: 30,
-							height: 30,
-							color: "#fff",
-						},
-						style: { strokeWidth: 2, stroke: "#AAA" },
-					}}
-					panOnDrag={hasWallet}
-					panOnScroll={hasWallet}
-					zoomOnScroll={hasWallet}
-					zoomOnPinch={hasWallet}
-					nodes={nodes}
-					edges={edges}
-					onNodesChange={onNodesChange}
-					onEdgesChange={onEdgesChange}
-					onConnect={onConnect}
-					onPaneClick={handlePaneClick}
-					onNodeClick={handleNodeClick}
-					onNodeDragStop={onNodeDragStop}
-					nodeTypes={nodeTypes}
-					connectionLineType={ConnectionLineType.SmoothStep}
-					fitView
-					className={`bg-gray-900 ${
-						showWelcome || (nodes.length === 0 && showWelcome !== false)
-							? "pointer-events-none opacity-10"
-							: ""
-					}`}
-				>
-					<Background />
-					<Controls />
-				</ReactFlow>
+                const confirmMessage = `Are you sure you want to delete this ${itemType}? "${itemName}" will be permanently removed.`;
 
-				{/* Inspector Panel - Right Side */}
-				<Inspector
-					selectedNode={selectedNode}
-					onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
-					onDelete={(nodeId, isRelation) => {
-						const node = nodes.find((n) => n.id === nodeId);
-						const isSpace = node?.type === "group";
-						const itemType = isSpace
-							? "Space"
-							: isRelation
-							? "Relation"
-							: "Topic";
-						const itemName = node?.data?.label || "Untitled";
+                if (window.confirm(confirmMessage)) {
+                  if (isRelation) {
+                    deleteRelation.mutate({ id: nodeId });
+                  } else {
+                    deleteEntity.mutate({ nodeId });
+                  }
+                }
+              }}
+            />
+          </ErrorBoundary>
 
-						const confirmMessage = `Are you sure you want to delete this ${itemType}? "${itemName}" will be permanently removed.`;
+          {/* Onboarding Checklist - Responsive Positioning */}
+          <ErrorBoundary context="Onboarding Checklist" enableAutoRestart={false}>
+            {showChecklist && (
+              <div className="absolute top-[90px] left-4 z-checklist max-w-sm">
+                <OnboardingChecklist
+                  steps={ONBOARDING_STEPS.map(step => ({
+                    ...step,
+                    isCompleted: completedSteps.includes(step.id)
+                  }))}
+                  onDismiss={dismissChecklist}
+                  onTryAgain={resetChecklist}
+                />
+              </div>
+            )}
+          </ErrorBoundary>
 
-						if (window.confirm(confirmMessage)) {
-							if (isRelation) {
-								deleteRelation.mutate({ id: nodeId });
-							} else {
-								deleteEntity.mutate({ nodeId });
-							}
-						}
-					}}
-				/>
+          {/* Welcome Modal */}
+          <ErrorBoundary context="Welcome Modal" enableAutoRestart={false}>
+            {showWelcome && (
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-modal">
+                <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4 shadow-2xl border border-gray-700">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-white">Welcome!</h2>
+                    <button
+                      onClick={() => setShowWelcome(false)}
+                      className="text-gray-400 hover:text-white transition-colors"
+                    >
+                      <X size={24} />
+                    </button>
+                  </div>
+                  <div className="space-y-4 text-gray-300">
+                    <p>
+                      This is the Knowledge Graph Visualizer - a tool for organizing your thoughts, concepts, and their relationships.
+                    </p>
+                    <p>
+                      Connect your wallet to get started creating topics, connecting them, and organizing them into spaces.
+                    </p>
+                    <div className="flex justify-end mt-6">
+                      <button
+                        onClick={() => setShowWelcome(false)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                      >
+                        Get Started
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </ErrorBoundary>
 
-				{/* Onboarding Checklist - Responsive Positioning */}
-				{showChecklist && (
-					<div className="absolute top-[90px] left-4 z-checklist max-w-sm">
-						<OnboardingChecklist
-							steps={ONBOARDING_STEPS.map(step => ({
-								...step,
-								isCompleted: completedSteps.includes(step.id)
-							}))}
-							onDismiss={dismissChecklist}
-							onTryAgain={resetChecklist}
-						/>
-					</div>
-				)}
-
-				{/* Bottom Right Action Buttons - Systematic Layout */}
-				<div className="absolute bottom-4 right-4 z-actions flex flex-col-reverse gap-3">
-					{/* Help/Checklist Toggle */}
-					<button
-						onClick={toggleChecklist}
-						className={`p-3 rounded-full shadow-lg transition-all duration-200 ${
-							showChecklist 
-								? 'bg-gray-600 text-gray-300 hover:bg-gray-500' 
-								: 'bg-blue-600 text-white hover:bg-blue-500'
-						}`}
-						title={showChecklist ? 'Hide getting started guide' : 'Show getting started guide'}
-						tabIndex={0}
-						aria-label={showChecklist ? 'Hide getting started guide' : 'Show getting started guide'}
-					>
-						{showChecklist ? <X size={20} /> : <HelpCircle size={20} />}
-					</button>
-				</div>
-
-				<Tooltip
-					id="kg-node-tip"
-					place="bottom"
-					className="z-tooltip max-w-xs whitespace-pre-line"
-				/>
-			</div>
-
-			{/* Welcome Modal - Full Screen Overlay */}
-			{showWelcome && (
-				<div 
-					className="absolute inset-0 z-modal flex items-center justify-center bg-black/80 backdrop-blur-sm"
-					onClick={() => setShowWelcome(false)}
-				>
-					<div 
-						className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-4xl mx-4 shadow-2xl border border-gray-700"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<div className="space-y-3">
-							<div className="flex items-center justify-center space-x-3">
-								<h2 className="text-3xl font-extrabold text-white">
-									Welcome to the {terms.knowledgeGraph}
-								</h2>
-								<span className="inline-flex items-center px-3 py-1 text-sm font-semibold bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full border border-orange-200 dark:border-orange-700/50 shadow-sm">
-									BETA
-								</span>
-							</div>
-							<p className="text-gray-300 text-lg leading-relaxed">
-								Learn knowledge graphs by building them collaboratively!
-							</p>
-							
-							{/* Mode Toggle */}
-							<div className="flex justify-center pt-2">
-								<div
-									onClick={toggleMode}
-									className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1"
-								>
-									<div
-										className={`px-3 py-1 rounded-full transition-colors duration-300 ${
-											!isDevMode ? "bg-blue-600 text-white" : "text-gray-400"
-										}`}
-									>
-										Normie Mode
-									</div>
-									<div
-										className={`px-3 py-1 rounded-full transition-colors duration-300 ${
-											isDevMode ? "bg-green-600 text-white" : "text-gray-400"
-										}`}
-									>
-										Dev Mode
-									</div>
-								</div>
-							</div>
-						</div>
-
-						<div className="grid md:grid-cols-2 gap-6 text-left">
-							<div className="space-y-3">
-								<h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-2">
-									How to Use
-								</h3>
-								<ul className="text-sm text-gray-300 space-y-2">
-									<li className="flex items-start space-x-2">
-										<span className="text-blue-400 font-bold">+</span>
-										<span>
-											Create a <span className="font-semibold text-purple-400">{terms.topic}</span> to represent key ideas
-										</span>
-									</li>
-									<li className="flex items-start space-x-2">
-										<span className="text-blue-400 font-bold">□</span>
-										<span>
-											Group{" "}
-											<span className="font-semibold text-purple-400">
-												{terms.topics}
-											</span>{" "}
-											<span>
-												into public or private{" "}
-												<span className="font-bold text-blue-400">Spaces</span>
-											</span>{" "}
-											for organization
-										</span>
-									</li>
-									<li className="flex items-start space-x-2">
-										<span className="text-orange-400">🔗</span>
-										<span>
-											Draw{" "}
-											<span className="font-bold text-orange-400">
-												{terms.relations}
-											</span>{" "}
-											between{" "}
-											<span className="font-bold text-purple-400">{terms.topics}</span>{" "}
-											to show how different ideas connect
-										</span>
-									</li>
-								</ul>
-							</div>
-
-							<div className="space-y-3">
-								<h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-2">
-									About This App
-								</h3>
-								<ul className="text-sm text-gray-300 space-y-2">
-									<li>
-										• Multiple users can connect wallets and build together in
-										real-time
-									</li>
-									<li>• Data is ephemeral and resets daily. Go play!</li>
-								</ul>
-							</div>
-						</div>
-
-						{/* Key Insight - Full Width */}
-						<div className="mt-6 p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-400/20 rounded-lg">
-							<div className="flex items-start space-x-4">
-								<span className="text-3xl">✨</span>
-								<div className="flex-1">
-									<div className="text-blue-300 font-semibold text-sm uppercase tracking-wide mb-2">
-										Key Insight
-									</div>
-									<div className="text-white font-medium text-lg leading-relaxed">
-										When two <span className="font-semibold text-purple-400">{terms.topics}</span> are connected by a relationship, we now have{" "}
-										<span className="text-blue-300 font-bold">Knowledge</span>{" "}
-										in our knowledge graph!
-									</div>
-								</div>
-							</div>
-						</div>
-
-						<div className="pt-4 border-t border-gray-700">
-							<p className="text-sm text-gray-400 mb-4">
-								To learn more, see the{" "}
-								<a
-									href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md"
-									target="_blank"
-									rel="noopener noreferrer"
-									className="text-blue-400 hover:text-blue-300 underline transition-colors"
-								>
-									GRC-20 spec
-								</a>{" "}
-								and The Graph&apos;s knowledge graph{" "}
-								<a
-									href="https://thegraph.com/blog/grc20-knowledge-graph/"
-									target="_blank"
-									rel="noopener noreferrer"
-									className="text-blue-400 hover:text-blue-300 underline transition-colors"
-								>
-									announcement
-								</a>
-							</p>
-							<button
-								onClick={() => setShowWelcome(false)}
-								className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-colors duration-200 shadow-lg"
-							>
-								Start Building
-							</button>
-							<p className="text-xs text-gray-500 mt-4">
-								Built by{" "}
-								<a
-									href="https://github.com/marcusrein"
-									target="_blank"
-									rel="noopener noreferrer"
-									className="text-gray-400 hover:text-gray-300 underline transition-colors"
-								>
-									Marcus Rein
-								</a>
-							</p>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Delete Confirmation Modal */}
-			<DeleteConfirmModal
-				isOpen={showDeleteModal}
-				onClose={() => {
-					setShowDeleteModal(false);
-					nodeToDeleteRef.current = null;
-				}}
-				onConfirm={handleConfirmDelete}
-				itemType={
-					nodeToDeleteRef.current?.type === 'group'
-						? 'Space'
-						: /^\d+$/.test(nodeToDeleteRef.current?.id || '')
-						? 'Relation'
-						: isDevMode
-						? 'Entity'
-						: 'Topic'
-				}
-				itemName={nodeToDeleteRef.current?.data?.label || 'Untitled'}
-			/>
-		</div>
-	);
+          {/* Delete Confirmation Modal */}
+          <ErrorBoundary context="Delete Modal" enableAutoRestart={false}>
+            <DeleteConfirmModal
+              isOpen={showDeleteModal}
+              onClose={() => setShowDeleteModal(false)}
+              onConfirm={handleConfirmDelete}
+              itemName={nodeToDeleteRef.current?.data?.label || 'Untitled'}
+              itemType={
+                nodeToDeleteRef.current?.type === 'group' 
+                  ? 'Space' 
+                  : isNumeric(nodeToDeleteRef.current?.id || '') 
+                    ? 'Relation' 
+                    : 'Topic'
+              }
+            />
+          </ErrorBoundary>
+        </div>
+      </div>
+    </ErrorBoundary>
+  );
 }
