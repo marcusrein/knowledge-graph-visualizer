@@ -5,7 +5,7 @@ import Avatar from './Avatar';
 
 const TopicNode = ({ data }: NodeProps<{ label: string; selectingAddress?: string }>) => {
   return (
-    <div className="px-4 py-3 rounded-md bg-blue-600 text-white text-base shadow relative">
+    <div className="px-4 py-3 rounded-md bg-purple-600 text-white text-base shadow relative">
       {data.selectingAddress && (
         <div className="absolute -top-3 -right-3">
           <Avatar address={data.selectingAddress} />

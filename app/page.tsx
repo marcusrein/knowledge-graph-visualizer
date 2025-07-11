@@ -941,8 +941,8 @@ export default function GraphPage() {
             style: {
               width: e.width ?? 400,
               height: e.height ?? 300,
-              backgroundColor: 'rgba(208, 192, 247, 0.2)',
-              borderColor: '#D0C0F7',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderColor: '#3B82F6',
             },
           };
 
