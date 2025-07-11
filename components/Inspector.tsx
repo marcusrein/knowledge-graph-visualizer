@@ -181,13 +181,21 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const isSpace = selectedNode?.type === 'group';
   const isRelation = selectedNode?.type === 'relation';
 
-  const spaceLabelDescription = 'This is the name for your Space (e.g., "Work Projects", "Research Notes"). Spaces help organize related Topics.';
+  const spaceLabelDescription = 'The name of your Space - a container for organizing related Topics and their relationships.';
+  
+  // Visibility tooltip descriptions
+  const visibilityDescription = `Choose who can see this Space:<br/><br/><strong>Public:</strong> Anyone can view this Space and its contents<br/><br/><strong>Private:</strong> Only you (the creator) can see this Space and its contents`;
+  const visibilityDevDescription = `Controls access permissions for this Space entity:<br/><br/><strong>Public:</strong> Space is visible to all users and indexed by the system<br/><br/><strong>Private:</strong> Space is only accessible to the owner's wallet address, filtered from public queries`;
 
   if (!selectedNode) return null;
 
   /* ---------- SPACE INSPECTOR ---------- */
   if (isSpace) {
-    const canEditVisibility = address && selectedNode?.data?.owner && address.toLowerCase() === selectedNode.data.owner.toLowerCase();
+    const canEditVisibility = Boolean(
+      selectedNode.data?.owner && 
+      address && 
+      selectedNode.data.owner.toLowerCase() === address.toLowerCase()
+    );
 
     const handleSpaceLabelChange = (value: string) => {
       setLabel(value);
@@ -246,7 +254,14 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Visibility</label>
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="block text-sm font-medium text-gray-400">Visibility</label>
+                  <Info
+                    className="w-4 h-4 text-gray-400 cursor-pointer"
+                    data-tooltip-id="inspector-tooltip"
+                    data-tooltip-html={isDevMode ? visibilityDevDescription : visibilityDescription}
+                  />
+                </div>
                 <select
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   value={visibility}

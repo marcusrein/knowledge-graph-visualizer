@@ -464,6 +464,14 @@ export default function GraphPage() {
             editorAddress: address,
           };
 
+      console.log('[updateNodeData] Sending update:', {
+        nodeId,
+        endpoint,
+        payload,
+        hasProperties: !!data.properties,
+        propertyCount: Object.keys(data.properties || {}).length
+      });
+
       const res = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1481,15 +1489,16 @@ export default function GraphPage() {
           });
 
           // Toast feedback
+          const entityName = node.data?.label || 'Untitled';
           if (newParentId) {
             const spaceNode = nodes.find((n) => n.id === newParentId);
             const spaceName = spaceNode?.data?.label || 'Space';
-            toast.success(`Moved to ${spaceName}`);
+            toast.success(`Moved ${entityName} into ${spaceName}`);
           } else if (normalizedCurrentParent) {
             // Moving out of a space - show which space it was removed from
             const previousSpaceNode = nodes.find((n) => n.id === normalizedCurrentParent);
             const previousSpaceName = previousSpaceNode?.data?.label || 'Space';
-            toast.success(`Removed from ${previousSpaceName}`);
+            toast.success(`Moved ${entityName} out of ${previousSpaceName}`);
           }
 
           // skip the later patch below to avoid duplicate if we already handled
