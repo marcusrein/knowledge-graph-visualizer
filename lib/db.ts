@@ -50,6 +50,19 @@ const init = () => {
       created_at TEXT,
       FOREIGN KEY(relationId) REFERENCES relations(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS edit_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nodeId TEXT NOT NULL,
+      nodeType TEXT NOT NULL CHECK(nodeType IN ('entity','relation')),
+      action TEXT NOT NULL CHECK(action IN ('create','update','delete')),
+      field TEXT,
+      oldValue TEXT,
+      newValue TEXT,
+      editorAddress TEXT,
+      timestamp TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // Add x and y columns if they were missing from an existing database

@@ -65,6 +65,11 @@ body {
   @apply dark:hover:bg-blue-900/20;
 }
 
+.btn-error {
+  @apply bg-red-600 text-white border-red-600 hover:bg-red-700 focus:ring-red-500;
+  @apply shadow-sm hover:shadow-md;
+}
+
 /* Custom input styles */
 .input {
   @apply block w-full rounded-md border px-3 py-2 text-sm;

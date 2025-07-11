@@ -52,39 +52,75 @@ export async function POST(req: NextRequest) {
     "INSERT INTO entities (nodeId, label, type, userAddress, parentId, x, y, width, height, properties, visibility, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))"
   );
   const info = stmt.run(nodeId, label, type, userAddress ?? null, parentId ?? null, x ?? null, y ?? null, width ?? null, height ?? null, JSON.stringify(body.properties ?? {}), visibility ?? 'public');
+  
+  // Record creation in edit history
+  db.prepare(`
+    INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(nodeId, 'entity', 'create', null, null, label, userAddress ?? null);
+  
   log('POST created', { id: info.lastInsertRowid, nodeId });
   return NextResponse.json({ id: info.lastInsertRowid });
 }
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { nodeId, x, y, label, properties, parentId, visibility: vis, width, height } = body;
+  const { nodeId, x, y, label, properties, parentId, visibility: vis, width, height, editorAddress } = body;
   log('PATCH payload', body);
   if (!nodeId) {
     return NextResponse.json({ error: 'Missing nodeId' }, { status: 400 });
   }
 
+  // Get current values for history tracking
+  const current = db.prepare('SELECT * FROM entities WHERE nodeId = ?').get(nodeId) as any;
+  if (!current) {
+    return NextResponse.json({ error: 'Entity not found' }, { status: 404 });
+  }
+
+  // Helper function to record edit history
+  const recordEdit = (field: string, oldValue: any, newValue: any) => {
+    if (oldValue !== newValue) {
+      db.prepare(`
+        INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(nodeId, 'entity', 'update', field, String(oldValue || ''), String(newValue || ''), editorAddress || null);
+    }
+  };
+
+  // Position updates (don't track in history for noise reduction)
   if (x !== undefined && y !== undefined) {
     db.prepare('UPDATE entities SET x=?, y=? WHERE nodeId=?').run(x, y, nodeId);
   }
 
-  if (label) {
+  // Label updates (track in history)
+  if (label && label !== current.label) {
+    recordEdit('label', current.label, label);
     db.prepare('UPDATE entities SET label=? WHERE nodeId=?').run(label, nodeId);
   }
 
+  // Properties updates (track in history)
   if (properties) {
-    db.prepare('UPDATE entities SET properties=? WHERE nodeId=?').run(JSON.stringify(properties), nodeId);
+    const oldProps = current.properties || '{}';
+    const newProps = JSON.stringify(properties);
+    if (oldProps !== newProps) {
+      recordEdit('properties', oldProps, newProps);
+      db.prepare('UPDATE entities SET properties=? WHERE nodeId=?').run(newProps, nodeId);
+    }
   }
 
-  if (vis) {
+  // Visibility updates (track in history)
+  if (vis && vis !== current.visibility) {
+    recordEdit('visibility', current.visibility, vis);
     db.prepare('UPDATE entities SET visibility=? WHERE nodeId=?').run(vis, nodeId);
   }
 
-  // parentId can be a string or null
-  if (parentId !== undefined) {
+  // Parent updates (track in history)
+  if (parentId !== undefined && parentId !== current.parentId) {
+    recordEdit('parentId', current.parentId, parentId);
     db.prepare('UPDATE entities SET parentId=? WHERE nodeId=?').run(parentId, nodeId);
   }
 
+  // Size updates (don't track in history for noise reduction)
   if (width !== undefined && height !== undefined) {
     db.prepare('UPDATE entities SET width=?, height=? WHERE nodeId=?').run(width, height, nodeId);
   }

@@ -207,12 +207,13 @@ export default function GraphPage() {
       const isRelation = isNumeric(nodeId);
       const endpoint = isRelation ? '/api/relations' : '/api/entities';
       const payload = isRelation
-        ? { id: nodeId, relationType: data.label, properties: data.properties }
+        ? { id: nodeId, relationType: data.label, properties: data.properties, editorAddress: address }
         : {
             nodeId: nodeId,
             label: data.label,
             properties: data.properties,
             visibility: data.visibility,
+            editorAddress: address,
           };
 
       const res = await fetch(endpoint, {
@@ -418,10 +419,32 @@ export default function GraphPage() {
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       if (nodes.filter(n => !isNumeric(n.id)).length > 1) {
         completeStep('create-connection');
       }
+      
+      // Create and select the new relation node to show the Inspector immediately
+      const newRelationNode: Node = {
+        id: String(data.id),
+        type: 'relation',
+        data: {
+          label: variables.relationType,
+          properties: {},
+          selectionColor: null,
+          selectingAddress: null
+        },
+        position: { x: variables.x, y: variables.y },
+        draggable: !!address,
+      };
+      
+      // Add the new relation node to the state and select it
+      setNodes((nds) => [...nds, newRelationNode]);
+      setSelectedNode(newRelationNode);
+      
+      // Broadcast selection to other users
+      socket.send(JSON.stringify({ type: 'selection', nodeId: String(data.id) }));
+      
       queryClient.invalidateQueries({ queryKey: ['relations', selectedDate] });
       queryClient.invalidateQueries({ queryKey: ['relationLinks', selectedDate] });
     },
@@ -852,7 +875,13 @@ export default function GraphPage() {
     (_: React.MouseEvent, node: Node) => {
       if (!requireWallet()) return;
 
-      // Relation nodes remain global; no toast needed on simple drag.
+      // Show toast for relation movement to explain global scope
+      if (isNumeric(node.id)) {
+        toast(terms.relationSpaceToast, {
+          icon: '🌐',
+          duration: 4000,
+        });
+      }
 
       // Helper: find enclosing Space (group) for a point (using center of node for more predictable behavior)
       const findEnclosingSpace = (nodeId: string, x: number, y: number): string | null => {
@@ -1020,7 +1049,7 @@ export default function GraphPage() {
         });
       }
     },
-    [nodes, socket, updateEntityPatch, updateRelationPosition, requireWallet]
+    [nodes, socket, updateEntityPatch, updateRelationPosition, requireWallet, terms]
   );
 
   const handlePaneClick = () => {
@@ -1238,316 +1267,383 @@ export default function GraphPage() {
   const hasWallet = !!address;
 
   return (
-    <div className="flex h-screen bg-gray-800 text-white">
-      <div className="flex-1 h-screen relative">
-        <div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
-          <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-            <div ref={menuRef} className="relative">
-              <button
-                className="flex items-center space-x-2"
-                onClick={() => setShowMenu(prev => !prev)}
-              >
-                <img src="/file.svg" alt="File" className="w-6 h-6" />
-                <span className="text-sm font-mono">GRC-20</span>
-                <span className="text-xs">▼</span>
-              </button>
-              {showMenu && (
-                <ul className="absolute top-full left-0 mt-2 bg-gray-800 rounded-lg shadow-lg p-2 w-48">
-                  <li>
-                    <a
-                      href="#"
-                      onClick={() => setShowWelcome(true)}
-                      className="block px-4 py-2 hover:bg-gray-700 rounded"
-                    >
-                      Help
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="https://thegraph.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block px-4 py-2 hover:bg-gray-700 rounded"
-                    >
-                      The Graph
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block px-4 py-2 hover:bg-gray-700 rounded"
-                    >
-                      GRC-20 Spec
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="https://github.com/graphprotocol/hypergraph"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block px-4 py-2 hover:bg-gray-700 rounded"
-                    >
-                      Hypergraph Repo
-                    </a>
-                  </li>
-                </ul>
-              )}
-            </div>
-            <div
-              onClick={toggleMode}
-              className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1"
-            >
-              <div
-                className={`px-3 py-1 rounded-full transition-colors duration-300 ${
-                  !isDevMode ? 'bg-blue-600 text-white' : 'text-gray-400'
-                }`}
-              >
-                Normie Mode
-              </div>
-              <div
-                className={`px-3 py-1 rounded-full transition-colors duration-300 ${
-                  isDevMode ? 'bg-green-600 text-white' : 'text-gray-400'
-                }`}
-              >
-                Dev Mode
-              </div>
-            </div>
+		<div className="flex h-screen bg-gray-800 text-white">
+			<div className="flex-1 h-screen relative">
+				<div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
+					<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
+						<div ref={menuRef} className="relative">
+							<button
+								className="flex items-center space-x-2"
+								onClick={() => setShowMenu((prev) => !prev)}
+							>
+								<img src="/file.svg" alt="File" className="w-6 h-6" />
+								<span className="text-sm font-mono">GRC-20</span>
+								<span className="text-xs">▼</span>
+							</button>
+							{showMenu && (
+								<ul className="absolute top-full left-0 mt-2 bg-gray-800 rounded-lg shadow-lg p-2 w-48">
+									<li>
+										<a
+											href="#"
+											onClick={() => setShowWelcome(true)}
+											className="block px-4 py-2 hover:bg-gray-700 rounded"
+										>
+											Help
+										</a>
+									</li>
+									<li>
+										<a
+											href="https://thegraph.com"
+											target="_blank"
+											rel="noopener noreferrer"
+											className="block px-4 py-2 hover:bg-gray-700 rounded"
+										>
+											The Graph
+										</a>
+									</li>
+									<li>
+										<a
+											href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md"
+											target="_blank"
+											rel="noopener noreferrer"
+											className="block px-4 py-2 hover:bg-gray-700 rounded"
+										>
+											GRC-20 Spec
+										</a>
+									</li>
+									<li>
+										<a
+											href="https://github.com/graphprotocol/hypergraph"
+											target="_blank"
+											rel="noopener noreferrer"
+											className="block px-4 py-2 hover:bg-gray-700 rounded"
+										>
+											Hypergraph Repo
+										</a>
+									</li>
+								</ul>
+							)}
+						</div>
+						<div
+							onClick={toggleMode}
+							className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1"
+						>
+							<div
+								className={`px-3 py-1 rounded-full transition-colors duration-300 ${
+									!isDevMode ? "bg-blue-600 text-white" : "text-gray-400"
+								}`}
+							>
+								Normie Mode
+							</div>
+							<div
+								className={`px-3 py-1 rounded-full transition-colors duration-300 ${
+									isDevMode ? "bg-green-600 text-white" : "text-gray-400"
+								}`}
+							>
+								Dev Mode
+							</div>
+						</div>
 
-            <span className="font-mono text-lg">{terms.knowledgeGraph}</span>
-            <span className="font-mono text-lg text-gray-400">/</span>
-            <img src="/globe.svg" alt="Globe" className="w-6 h-6" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-sm"
-              data-tooltip-id="kg-node-tip"
-              data-tooltip-content={`Select a date to view the ${terms.knowledgeGraph} for that day. It is ephemeral and resets daily.`}
-            />
-          </div>
+						<span className="font-mono text-lg">{terms.knowledgeGraph}</span>
+						<span className="font-mono text-lg text-gray-400">/</span>
+						<img src="/globe.svg" alt="Globe" className="w-6 h-6" />
+						<input
+							type="date"
+							value={selectedDate}
+							onChange={(e) => setSelectedDate(e.target.value)}
+							className="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-sm"
+							data-tooltip-id="kg-node-tip"
+							data-tooltip-content={`Select a date to view the ${terms.knowledgeGraph} for that day. \n\n As this app is multiplayer, you can see how daily collaborative knowledge graphs are built over time.`}
+						/>
+					</div>
 
-          <button
-            onClick={handleAddNode}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-            data-tooltip-id="kg-node-tip"
-            data-tooltip-content="Create Topic"
-          >
-            +
-          </button>
+					<button
+						onClick={handleAddNode}
+						className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+						data-tooltip-id="kg-node-tip"
+						data-tooltip-content="Create Topic"
+					>
+						+
+					</button>
 
-          <button
-            onClick={handleAddSpace}
-            className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded"
-            data-tooltip-id="kg-node-tip"
-            data-tooltip-content="Create Space"
-          >
-            □
-          </button>
+					<button
+						onClick={handleAddSpace}
+						className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded"
+						data-tooltip-id="kg-node-tip"
+						data-tooltip-content="Create Space"
+					>
+						□
+					</button>
 
-          <button
-            onClick={handleAutoLayout}
-            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
-            data-tooltip-id="kg-node-tip"
-            data-tooltip-content="Tidy up layout"
-          >
-            ⇆
-          </button>
+					<button
+						onClick={handleAutoLayout}
+						className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+						data-tooltip-id="kg-node-tip"
+						data-tooltip-content="Tidy up layout"
+					>
+						⇆
+					</button>
 
-          <button
-            onClick={handleCenterView}
-            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
-            data-tooltip-id="kg-node-tip"
-            data-tooltip-content="Center view"
-          >
-            ☉
-          </button>
+					<button
+						onClick={handleCenterView}
+						className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+						data-tooltip-id="kg-node-tip"
+						data-tooltip-content="Center view"
+					>
+						☉
+					</button>
 
-          <div className="flex items-center space-x-2">
-            {presentUsers.filter(u => u.address !== address).map(user => (
-              <Avatar key={user.id} address={user.address} />
-            ))}
-          </div>
-        </div>
+					<div className="flex items-center space-x-2">
+						{presentUsers
+							.filter((u) => u.address !== address)
+							.map((user) => (
+								<Avatar key={user.id} address={user.address} />
+							))}
+					</div>
+				</div>
 
-        <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
-          {connecting ? (
-            <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-              <span className="text-sm font-mono">Loading...</span>
-            </div>
-          ) : address ? (
-            <div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-              <span className="flex items-center space-x-2">
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: addressToColor(address) }} />
-                <span className="text-sm font-mono">{`${address.slice(0,6)}...${address.slice(-4)}`}</span>
-              </span>
-              <button
-                onClick={() => disconnect()}
-                className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs"
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-2">
-              {connectors.map((connector) => (
-                <button
-                  key={connector.uid}
-                  onClick={() => connect({ connector })}
-                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-                >
-                  {connector.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+				<div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
+					{connecting ? (
+						<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
+							<span className="text-sm font-mono">Loading...</span>
+						</div>
+					) : address ? (
+						<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
+							<span className="flex items-center space-x-2">
+								<span
+									className="w-3 h-3 rounded-full"
+									style={{ backgroundColor: addressToColor(address) }}
+								/>
+								<span className="text-sm font-mono">{`${address.slice(
+									0,
+									6
+								)}...${address.slice(-4)}`}</span>
+							</span>
+							<button
+								onClick={() => disconnect()}
+								className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs"
+							>
+								Disconnect
+							</button>
+						</div>
+					) : (
+						<div className="flex items-center space-x-2">
+							{connectors.map((connector) => (
+								<button
+									key={connector.uid}
+									onClick={() => connect({ connector })}
+									className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+								>
+									{connector.name}
+								</button>
+							))}
+						</div>
+					)}
+				</div>
 
-        {!hasWallet && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center backdrop-blur-xs">
-            <div className="bg-gray-800/90 rounded-lg px-6 py-4 flex flex-col items-center space-y-4">
-              <p className="text-white text-lg font-medium text-center">The Knowledge Graph Visualizer</p>
+				{!hasWallet && (
+					<div className="absolute inset-0 z-30 flex items-center justify-center backdrop-blur-xs">
+						<div className="bg-gray-800/90 rounded-lg px-6 py-4 flex flex-col items-center space-y-4">
+							<p className="text-white text-lg font-medium text-center">
+								The Knowledge Graph Visualizer
+							</p>
 
-              <button
-                onClick={() => connectors[0] && connect({ connector: connectors[0] })}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-              >
-                Connect with MetaMask
-              </button>
-            </div>
-          </div>
-        )}
+							<button
+								onClick={() =>
+									connectors[0] && connect({ connector: connectors[0] })
+								}
+								className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+							>
+								Connect with MetaMask
+							</button>
+						</div>
+					</div>
+				)}
 
-        {/* Default edge styling */}
-        <ReactFlow
-          onInit={setRfInstance}
-          deleteKeyCode={null}
-          defaultEdgeOptions={{
-            type: 'smoothstep',
-            markerEnd: { type: MarkerType.ArrowClosed, width: 30, height: 30, color: '#fff' },
-            style: { strokeWidth: 2, stroke: '#AAA' },
-          }}
-          panOnDrag={hasWallet}
-          panOnScroll={hasWallet}
-          zoomOnScroll={hasWallet}
-          zoomOnPinch={hasWallet}
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onPaneClick={handlePaneClick}
-          onNodeClick={handleNodeClick}
-          onNodeDragStop={onNodeDragStop}
-          nodeTypes={nodeTypes}
-          connectionLineType={ConnectionLineType.SmoothStep}
-          fitView
-          className={`bg-gray-900 ${((showWelcome) || (nodes.length === 0 && showWelcome !== false)) ? 'pointer-events-none opacity-10' : ''}`}
-        >
-          <Background />
-          <Controls />
-        </ReactFlow>
+				{/* Default edge styling */}
+				<ReactFlow
+					onInit={setRfInstance}
+					deleteKeyCode={null}
+					defaultEdgeOptions={{
+						type: "smoothstep",
+						markerEnd: {
+							type: MarkerType.ArrowClosed,
+							width: 30,
+							height: 30,
+							color: "#fff",
+						},
+						style: { strokeWidth: 2, stroke: "#AAA" },
+					}}
+					panOnDrag={hasWallet}
+					panOnScroll={hasWallet}
+					zoomOnScroll={hasWallet}
+					zoomOnPinch={hasWallet}
+					nodes={nodes}
+					edges={edges}
+					onNodesChange={onNodesChange}
+					onEdgesChange={onEdgesChange}
+					onConnect={onConnect}
+					onPaneClick={handlePaneClick}
+					onNodeClick={handleNodeClick}
+					onNodeDragStop={onNodeDragStop}
+					nodeTypes={nodeTypes}
+					connectionLineType={ConnectionLineType.SmoothStep}
+					fitView
+					className={`bg-gray-900 ${
+						showWelcome || (nodes.length === 0 && showWelcome !== false)
+							? "pointer-events-none opacity-10"
+							: ""
+					}`}
+				>
+					<Background />
+					<Controls />
+				</ReactFlow>
 
-        {selectedNode && (
-          <Inspector
-            selectedNode={selectedNode}
-            onClose={() => {
-              setSelectedNode(null);
-              socket.send(JSON.stringify({ type: 'selection', nodeId: null }));
-            }}
-            onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
-            onDelete={(nodeId, isRelation) => {
-              if (isRelation) {
-                deleteRelation.mutate({ id: nodeId });
-              } else {
-                deleteEntity.mutate({ nodeId });
-              }
-            }}
-          />
-        )}
+				{selectedNode && (
+					<Inspector
+						selectedNode={selectedNode}
+						onClose={() => {
+							setSelectedNode(null);
+							socket.send(JSON.stringify({ type: "selection", nodeId: null }));
+						}}
+						onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
+						onDelete={(nodeId, isRelation) => {
+							if (isRelation) {
+								deleteRelation.mutate({ id: nodeId });
+							} else {
+								deleteEntity.mutate({ nodeId });
+							}
+						}}
+					/>
+				)}
 
-        {showChecklist && (
-          <OnboardingChecklist
-            steps={ONBOARDING_STEPS.map(step => ({ ...step, isCompleted: completedSteps.includes(step.id) }))}
-            onDismiss={dismissChecklist}
-          />
-        )}
+				{showChecklist && (
+					<OnboardingChecklist
+						steps={ONBOARDING_STEPS.map((step) => ({
+							...step,
+							isCompleted: completedSteps.includes(step.id),
+						}))}
+						onDismiss={dismissChecklist}
+					/>
+				)}
 
-        <Tooltip id="kg-node-tip" place="bottom" />
-      </div>
+				<Tooltip
+					id="kg-node-tip"
+					place="bottom"
+					className="z-50 max-w-xs whitespace-pre-line"
+				/>
+			</div>
 
-      {showWelcome && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-2xl mx-4 shadow-2xl border border-gray-700">
-            <div className="space-y-3">
-              <h2 className="text-3xl font-extrabold text-white">Welcome to the Knowledge Graph Visualizer</h2>
-              <p className="text-gray-300 text-lg leading-relaxed">
-                Map concepts, ideas, and data into an interactive graph you can expand and
-                explore collaboratively.
-              </p>
-            </div>
+			{showWelcome && (
+				<div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+					<div className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-2xl mx-4 shadow-2xl border border-gray-700">
+						<div className="space-y-3">
+							<h2 className="text-3xl font-extrabold text-white">
+								Welcome to the Knowledge Graph Visualizer
+							</h2>
+							<p className="text-gray-300 text-lg leading-relaxed">
+								Map concepts, ideas, and data into an interactive graph you can
+								expand and explore collaboratively.
+							</p>
+						</div>
 
-            <div className="grid md:grid-cols-2 gap-6 text-left">
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-2">How to Use</h3>
-                <ul className="text-sm text-gray-300 space-y-2">
-                  <li className="flex items-start space-x-2">
-                    <span className="text-blue-400 font-bold">+</span>
-                    <span><span className="font-semibold text-blue-400">Create Topics</span> to represent key ideas</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-purple-400 font-bold">□</span>
-                    <span><span className="font-semibold text-purple-400">Group Topics into Spaces</span> for organization</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-gray-400">→</span>
-                    <span>Draw relations to show how everything connects</span>
-                  </li>
-                </ul>
-              </div>
+						<div className="grid md:grid-cols-2 gap-6 text-left">
+							<div className="space-y-3">
+								<h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-2">
+									How to Use
+								</h3>
+								<ul className="text-sm text-gray-300 space-y-2">
+									<li className="flex items-start space-x-2">
+										<span className="text-blue-400 font-bold">+</span>
+										<span>
+											<span className="font-semibold text-blue-400">
+												Create Topics
+											</span>{" "}
+											to represent key ideas
+										</span>
+									</li>
+									<li className="flex items-start space-x-2">
+										<span className="text-purple-400 font-bold">□</span>
+										<span>
+											<span className="font-semibold text-purple-400">
+												Group Topics </span> <span>into public or private <span className="font-bold text-green-400">Spaces</span></span> for organization
+											</span>
+									</li>
+									<li className="flex items-start space-x-2">
+										<span className="text-green-400">🔗</span>
+										<span>
+											Draw <span className="font-bold text-orange-400">Relations</span> between Topics to show how different ideas connect
+										</span>
+									</li>
+								</ul>
+							</div>
 
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-2">About This App</h3>
-                <ul className="text-sm text-gray-300 space-y-2">
-                  <li>• Collaborative visualizer for exploring knowledge graph concepts</li>
-                  <li>• Multiple users can connect wallets and build together in real-time</li>
-                  <li>• Data is ephemeral and resets daily. Go play!</li>
-                </ul>
-              </div>
-            </div>
+							<div className="space-y-3">
+								<h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-2">
+									About This App
+								</h3>
+								<ul className="text-sm text-gray-300 space-y-2">
+									<li>
+										• Collaborative visualizer for exploring knowledge graph
+										concepts
+									</li>
+									<li>
+										• Multiple users can connect wallets and build together in
+										real-time
+									</li>
+									<li>• Data is ephemeral and resets daily. Go play!</li>
+								</ul>
+							</div>
+						</div>
 
-                         <div className="pt-4 border-t border-gray-700">
-               <p className="text-sm text-gray-400 mb-4">
-                 To learn more, see the{' '}
-                 <a 
-                   href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md" 
-                   target="_blank" 
-                   rel="noopener noreferrer" 
-                   className="text-blue-400 hover:text-blue-300 underline transition-colors"
-                 >
-                   GRC-20 spec
-                 </a>
-                 {' '}and The Graph&apos;s knowledge graph{' '}
-                 <a 
-                   href="https://thegraph.com/blog/grc20-knowledge-graph/" 
-                   target="_blank" 
-                   rel="noopener noreferrer" 
-                   className="text-blue-400 hover:text-blue-300 underline transition-colors"
-                 >
-                   announcement
-                 </a>
-               </p>
-              <button
-                onClick={() => setShowWelcome(false)}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-colors duration-200 shadow-lg"
-              >
-                Start Building
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+						{/* Key Insight - Full Width */}
+						<div className="mt-6 p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-400/20 rounded-lg">
+							<div className="flex items-start space-x-4">
+								<span className="text-3xl">✨</span>
+								<div className="flex-1">
+									<div className="text-blue-300 font-semibold text-sm uppercase tracking-wide mb-2">
+										Key Insight
+									</div>
+									<div className="text-white font-medium text-lg leading-relaxed">
+										When two Topics are connected by a relationship, we now have{" "}
+										<span className="text-blue-300 font-bold">Knowledge</span>{" "}
+										in our knowledge graph!
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<div className="pt-4 border-t border-gray-700">
+							<p className="text-sm text-gray-400 mb-4">
+								To learn more, see the{" "}
+								<a
+									href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md"
+									target="_blank"
+									rel="noopener noreferrer"
+									className="text-blue-400 hover:text-blue-300 underline transition-colors"
+								>
+									GRC-20 spec
+								</a>{" "}
+								and The Graph&apos;s knowledge graph{" "}
+								<a
+									href="https://thegraph.com/blog/grc20-knowledge-graph/"
+									target="_blank"
+									rel="noopener noreferrer"
+									className="text-blue-400 hover:text-blue-300 underline transition-colors"
+								>
+									announcement
+								</a>
+							</p>
+							<button
+								onClick={() => setShowWelcome(false)}
+								className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-colors duration-200 shadow-lg"
+							>
+								Start Building
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+		</div>
+	);
 }

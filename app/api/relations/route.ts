@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { format } from 'date-fns';
+
+// Database types
+interface RelationRow {
+  id: number;
+  sourceId: string | null;
+  targetId: string | null;
+  relationType: string;
+  properties: string | null;
+  x: number;
+  y: number;
+  userAddress: string | null;
+  created_at: string;
+}
+
 // Verbose logging helper
 const log = (...args: unknown[]) => console.log('[Relations]', new Date().toISOString(), ...args);
 
@@ -30,6 +44,12 @@ export async function POST(req: NextRequest) {
   );
   const info = stmt.run(sourceId, targetId, relationType, userAddress ?? null, x, y);
   log('POST created', { id: info.lastInsertRowid, sourceId, targetId, relationType });
+
+  // Record creation in edit history
+  db.prepare(`
+    INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(String(info.lastInsertRowid), 'relation', 'create', null, null, relationType, userAddress ?? null);
 
   // insert into relation_links table
   const linkStmt = db.prepare("INSERT INTO relation_links (relationId, entityId, role, created_at) VALUES (?,?,?,datetime('now'))");
@@ -72,7 +92,7 @@ export async function DELETE(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { id, x, y, relationType, properties, sourceId, targetId } = body;
+  const { id, x, y, relationType, properties, sourceId, targetId, editorAddress } = body;
   log('PATCH payload', body);
   if (!id) {
     return NextResponse.json({ error: 'Missing relation ID' }, { status: 400 });
@@ -83,32 +103,52 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid relation ID' }, { status: 400 });
   }
 
+  // Get current values for history tracking
+  const current = db.prepare('SELECT * FROM relations WHERE id = ?').get(relationId) as RelationRow | undefined;
+  if (!current) {
+    return NextResponse.json({ error: 'Relation not found' }, { status: 404 });
+  }
+
+  // Helper function to record edit history
+  const recordEdit = (field: string, oldValue: string | number | null, newValue: string | number | null) => {
+    if (oldValue !== newValue) {
+      db.prepare(`
+        INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(String(relationId), 'relation', 'update', field, String(oldValue || ''), String(newValue || ''), editorAddress || null);
+    }
+  };
+
+  // Position updates (don't track in history for noise reduction)
   if (x !== undefined && y !== undefined) {
     db.prepare('UPDATE relations SET x=?, y=? WHERE id=?').run(x, y, relationId);
   }
 
-  if (relationType) {
+  // Relation type updates (track in history)
+  if (relationType && relationType !== current.relationType) {
+    recordEdit('relationType', current.relationType, relationType);
     db.prepare('UPDATE relations SET relationType=? WHERE id=?').run(relationType, relationId);
   }
 
+  // Properties updates (track in history)
   if (properties) {
-    db.prepare('UPDATE relations SET properties=? WHERE id=?').run(JSON.stringify(properties), relationId);
+    const oldProps = current.properties || '{}';
+    const newProps = JSON.stringify(properties);
+    if (oldProps !== newProps) {
+      recordEdit('properties', oldProps, newProps);
+      db.prepare('UPDATE relations SET properties=? WHERE id=?').run(newProps, relationId);
+    }
   }
 
-  if (sourceId) {
+  // Source/target updates (track in history)
+  if (sourceId && sourceId !== current.sourceId) {
+    recordEdit('sourceId', current.sourceId, sourceId);
     db.prepare('UPDATE relations SET sourceId=? WHERE id=?').run(sourceId, relationId);
   }
 
-  if (targetId) {
+  if (targetId && targetId !== current.targetId) {
+    recordEdit('targetId', current.targetId, targetId);
     db.prepare('UPDATE relations SET targetId=? WHERE id=?').run(targetId, relationId);
-  }
-
-  // Check if any update was successful to prevent false negatives
-  const checkStmt = db.prepare('SELECT id FROM relations WHERE id = ?');
-  const info = checkStmt.get(relationId) as { id: number } | undefined;
-
-  if (!info) {
-    return NextResponse.json({ error: 'Relation not found' }, { status: 404 });
   }
 
   return NextResponse.json({ success: true });
