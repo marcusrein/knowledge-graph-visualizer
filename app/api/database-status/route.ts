@@ -147,8 +147,6 @@ export async function POST(req: NextRequest) {
 // Helper function to get top users by activity
 async function getTopUsers() {
   try {
-    const { getDatabaseSize } = await import('@/lib/database');
-    
     // This is a simplified version - in a real implementation, 
     // you'd query the database for user statistics
     return {
@@ -156,7 +154,7 @@ async function getTopUsers() {
       totalUsers: 0,
       activeUsers: 0
     };
-  } catch (error) {
+  } catch {
     return { error: 'Failed to get user statistics' };
   }
 } 
