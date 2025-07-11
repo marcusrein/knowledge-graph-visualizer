@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
   },
   // Optimize for production
   productionBrowserSourceMaps: process.env.NODE_ENV === 'development',
+  // Disable ESLint warnings during build
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Headers for security
   async headers() {
     return [

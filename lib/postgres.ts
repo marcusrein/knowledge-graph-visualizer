@@ -1,5 +1,4 @@
 import { sql as vercelSql } from '@vercel/postgres';
-// @ts-expect-error - postgres driver no types
 import postgres from 'postgres';
 
 // Choose driver
