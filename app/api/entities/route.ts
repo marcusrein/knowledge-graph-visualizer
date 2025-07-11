@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       const sanitized = await getEntitiesForDate(date, addressParam || undefined);
       
       console.log(`[API] GET ENTITIES RESULT: ${sanitized.length} entities returned`);
-      log('GET', { date, rows: sanitized.length });
+      log('GET', { date, rows: sanitized.length, debug: `Fetched ${sanitized.length} entities for ${date}` });
       
       const duration = Date.now() - startTime;
       logger.info('API', 'GET /api/entities completed', { 
