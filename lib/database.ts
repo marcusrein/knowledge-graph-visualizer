@@ -1,9 +1,16 @@
-import { sql } from '@vercel/postgres';
+import { sql as vercelSql } from '@vercel/postgres';
+// Switch driver when using Supabase (non-Neon Postgres)
+// @ts-expect-error - postgres has no official types but works fine
+import postgres from 'postgres';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { dbProtection, DatabaseOperation } from './databaseProtection';
 import { errorLogger } from './errorHandler';
+
+// Determine which SQL client to use
+const isSupabase = process.env.SUPABASE_URL || (process.env.DATABASE_URL?.includes('supabase.co'));
+const sql = isSupabase ? (postgres(process.env.DATABASE_URL!, { ssl: 'require' }) as unknown as typeof vercelSql) : vercelSql;
 
 // Environment detection
 const isProduction = process.env.NODE_ENV === 'production';

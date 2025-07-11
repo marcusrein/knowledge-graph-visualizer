@@ -1,4 +1,10 @@
-import { sql } from '@vercel/postgres';
+import { sql as vercelSql } from '@vercel/postgres';
+// @ts-expect-error - postgres driver no types
+import postgres from 'postgres';
+
+// Choose driver
+const isSupabase = process.env.SUPABASE_URL || (process.env.DATABASE_URL?.includes('supabase.co'));
+const sql = isSupabase ? (postgres(process.env.DATABASE_URL!, { ssl: 'require' }) as unknown as typeof vercelSql) : vercelSql;
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Initialize database tables
