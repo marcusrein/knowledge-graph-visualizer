@@ -910,6 +910,22 @@ export default function GraphPage() {
     }
   }, [showWelcome, nodes.length]);
 
+  // Debug: Log when nodes state changes
+  useEffect(() => {
+    console.log('[React State] Nodes array updated, length:', nodes.length);
+    console.log('[React State] Node IDs:', nodes.map(n => n.id));
+    console.log('[React State] showWelcome:', showWelcome);
+    console.log('[React State] Current viewport:', rfInstance?.getViewport());
+    
+    // Force fitView when nodes change to ensure they're visible
+    if (rfInstance && nodes.length > 0 && !showWelcome) {
+      setTimeout(() => {
+        console.log('[React State] Forcing fitView for', nodes.length, 'nodes');
+        rfInstance.fitView({ padding: 0.2, duration: 500 });
+      }, 100);
+    }
+  }, [nodes, showWelcome, rfInstance]);
+
   const addressToColor = useCallback((addr: string) => {
     // simple deterministic hash to hue
     let hash = 0;
@@ -1191,6 +1207,12 @@ export default function GraphPage() {
       const built = buildNodes();
       console.log('[BuildNodes] count', built.length);
       console.table(built.map((n) => ({ id: n.id, type: n.type, parentId: n.parentId, x: n.position.x, y: n.position.y })));
+      
+      // Log the actual nodes being set to help debug rendering issues
+      console.log('[BuildNodes] Setting nodes with IDs:', built.map(n => n.id));
+      console.log('[BuildNodes] Node types:', built.map(n => `${n.id}:${n.type}`));
+      console.log('[BuildNodes] Node positions:', built.map(n => `${n.id}:(${n.position.x},${n.position.y})`));
+      
       setNodes(built);
       setEdges(newEdges);
     }
@@ -2269,6 +2291,7 @@ export default function GraphPage() {
 
 				{/* ReactFlow - Main Canvas */}
 				<ReactFlow
+					key={`reactflow-${nodes.length}-${edges.length}`}
 					onInit={setRfInstance}
 					deleteKeyCode={null}
 					defaultEdgeOptions={{
@@ -2296,6 +2319,7 @@ export default function GraphPage() {
 					nodeTypes={nodeTypes}
 					connectionLineType={ConnectionLineType.SmoothStep}
 					fitView
+					fitViewOptions={{ padding: 0.2, minZoom: 0.1, maxZoom: 2 }}
 					className={`bg-gray-900 ${
 						showWelcome
 							? "pointer-events-none opacity-10"
