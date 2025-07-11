@@ -7,7 +7,7 @@ import {
   createEntity, 
   updateEntity, 
   deleteEntity 
-} from '@/lib/postgres';
+} from '@/lib/database';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Verbose logging helper

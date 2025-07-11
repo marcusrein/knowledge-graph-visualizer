@@ -368,7 +368,7 @@ function createEntitySQLite(data: {
   
   try {
     // Check for duplicates
-    const existing = sqliteDb.prepare('SELECT id FROM entities WHERE nodeId = ?').get(data.nodeId);
+    const existing = sqliteDb.prepare('SELECT id FROM entities WHERE nodeId = ?').get(data.nodeId) as { id: number } | undefined;
     
     if (existing) {
       return { id: existing.id, duplicated: true };
