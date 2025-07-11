@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
     
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get('date');
-    const date = dateParam ?? format(new Date(), 'yyyy-MM-dd');
+    // If date parameter is empty string, pass it through (to get all entities)
+    // Otherwise use today's date as default
+    const date = dateParam === '' ? '' : (dateParam ?? format(new Date(), 'yyyy-MM-dd'));
 
     console.log(`[API] GET ENTITIES START: date=${date}, userAddress=${addressParam}`);
     logger.info('API', 'GET /api/entities started', { date, userAddress: addressParam }, addressParam || undefined);

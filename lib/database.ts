@@ -12,15 +12,20 @@ const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 const isSupabase = process.env.SUPABASE_URL || (databaseUrl?.includes('supabase.co'));
 
 // Create SQL client based on database type
-let sql: typeof vercelSql;
+let sql: any;
+let isPostgresDriver = false;
+
 if (isSupabase) {
-  sql = postgres(databaseUrl!, { ssl: 'require' }) as unknown as typeof vercelSql;
+  sql = postgres(databaseUrl!, { ssl: 'require' });
+  isPostgresDriver = true;
 } else if (process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
   // If we have POSTGRES_URL but not DATABASE_URL, use postgres driver
-  sql = postgres(process.env.POSTGRES_URL, { ssl: 'require' }) as unknown as typeof vercelSql;
+  sql = postgres(process.env.POSTGRES_URL, { ssl: 'require' });
+  isPostgresDriver = true;
 } else {
   // Use Vercel's built-in PostgreSQL client
   sql = vercelSql;
+  isPostgresDriver = false;
 }
 
 // Environment detection
@@ -298,38 +303,63 @@ async function getEntitiesForDatePostgres(date: string, userAddress?: string) {
     console.log(`[Database] QUERY START: Getting entities for date: ${date}, userAddress: ${userAddress}`);
     
     // First, let's see what's actually in the database
-    const allEntities = await sql`SELECT * FROM entities ORDER BY created_at DESC LIMIT 10`;
-    console.log(`[Database] ALL ENTITIES COUNT: ${allEntities?.rows?.length || 0}`);
+    const allEntities = isPostgresDriver 
+      ? await sql`SELECT * FROM entities ORDER BY created_at DESC LIMIT 10`
+      : await sql`SELECT * FROM entities ORDER BY created_at DESC LIMIT 10`;
     
-    if (allEntities?.rows && allEntities.rows.length > 0) {
-      console.log(`[Database] SAMPLE ENTITY:`, JSON.stringify(allEntities.rows[0]));
+    const allRows = isPostgresDriver ? allEntities : allEntities?.rows;
+    console.log(`[Database] ALL ENTITIES COUNT: ${allRows?.length || 0}`);
+    
+    if (allRows && allRows.length > 0) {
+      console.log(`[Database] SAMPLE ENTITY:`, JSON.stringify(allRows[0]));
     }
     
     // Handle empty date parameter (get all entities) vs specific date
-    const result = date === '' ? 
-      await sql`
+    let result;
+    if (date === '') {
+      console.log('[Database] Fetching ALL entities (no date filter)');
+      result = await sql`
         SELECT * FROM entities 
-        ORDER BY created_at ASC
-      ` :
-      await sql`
-        SELECT * FROM entities 
-        WHERE DATE(created_at) = ${date}
         ORDER BY created_at ASC
       `;
+    } else {
+      console.log(`[Database] Fetching entities for specific date: ${date}`);
+      // Use timezone-aware date comparison
+      result = await sql`
+        SELECT * FROM entities 
+        WHERE created_at::date = ${date}::date
+        ORDER BY created_at ASC
+      `;
+      
+      // If no results, also try with timezone considerations
+      const rows = isPostgresDriver ? result : result?.rows;
+      if (!rows || rows.length === 0) {
+        console.log('[Database] No results with ::date comparison, trying with AT TIME ZONE');
+        result = await sql`
+          SELECT * FROM entities 
+          WHERE (created_at AT TIME ZONE 'UTC')::date = ${date}::date
+          ORDER BY created_at ASC
+        `;
+      }
+    }
     
-    console.log(`[Database] FILTERED QUERY RESULT: ${result?.rows?.length || 0} rows (date: ${date})`);
+    const resultRows = isPostgresDriver ? result : result?.rows;
+    console.log(`[Database] FILTERED QUERY RESULT: ${resultRows?.length || 0} rows (date: ${date})`);
     
-    if (!result || !result.rows) {
+    if (!resultRows) {
       console.log('[Database] RETURNING EMPTY ARRAY - no result or rows');
       return [];
     }
     
-    return result.rows.map((row: Record<string, unknown>) => {
+    return resultRows.map((row: Record<string, unknown>) => {
+      // Handle both useraddress and userAddress column names (case sensitivity)
+      const rowUserAddress = row.useraddress || row.userAddress;
+      
       if (
         row.type === 'group' &&
         row.visibility === 'private' &&
-        row.useraddress &&
-        String(row.useraddress).toLowerCase() !== (userAddress || '').toLowerCase()
+        rowUserAddress &&
+        String(rowUserAddress).toLowerCase() !== (userAddress || '').toLowerCase()
       ) {
         return { ...row, label: '', properties: {} };
       }
@@ -563,7 +593,8 @@ async function getDatabaseSizePostgres(): Promise<{ sizeKB: number; tableStats: 
     `;
 
     const tableStats: Record<string, number> = {};
-    tableStatsResults.rows.forEach(row => {
+    const statsRows = isPostgresDriver ? tableStatsResults : tableStatsResults.rows;
+    statsRows.forEach((row: any) => {
       tableStats[row.table_name] = Number(row.count);
     });
 
@@ -680,11 +711,12 @@ async function createEntityPostgres(data: {
       SELECT id FROM entities WHERE nodeId = ${data.nodeId}
     `;
     
-    console.log(`[Database] DUPLICATE CHECK: ${existing?.rows?.length || 0} existing rows`);
+    const existingRows = isPostgresDriver ? existing : existing?.rows;
+    console.log(`[Database] DUPLICATE CHECK: ${existingRows?.length || 0} existing rows`);
     
-    if (existing?.rows && existing.rows.length > 0) {
-      console.log(`[Database] FOUND DUPLICATE, returning existing id: ${existing.rows[0].id}`);
-      return { id: existing.rows[0].id, duplicated: true };
+    if (existingRows && existingRows.length > 0) {
+      console.log(`[Database] FOUND DUPLICATE, returning existing id: ${existingRows[0].id}`);
+      return { id: existingRows[0].id, duplicated: true };
     }
 
     const result = await sql`
@@ -706,10 +738,11 @@ async function createEntityPostgres(data: {
       RETURNING id, created_at
     `;
 
-    console.log(`[Database] INSERT RESULT: ${result?.rows?.length || 0} rows inserted`);
+    const resultRows = isPostgresDriver ? result : result?.rows;
+    console.log(`[Database] INSERT RESULT: ${resultRows?.length || 0} rows inserted`);
     
-    if (result?.rows && result.rows.length > 0) {
-      console.log(`[Database] CREATED ENTITY: id=${result.rows[0].id}, created_at=${result.rows[0].created_at}`);
+    if (resultRows && resultRows.length > 0) {
+      console.log(`[Database] CREATED ENTITY: id=${resultRows[0].id}, created_at=${resultRows[0].created_at}`);
     }
 
     // Record creation in edit history
@@ -718,13 +751,13 @@ async function createEntityPostgres(data: {
       VALUES (${data.nodeId}, 'entity', 'create', null, null, ${data.label}, ${data.userAddress || null})
     `;
 
-    if (!result?.rows || result.rows.length === 0) {
+    if (!resultRows || resultRows.length === 0) {
       console.log('[Database] INSERT FAILED - No result from insert, returning default id');
       return { id: 1 }; // Fallback ID
     }
 
-    console.log(`[Database] CREATE ENTITY SUCCESS: returning id ${result.rows[0].id}`);
-    return { id: result.rows[0].id };
+    console.log(`[Database] CREATE ENTITY SUCCESS: returning id ${resultRows[0].id}`);
+    return { id: resultRows[0].id };
   } catch (error) {
     console.error('[Database] Error creating entity (PostgreSQL):', error);
     throw error;
