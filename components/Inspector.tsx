@@ -269,10 +269,12 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                   />
                 </div>
                 <input
-                  className="input input-bordered w-full"
+                  className="input input-bordered w-full focus:ring-2 focus:ring-blue-300 transition-all duration-200"
                   value={label}
                   onChange={(e) => handleSpaceLabelChange(e.target.value)}
                   onBlur={() => handleSave(selectedNode.id, { label, visibility })}
+                  tabIndex={0}
+                  aria-label="Space label"
                 />
               </div>
 
@@ -341,7 +343,14 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
             </div>
 
             <div className="mt-6 space-y-2">
-              <button className="btn btn-error w-full" onClick={() => setShowDeleteModal(true)}>Delete</button>
+              <button 
+                className="btn btn-error w-full focus:ring-2 focus:ring-red-300 transition-all duration-200" 
+                onClick={() => setShowDeleteModal(true)}
+                tabIndex={0}
+                aria-label="Delete item"
+              >
+                Delete
+              </button>
             </div>
           </div>
           <Tooltip id="inspector-tooltip" className="z-50 max-w-xs" />
