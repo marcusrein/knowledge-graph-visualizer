@@ -487,10 +487,15 @@ async function getUserQuotaPostgres(userAddress: string): Promise<{ entities: nu
       ), 0) as size FROM relations WHERE userAddress = ${userAddress}
     `;
 
+    const entityCountRows = isPostgresDriver ? entityCount : entityCount?.rows;
+    const relationCountRows = isPostgresDriver ? relationCount : relationCount?.rows;
+    const entitySizeRows = isPostgresDriver ? entitySize : entitySize?.rows;
+    const relationSizeRows = isPostgresDriver ? relationSize : relationSize?.rows;
+    
     return {
-      entities: Number(entityCount.rows[0].count) || 0,
-      relations: Number(relationCount.rows[0].count) || 0,
-      totalSizeKB: Math.ceil((Number(entitySize.rows[0].size) + Number(relationSize.rows[0].size)) / 1024)
+      entities: Number(entityCountRows?.[0]?.count) || 0,
+      relations: Number(relationCountRows?.[0]?.count) || 0,
+      totalSizeKB: Math.ceil((Number(entitySizeRows?.[0]?.size || 0) + Number(relationSizeRows?.[0]?.size || 0)) / 1024)
     };
   } catch (error) {
     errorLogger.logError(
@@ -632,8 +637,10 @@ async function getDatabaseSizePostgres(): Promise<{ sizeKB: number; tableStats: 
       tableStats[row.table_name] = Number(row.count);
     });
 
+    const dbSizeRows = isPostgresDriver ? dbSizeResult : dbSizeResult?.rows;
+    
     return {
-      sizeKB: Math.ceil(Number(dbSizeResult.rows[0].size) / 1024),
+      sizeKB: Math.ceil(Number(dbSizeRows?.[0]?.size || 0) / 1024),
       tableStats
     };
   } catch (error) {
@@ -884,11 +891,12 @@ async function updateEntityPostgres(nodeId: string, updates: Record<string, unkn
       SELECT * FROM entities WHERE nodeId = ${nodeId}
     `;
     
-    if (current.rows.length === 0) {
+    const rows = isPostgresDriver ? current : current?.rows;
+    if (!rows || rows.length === 0) {
       throw new Error('Entity not found');
     }
     
-    const currentData = current.rows[0];
+    const currentData = rows[0];
 
     // Helper function to record edit history
     const recordEdit = async (field: string, oldValue: unknown, newValue: unknown) => {
@@ -1046,16 +1054,17 @@ async function deleteEntityPostgres(nodeId: string) {
       SELECT * FROM entities WHERE nodeId = ${nodeId}
     `;
     
-    console.log('[Database] Delete entity query result:', { hasResult: !!entity, hasRows: !!entity?.rows, rowCount: entity?.rows?.length });
+    const rows = isPostgresDriver ? entity : entity?.rows;
+    console.log('[Database] Delete entity query result:', { hasResult: !!entity, hasRows: !!rows, rowCount: rows?.length });
     
-    if (!entity?.rows || entity.rows.length === 0) {
+    if (!rows || rows.length === 0) {
       throw new Error('Entity not found');
     }
 
     // Record deletion in edit history
     await sql`
       INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
-      VALUES (${nodeId}, 'entity', 'delete', null, ${entity.rows[0].label}, null, null)
+      VALUES (${nodeId}, 'entity', 'delete', null, ${rows[0].label}, null, null)
     `;
 
     // Delete the entity
