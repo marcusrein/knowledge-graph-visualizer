@@ -1,6 +1,5 @@
 import { sql as vercelSql } from '@vercel/postgres';
 // Switch driver when using Supabase (non-Neon Postgres)
-// @ts-expect-error - postgres has no official types but works fine
 import postgres from 'postgres';
 import Database from 'better-sqlite3';
 import path from 'path';
