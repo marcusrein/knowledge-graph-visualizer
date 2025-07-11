@@ -38,14 +38,6 @@ import { useTerminology } from '@/lib/TerminologyContext';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal';
 import { errorLogger } from '@/lib/errorHandler';
 
-// Define nodeTypes outside component to fix React Flow warnings
-const nodeTypes = {
-  relation: RelationNode,
-  topic: TopicNode,
-  knowledge: TopicNode, // alias to silence React Flow warnings
-  group: SpaceNode,
-};
-
 interface PresentUser {
   id: string;
   address: string;
@@ -91,6 +83,14 @@ export default function GraphPage() {
   const { terms, isDevMode, toggleMode } = useTerminology();
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Memoize nodeTypes to prevent React Flow warnings
+  const nodeTypes = useMemo(() => ({
+    relation: RelationNode,
+    topic: TopicNode,
+    knowledge: TopicNode, // alias to silence React Flow warnings
+    group: SpaceNode,
+  }), []);
 
   // Close dropdown when clicking outside
   useEffect(() => {

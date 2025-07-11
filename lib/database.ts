@@ -405,5 +405,225 @@ function createEntitySQLite(data: {
   }
 }
 
+// Helper function to update an entity
+export async function updateEntity(nodeId: string, updates: Record<string, unknown>, editorAddress?: string) {
+  if (usePostgres) {
+    return updateEntityPostgres(nodeId, updates, editorAddress);
+  } else {
+    return updateEntitySQLite(nodeId, updates, editorAddress);
+  }
+}
+
+async function updateEntityPostgres(nodeId: string, updates: Record<string, unknown>, editorAddress?: string) {
+  try {
+    // Get current values for history tracking
+    const current = await sql`
+      SELECT * FROM entities WHERE nodeId = ${nodeId}
+    `;
+    
+    if (current.rows.length === 0) {
+      throw new Error('Entity not found');
+    }
+    
+    const currentData = current.rows[0];
+
+    // Helper function to record edit history
+    const recordEdit = async (field: string, oldValue: unknown, newValue: unknown) => {
+      if (oldValue !== newValue) {
+        await sql`
+          INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+          VALUES (${nodeId}, 'entity', 'update', ${field}, ${String(oldValue || '')}, ${String(newValue || '')}, ${editorAddress || null})
+        `;
+      }
+    };
+
+    // Position updates (don't track in history for noise reduction)
+    if (updates.x !== undefined && updates.y !== undefined) {
+      await sql`
+        UPDATE entities SET x = ${updates.x}, y = ${updates.y} WHERE nodeId = ${nodeId}
+      `;
+    }
+
+    // Label updates (track in history)
+    if (updates.label && updates.label !== currentData.label) {
+      await recordEdit('label', currentData.label, updates.label);
+      await sql`
+        UPDATE entities SET label = ${updates.label} WHERE nodeId = ${nodeId}
+      `;
+    }
+
+    // Properties updates (track in history)
+    if (updates.properties) {
+      const oldProps = JSON.stringify(currentData.properties || {});
+      const newProps = JSON.stringify(updates.properties);
+      if (oldProps !== newProps) {
+        await recordEdit('properties', oldProps, newProps);
+        await sql`
+          UPDATE entities SET properties = ${newProps} WHERE nodeId = ${nodeId}
+        `;
+      }
+    }
+
+    // Visibility updates (track in history)
+    if (updates.visibility && updates.visibility !== currentData.visibility) {
+      await recordEdit('visibility', currentData.visibility, updates.visibility);
+      await sql`
+        UPDATE entities SET visibility = ${updates.visibility} WHERE nodeId = ${nodeId}
+      `;
+    }
+
+    // Parent updates (track in history)
+    if (updates.parentId !== undefined && updates.parentId !== currentData.parentid) {
+      await recordEdit('parentId', currentData.parentid, updates.parentId);
+      await sql`
+        UPDATE entities SET parentId = ${updates.parentId} WHERE nodeId = ${nodeId}
+      `;
+    }
+
+    // Size updates (don't track in history for noise reduction)
+    if (updates.width !== undefined && updates.height !== undefined) {
+      await sql`
+        UPDATE entities SET width = ${updates.width}, height = ${updates.height} WHERE nodeId = ${nodeId}
+      `;
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Database] Error updating entity (PostgreSQL):', error);
+    throw error;
+  }
+}
+
+function updateEntitySQLite(nodeId: string, updates: Record<string, unknown>, editorAddress?: string) {
+  if (!sqliteDb) throw new Error('SQLite not initialized');
+  
+  try {
+    // Get current values for history tracking
+    const current = sqliteDb.prepare('SELECT * FROM entities WHERE nodeId = ?').get(nodeId) as Record<string, unknown> | undefined;
+    
+    if (!current) {
+      throw new Error('Entity not found');
+    }
+
+    // Helper function to record edit history
+    const recordEdit = (field: string, oldValue: unknown, newValue: unknown) => {
+      if (oldValue !== newValue) {
+        sqliteDb!.prepare(`
+          INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+          VALUES (?, 'entity', 'update', ?, ?, ?, ?)
+        `).run(nodeId, field, String(oldValue || ''), String(newValue || ''), editorAddress || null);
+      }
+    };
+
+    // Position updates (don't track in history for noise reduction)
+    if (updates.x !== undefined && updates.y !== undefined) {
+      sqliteDb.prepare('UPDATE entities SET x = ?, y = ? WHERE nodeId = ?').run(updates.x, updates.y, nodeId);
+    }
+
+    // Label updates (track in history)
+    if (updates.label && updates.label !== current.label) {
+      recordEdit('label', current.label, updates.label);
+      sqliteDb.prepare('UPDATE entities SET label = ? WHERE nodeId = ?').run(updates.label, nodeId);
+    }
+
+    // Properties updates (track in history)
+    if (updates.properties) {
+      const oldProps = JSON.stringify(current.properties || {});
+      const newProps = JSON.stringify(updates.properties);
+      if (oldProps !== newProps) {
+        recordEdit('properties', oldProps, newProps);
+        sqliteDb.prepare('UPDATE entities SET properties = ? WHERE nodeId = ?').run(newProps, nodeId);
+      }
+    }
+
+    // Visibility updates (track in history)
+    if (updates.visibility && updates.visibility !== current.visibility) {
+      recordEdit('visibility', current.visibility, updates.visibility);
+      sqliteDb.prepare('UPDATE entities SET visibility = ? WHERE nodeId = ?').run(updates.visibility, nodeId);
+    }
+
+    // Parent updates (track in history)
+    if (updates.parentId !== undefined && updates.parentId !== current.parentId) {
+      recordEdit('parentId', current.parentId, updates.parentId);
+      sqliteDb.prepare('UPDATE entities SET parentId = ? WHERE nodeId = ?').run(updates.parentId, nodeId);
+    }
+
+    // Size updates (don't track in history for noise reduction)
+    if (updates.width !== undefined && updates.height !== undefined) {
+      sqliteDb.prepare('UPDATE entities SET width = ?, height = ? WHERE nodeId = ?').run(updates.width, updates.height, nodeId);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Database] Error updating entity (SQLite):', error);
+    throw error;
+  }
+}
+
+// Helper function to delete an entity
+export async function deleteEntity(nodeId: string) {
+  if (usePostgres) {
+    return deleteEntityPostgres(nodeId);
+  } else {
+    return deleteEntitySQLite(nodeId);
+  }
+}
+
+async function deleteEntityPostgres(nodeId: string) {
+  try {
+    // Get entity info before deletion for history
+    const entity = await sql`
+      SELECT * FROM entities WHERE nodeId = ${nodeId}
+    `;
+    
+    if (entity.rows.length === 0) {
+      throw new Error('Entity not found');
+    }
+
+    // Record deletion in edit history
+    await sql`
+      INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+      VALUES (${nodeId}, 'entity', 'delete', null, ${entity.rows[0].label}, null, null)
+    `;
+
+    // Delete the entity
+    await sql`
+      DELETE FROM entities WHERE nodeId = ${nodeId}
+    `;
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Database] Error deleting entity (PostgreSQL):', error);
+    throw error;
+  }
+}
+
+function deleteEntitySQLite(nodeId: string) {
+  if (!sqliteDb) throw new Error('SQLite not initialized');
+  
+  try {
+    // Get entity info before deletion for history
+    const entity = sqliteDb.prepare('SELECT * FROM entities WHERE nodeId = ?').get(nodeId) as Record<string, unknown> | undefined;
+    
+    if (!entity) {
+      throw new Error('Entity not found');
+    }
+
+    // Record deletion in edit history
+    sqliteDb.prepare(`
+      INSERT INTO edit_history (nodeId, nodeType, action, field, oldValue, newValue, editorAddress) 
+      VALUES (?, 'entity', 'delete', NULL, ?, NULL, NULL)
+    `).run(nodeId, String(entity.label || ''));
+
+    // Delete the entity
+    sqliteDb.prepare('DELETE FROM entities WHERE nodeId = ?').run(nodeId);
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Database] Error deleting entity (SQLite):', error);
+    throw error;
+  }
+}
+
 // Export the database instance for backward compatibility
 export default usePostgres ? null : sqliteDb; 
