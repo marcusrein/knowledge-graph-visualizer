@@ -14,8 +14,15 @@ const sql = isSupabase ? (postgres(process.env.DATABASE_URL!, { ssl: 'require' }
 // Environment detection
 const isProduction = process.env.NODE_ENV === 'production';
 const hasVercelDB = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
-const usePostgres = isProduction && hasVercelDB;
+let usePostgres = isProduction && hasVercelDB;
 
+console.log(`[Database] Environment detection:`);
+console.log(`  - NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`  - DATABASE_URL exists: ${Boolean(process.env.DATABASE_URL)}`);
+console.log(`  - POSTGRES_URL exists: ${Boolean(process.env.POSTGRES_URL)}`);
+console.log(`  - isProduction: ${isProduction}`);
+console.log(`  - hasVercelDB: ${hasVercelDB}`);
+console.log(`  - usePostgres: ${usePostgres}`);
 console.log(`[Database] Using ${usePostgres ? 'PostgreSQL' : 'SQLite'} (production: ${isProduction}, vercelDB: ${hasVercelDB})`);
 
 // SQLite setup for development
@@ -35,7 +42,29 @@ if (!usePostgres) {
 // Database initialization
 export async function initializeDatabase() {
   if (usePostgres) {
-    return initializePostgres();
+    try {
+      return await initializePostgres();
+    } catch (error) {
+      console.error('[Database] PostgreSQL initialization failed, falling back to SQLite:', error);
+      console.log('[Database] Setting up SQLite fallback...');
+      
+      // Switch to SQLite mode
+      usePostgres = false;
+      
+      // Initialize SQLite as fallback
+      const dataDir = path.join(process.cwd(), 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      
+      const dbPath = path.join(dataDir, 'graph.sqlite');
+      if (!sqliteDb) {
+        sqliteDb = new Database(dbPath);
+        sqliteDb.pragma('journal_mode = WAL');
+      }
+      
+      return initializeSQLite();
+    }
   } else {
     return initializeSQLite();
   }
@@ -44,6 +73,12 @@ export async function initializeDatabase() {
 async function initializePostgres() {
   try {
     console.log('[Database] Initializing PostgreSQL...');
+    console.log('[Database] Testing connection...');
+    
+    // Test the connection first
+    await sql`SELECT 1`;
+    console.log('[Database] Connection successful');
+    
     // Create entities table
     await sql`
       CREATE TABLE IF NOT EXISTS entities (
