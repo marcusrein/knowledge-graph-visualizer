@@ -932,6 +932,41 @@ export default function GraphPage() {
       // Show toast for relation movement only when crossing space boundaries
       if (isNumeric(node.id)) {
         // Check if relation is currently inside any space
+        const spaces = nodes.filter(n => n.type === 'group');
+        console.log(`[Relation Toast] Found ${spaces.length} spaces:`, spaces.map(s => ({
+          id: s.id,
+          label: s.data.label,
+          position: s.position,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          size: { width: (s.style as any)?.width || 400, height: (s.style as any)?.height || 300 }
+        })));
+        
+        // Get absolute position (convert from relative if inside a space)
+        let absoluteX = node.position.x;
+        let absoluteY = node.position.y;
+        
+        if (node.parentId) {
+          const parentSpace = nodes.find(n => n.id === node.parentId);
+          if (parentSpace) {
+            absoluteX += parentSpace.position.x;
+            absoluteY += parentSpace.position.y;
+            console.log(`[Relation Toast] Converting relative to absolute:`, {
+              relative: node.position,
+              parentPos: parentSpace.position,
+              absolute: { x: absoluteX, y: absoluteY }
+            });
+          }
+        }
+        
+        const relationCenterX = absoluteX + 90; // approximate relation node center
+        const relationCenterY = absoluteY + 30;
+        console.log(`[Relation Toast] Relation position:`, {
+          raw: node.position,
+          absolute: { x: absoluteX, y: absoluteY },
+          center: { x: relationCenterX, y: relationCenterY },
+          hasParent: !!node.parentId
+        });
+        
         const isInsideSpace = nodes.some(spaceNode => {
           if (spaceNode.type !== 'group') return false;
           
@@ -939,6 +974,7 @@ export default function GraphPage() {
           if (spaceData.visibility === 'private' && 
               spaceData.owner && address && 
               spaceData.owner.toLowerCase() !== address.toLowerCase()) {
+            console.log(`[Relation Toast] Skipping private space ${spaceNode.id} (not owner)`);
             return false; // skip private spaces not owned by current user
           }
           
@@ -947,29 +983,51 @@ export default function GraphPage() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const sHeight = (spaceNode.style as any)?.height || 300;
           
-          const relationCenterX = node.position.x + 90; // approximate relation node center
-          const relationCenterY = node.position.y + 30;
+          const spaceLeft = spaceNode.position.x;
+          const spaceRight = spaceNode.position.x + sWidth;
+          const spaceTop = spaceNode.position.y;
+          const spaceBottom = spaceNode.position.y + sHeight;
           
-          return relationCenterX >= spaceNode.position.x && 
-                 relationCenterX <= spaceNode.position.x + sWidth &&
-                 relationCenterY >= spaceNode.position.y && 
-                 relationCenterY <= spaceNode.position.y + sHeight;
+          const isInside = relationCenterX >= spaceLeft && 
+                          relationCenterX <= spaceRight &&
+                          relationCenterY >= spaceTop && 
+                          relationCenterY <= spaceBottom;
+          
+          console.log(`[Relation Toast] Space ${spaceNode.id} check:`, {
+            spaceBounds: { left: spaceLeft, right: spaceRight, top: spaceTop, bottom: spaceBottom },
+            relationCenter: { x: relationCenterX, y: relationCenterY },
+            isInside
+          });
+          
+          return isInside;
         });
         
         // Check previous state and show toast only if boundary was crossed
         const wasInsideSpace = relationSpaceStateRef.current.get(node.id) || false;
         const boundaryChanged = wasInsideSpace !== isInsideSpace;
         
+        console.log(`[Relation Toast] Node ${node.id}:`, {
+          wasInsideSpace,
+          isInsideSpace, 
+          boundaryChanged,
+          direction: boundaryChanged ? (isInsideSpace ? 'INTO space' : 'OUT OF space') : 'no change'
+        });
+        
         if (boundaryChanged) {
           const now = Date.now();
           const cooldownPeriod = 5000; // 5 seconds cooldown for boundary changes
           
+          console.log(`[Relation Toast] Boundary crossed! Direction: ${isInsideSpace ? 'INTO space' : 'OUT OF space'}`);
+          
           if (now - relationToastCooldownRef.current > cooldownPeriod) {
+            console.log('[Relation Toast] Showing toast (cooldown passed)');
             toast(terms.relationSpaceToast, {
               icon: '🌐',
               duration: 4000,
             });
             relationToastCooldownRef.current = now;
+          } else {
+            console.log(`[Relation Toast] Cooldown active (${Math.ceil((cooldownPeriod - (now - relationToastCooldownRef.current)) / 1000)}s remaining)`);
           }
         }
         
