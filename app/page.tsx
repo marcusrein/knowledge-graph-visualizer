@@ -32,6 +32,7 @@ import OnboardingChecklist from '@/components/OnboardingChecklist';
 import TopicNode from '@/components/TopicNode';
 import { Tooltip } from 'react-tooltip';
 import { useTerminology } from '@/lib/TerminologyContext';
+import DeleteConfirmModal from '@/components/DeleteConfirmModal';
 
 interface PresentUser {
   id: string;
@@ -112,6 +113,8 @@ export default function GraphPage() {
   const [connecting, setConnecting] = useState(true);
   const relationToastCooldownRef = useRef<number>(0);
   const relationSpaceStateRef = useRef<Map<string, boolean>>(new Map()); // tracks if relation is inside a space
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const nodeToDeleteRef = useRef<Node | null>(null);
 
 
   const socket = usePartySocket({
@@ -474,22 +477,8 @@ export default function GraphPage() {
             (event.target as HTMLElement)?.tagName !== 'INPUT' && 
             (event.target as HTMLElement)?.tagName !== 'TEXTAREA') {
           event.preventDefault();
-          
-          const isRelation = /^\d+$/.test(selectedNode.id);
-          const isSpace = selectedNode.type === 'group';
-          const itemType = isSpace ? 'Space' : isRelation ? 'Relation' : 'Topic';
-          const itemName = selectedNode.data.label || 'Untitled';
-          
-          const confirmMessage = `Are you sure you want to delete this ${itemType}? "${itemName}" will be permanently removed.`;
-          
-          if (window.confirm(confirmMessage)) {
-            if (isRelation) {
-              deleteRelation.mutate({ id: selectedNode.id });
-            } else {
-              deleteEntity.mutate({ nodeId: selectedNode.id });
-            }
-            setSelectedNode(null);
-          }
+          nodeToDeleteRef.current = selectedNode;
+          setShowDeleteModal(true);
         }
       }
     }
@@ -498,7 +487,22 @@ export default function GraphPage() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedNode, deleteRelation, deleteEntity]);
+  }, [selectedNode]);
+
+  function handleConfirmDelete() {
+    const nodeToDelete = nodeToDeleteRef.current;
+    if (nodeToDelete) {
+      const isRelation = /^\d+$/.test(nodeToDelete.id);
+      if (isRelation) {
+        deleteRelation.mutate({ id: nodeToDelete.id });
+      } else {
+        deleteEntity.mutate({ nodeId: nodeToDelete.id });
+      }
+      setSelectedNode(null);
+      setShowDeleteModal(false);
+      nodeToDeleteRef.current = null;
+    }
+  }
 
   // Escape key to close welcome modal
   useEffect(() => {
@@ -1022,7 +1026,6 @@ export default function GraphPage() {
           if (now - relationToastCooldownRef.current > cooldownPeriod) {
             console.log('[Relation Toast] Showing toast (cooldown passed)');
             toast(terms.relationSpaceToast, {
-              icon: '🌐',
               duration: 4000,
             });
             relationToastCooldownRef.current = now;
@@ -1563,8 +1566,11 @@ export default function GraphPage() {
 						<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
 							<span className="flex items-center space-x-2">
 								<span
-									className="w-3 h-3 rounded-full"
-									style={{ backgroundColor: addressToColor(address) }}
+									className="w-3 h-3 rounded-full bg-green-500 animate-pulse"
+									style={{ 
+										animation: 'gentle-flash 2s ease-in-out infinite',
+										boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)'
+									}}
 								/>
 								<span className="text-sm font-mono">{`${address.slice(
 									0,
@@ -1850,6 +1856,25 @@ export default function GraphPage() {
 					</div>
 				</div>
 			)}
+
+			<DeleteConfirmModal
+				isOpen={showDeleteModal}
+				onClose={() => {
+					setShowDeleteModal(false);
+					nodeToDeleteRef.current = null;
+				}}
+				onConfirm={handleConfirmDelete}
+				itemType={
+					nodeToDeleteRef.current?.type === 'group'
+						? 'Space'
+						: /^\d+$/.test(nodeToDeleteRef.current?.id || '')
+						? 'Relation'
+						: isDevMode
+						? 'Entity'
+						: 'Topic'
+				}
+				itemName={nodeToDeleteRef.current?.data?.label || 'Untitled'}
+			/>
 		</div>
 	);
 }

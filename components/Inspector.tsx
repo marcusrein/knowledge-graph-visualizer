@@ -6,6 +6,7 @@ import { Info, Clock, ChevronDown, ChevronRight } from 'lucide-react';
 import { Tooltip } from 'react-tooltip';
 import { deepEqual } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 interface InspectorProps {
   selectedNode: Node | null;
@@ -54,6 +55,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const [owner, setOwner] = useState<string | undefined>(undefined);
   const [showHistory, setShowHistory] = useState(true);
   const { address } = useAccount();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Fetch edit history for the selected node
   const editHistoryQuery = useQuery({
@@ -224,8 +226,13 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
 
   // Common delete handler usable in all inspector modes
   function handleDelete() {
+    setShowDeleteModal(true);
+  }
+
+  function handleConfirmDelete() {
     if (selectedNode) {
       onDelete(selectedNode.id, isRelation);
+      setShowDeleteModal(false);
     }
   }
 
@@ -248,68 +255,69 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     };
 
     return (
-      <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold">Space Inspector</h3>
-          <button onClick={onClose} className="btn btn-sm btn-ghost">&times;</button>
-        </div>
+      <>
+        <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold">Space Inspector</h3>
+            <button onClick={onClose} className="btn btn-sm btn-ghost">&times;</button>
+          </div>
 
-        <div className="flex-1 space-y-6 overflow-y-auto">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className="block text-sm font-medium text-gray-400">Label</label>
-              <Info
-                className="w-4 h-4 text-gray-400 cursor-pointer"
-                data-tooltip-id="inspector-tooltip"
-                data-tooltip-content={spaceLabelDescription}
+          <div className="flex-1 space-y-6 overflow-y-auto">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <label className="block text-sm font-medium text-gray-400">Label</label>
+                <Info
+                  className="w-4 h-4 text-gray-400 cursor-pointer"
+                  data-tooltip-id="inspector-tooltip"
+                  data-tooltip-content={spaceLabelDescription}
+                />
+              </div>
+              <input
+                className="input input-bordered w-full"
+                value={label}
+                onChange={(e) => handleSpaceLabelChange(e.target.value)}
+                onBlur={() => onSave(selectedNode.id, { label, visibility })}
               />
             </div>
-            <input
-              className="input input-bordered w-full"
-              value={label}
-              onChange={(e) => handleSpaceLabelChange(e.target.value)}
-              onBlur={() => onSave(selectedNode.id, { label, visibility })}
-            />
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">Visibility</label>
-            <select
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-              value={visibility}
-              disabled={!canEditVisibility}
-              onChange={(e) => handleVisibilityChange(e.target.value as 'public' | 'private')}
-            >
-              <option value="public">Public</option>
-              <option value="private">Private</option>
-            </select>
-            {!canEditVisibility && (
-              <p className="text-xs text-gray-500 mt-1">Only the owner can change visibility</p>
-            )}
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1">Visibility</label>
+              <select
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                value={visibility}
+                disabled={!canEditVisibility}
+                onChange={(e) => handleVisibilityChange(e.target.value as 'public' | 'private')}
+              >
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+              </select>
+              {!canEditVisibility && (
+                <p className="text-xs text-gray-500 mt-1">Only the owner can change visibility</p>
+              )}
+            </div>
 
-          {/* Edit History Section for Spaces */}
-          <div>
-            <button
-              className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors"
-              onClick={() => setShowHistory(!showHistory)}
-            >
-              {showHistory ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-              <Clock size={16} />
-              Edit History
-            </button>
-            
-            {showHistory && (
-              <div className="mt-2 max-h-48 overflow-y-auto bg-gray-800/50 rounded-lg p-3">
-                {editHistoryQuery.isLoading && (
-                  <div className="text-xs text-gray-500">Loading history...</div>
-                )}
-                
-                {editHistoryQuery.error && (
-                  <div className="text-xs text-red-400">Failed to load history</div>
-                )}
-                
-                                 {editHistoryQuery.data && editHistoryQuery.data.length > 0 ? (
+            {/* Edit History Section for Spaces */}
+            <div>
+              <button
+                className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors"
+                onClick={() => setShowHistory(!showHistory)}
+              >
+                {showHistory ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                <Clock size={16} />
+                Edit History
+              </button>
+              
+              {showHistory && (
+                <div className="mt-2 max-h-48 overflow-y-auto bg-gray-800/50 rounded-lg p-3">
+                  {editHistoryQuery.isLoading && (
+                    <div className="text-xs text-gray-500">Loading history...</div>
+                  )}
+                  
+                  {editHistoryQuery.error && (
+                    <div className="text-xs text-red-400">Failed to load history</div>
+                  )}
+                  
+                                   {editHistoryQuery.data && editHistoryQuery.data.length > 0 ? (
                    <div className="space-y-2">
                      {editHistoryQuery.data.map((entry, index) => {
                        const isCreation = entry.action === 'create';
@@ -358,16 +366,25 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                  ) : editHistoryQuery.data && editHistoryQuery.data.length === 0 ? (
                    <div className="text-xs text-gray-500">No edit history available</div>
                  ) : null}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="mt-6 space-y-2">
-          <button className="btn btn-error w-full" onClick={handleDelete}>Delete</button>
-        </div>
-        <Tooltip id="inspector-tooltip" className="z-50 max-w-xs" />
-      </aside>
+          <div className="mt-6 space-y-2">
+            <button className="btn btn-error w-full" onClick={handleDelete}>Delete</button>
+          </div>
+          <Tooltip id="inspector-tooltip" className="z-50 max-w-xs" />
+        </aside>
+
+        <DeleteConfirmModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={handleConfirmDelete}
+          itemType={isSpace ? 'Space' : 'Topic'}
+          itemName={selectedNode?.data?.label || 'Untitled'}
+        />
+      </>
     );
   }
 
@@ -418,171 +435,181 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const propertiesDevDescription = isRelation ? relationPropertiesDevDescription : topicPropertiesDevDescription;
 
   return (
-    <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold flex items-center gap-2">
-          {isRelation ? 'Relation' : terms.topic} Inspector
-          <Info
-            className="w-4 h-4 text-gray-400 cursor-pointer"
-            data-tooltip-id="inspector-tooltip"
-            data-tooltip-content={
-              isDevMode
-                ? isRelation
-                  ? relationDevDescription
-                  : topicDevDescription
-                : isRelation
-                ? relationDescription
-                : topicDescription
-            }
-          />
-        </h3>
-        <button onClick={onClose} className="btn btn-sm btn-ghost">
-          &times;
-        </button>
-      </div>
-
-      <div className="flex-1 space-y-6 overflow-y-auto">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <label className="block text-sm font-medium text-gray-400">
-              {isRelation ? terms.inspectorRelationLabel : terms.inspectorLabel}
-            </label>
+    <>
+      <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold flex items-center gap-2">
+            {isRelation ? 'Relation' : terms.topic} Inspector
             <Info
               className="w-4 h-4 text-gray-400 cursor-pointer"
               data-tooltip-id="inspector-tooltip"
-              data-tooltip-content={isDevMode ? labelDevDescription : labelDescription}
+              data-tooltip-content={
+                isDevMode
+                  ? isRelation
+                    ? relationDevDescription
+                    : topicDevDescription
+                  : isRelation
+                  ? relationDescription
+                  : topicDescription
+              }
             />
-          </div>
-          <input
-            type="text"
-            className="input input-bordered w-full"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            onBlur={immediateSave}
-          />
-        </div>
-
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="block text-sm font-medium text-gray-400">{terms.inspectorProperties}</span>
-            <Info
-              className="w-4 h-4 text-gray-400 cursor-pointer"
-              data-tooltip-id="inspector-tooltip"
-              data-tooltip-html={isDevMode ? propertiesDevDescription : propertiesDescription}
-            />
-          </div>
-          <div className="space-y-2">
-            {properties.map((prop) => (
-              <div key={prop.id} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  className="input input-bordered input-sm w-full"
-                  value={prop.key}
-                  placeholder={terms.inspectorPropertyKey}
-                  onChange={(e) => handlePropertyChange(prop.id, 'key', e.target.value)}
-                  onBlur={immediateSave}
-                />
-                <input
-                  type="text"
-                  className="input input-bordered input-sm w-full"
-                  value={prop.value}
-                  placeholder={terms.inspectorPropertyValue}
-                  onChange={(e) => handlePropertyChange(prop.id, 'value', e.target.value)}
-                  onBlur={immediateSave}
-                />
-                <button onClick={() => handleRemoveProperty(prop.id)} className="btn btn-ghost btn-sm">
-                  &times;
-                </button>
-              </div>
-            ))}
-          </div>
-          <button onClick={handleAddProperty} className="btn btn-sm btn-outline mt-2 w-full">
-            {terms.inspectorAddProperty}
+          </h3>
+          <button onClick={onClose} className="btn btn-sm btn-ghost">
+            &times;
           </button>
         </div>
 
-        {/* Edit History Section */}
-        <div>
-          <button
-            className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors"
-            onClick={() => setShowHistory(!showHistory)}
-          >
-            {showHistory ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            <Clock size={16} />
-            Edit History
-          </button>
-          
-          {showHistory && (
-            <div className="mt-2 max-h-48 overflow-y-auto bg-gray-800/50 rounded-lg p-3">
-              {editHistoryQuery.isLoading && (
-                <div className="text-xs text-gray-500">Loading history...</div>
-              )}
-              
-              {editHistoryQuery.error && (
-                <div className="text-xs text-red-400">Failed to load history</div>
-              )}
-              
-              {editHistoryQuery.data && editHistoryQuery.data.length > 0 ? (
-                <div className="space-y-2">
-                  {editHistoryQuery.data.map((entry, index) => {
-                    const isCreation = entry.action === 'create';
-                    const isLastEntry = index === editHistoryQuery.data.length - 1;
-                    
-                    return (
-                      <div key={entry.id} className={`text-xs border-b border-gray-700 pb-2 last:border-b-0 ${isCreation ? 'bg-green-900/20 rounded px-2 py-1' : ''}`}>
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="text-gray-300">
-                              {isCreation ? (
-                                <span className="font-medium text-green-400">
-                                 Created {isLastEntry ? 'this' : ''} {entry.nodeType === 'relation' ? 'relation' : entry.nodeType}
-                                </span>
-                              ) : (
-                                <span>
-                                  <span className="font-medium">{formatFieldName(entry.field)}</span> updated
-                                </span>
-                              )}
-                            </div>
-                            {entry.newValue && (
-                              <div className="text-gray-500 mt-1 truncate">
+        <div className="flex-1 space-y-6 overflow-y-auto">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <label className="block text-sm font-medium text-gray-400">
+                {isRelation ? terms.inspectorRelationLabel : terms.inspectorLabel}
+              </label>
+              <Info
+                className="w-4 h-4 text-gray-400 cursor-pointer"
+                data-tooltip-id="inspector-tooltip"
+                data-tooltip-content={isDevMode ? labelDevDescription : labelDescription}
+              />
+            </div>
+            <input
+              type="text"
+              className="input input-bordered w-full"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              onBlur={immediateSave}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="block text-sm font-medium text-gray-400">{terms.inspectorProperties}</span>
+              <Info
+                className="w-4 h-4 text-gray-400 cursor-pointer"
+                data-tooltip-id="inspector-tooltip"
+                data-tooltip-html={isDevMode ? propertiesDevDescription : propertiesDescription}
+              />
+            </div>
+            <div className="space-y-2">
+              {properties.map((prop) => (
+                <div key={prop.id} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    className="input input-bordered input-sm w-full"
+                    value={prop.key}
+                    placeholder={terms.inspectorPropertyKey}
+                    onChange={(e) => handlePropertyChange(prop.id, 'key', e.target.value)}
+                    onBlur={immediateSave}
+                  />
+                  <input
+                    type="text"
+                    className="input input-bordered input-sm w-full"
+                    value={prop.value}
+                    placeholder={terms.inspectorPropertyValue}
+                    onChange={(e) => handlePropertyChange(prop.id, 'value', e.target.value)}
+                    onBlur={immediateSave}
+                  />
+                  <button onClick={() => handleRemoveProperty(prop.id)} className="btn btn-ghost btn-sm">
+                    &times;
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button onClick={handleAddProperty} className="btn btn-sm btn-outline mt-2 w-full">
+              {terms.inspectorAddProperty}
+            </button>
+          </div>
+
+          {/* Edit History Section */}
+          <div>
+            <button
+              className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors"
+              onClick={() => setShowHistory(!showHistory)}
+            >
+              {showHistory ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              <Clock size={16} />
+              Edit History
+            </button>
+            
+            {showHistory && (
+              <div className="mt-2 max-h-48 overflow-y-auto bg-gray-800/50 rounded-lg p-3">
+                {editHistoryQuery.isLoading && (
+                  <div className="text-xs text-gray-500">Loading history...</div>
+                )}
+                
+                {editHistoryQuery.error && (
+                  <div className="text-xs text-red-400">Failed to load history</div>
+                )}
+                
+                {editHistoryQuery.data && editHistoryQuery.data.length > 0 ? (
+                  <div className="space-y-2">
+                    {editHistoryQuery.data.map((entry, index) => {
+                      const isCreation = entry.action === 'create';
+                      const isLastEntry = index === editHistoryQuery.data.length - 1;
+                      
+                      return (
+                        <div key={entry.id} className={`text-xs border-b border-gray-700 pb-2 last:border-b-0 ${isCreation ? 'bg-green-900/20 rounded px-2 py-1' : ''}`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="text-gray-300">
                                 {isCreation ? (
-                                  <span className="text-green-300">
-                                    Initial name: {entry.newValue.length > 40 ? `${entry.newValue.substring(0, 40)}...` : entry.newValue}
+                                  <span className="font-medium text-green-400">
+                                   Created {isLastEntry ? 'this' : ''} {entry.nodeType === 'relation' ? 'relation' : entry.nodeType}
                                   </span>
                                 ) : (
                                   <span>
-                                    {entry.newValue.length > 50 
-                                      ? `${entry.newValue.substring(0, 50)}...` 
-                                      : entry.newValue}
+                                    <span className="font-medium">{formatFieldName(entry.field)}</span> updated
                                   </span>
                                 )}
                               </div>
-                            )}
-                          </div>
-                          <div className="text-gray-500 text-right ml-2">
-                            <div className={isCreation ? 'text-green-400' : ''}>{formatAddress(entry.editorAddress)}</div>
-                            <div className={`text-gray-600 ${isCreation ? 'text-green-500' : ''}`}>{formatTimestamp(entry.timestamp)}</div>
+                              {entry.newValue && (
+                                <div className="text-gray-500 mt-1 truncate">
+                                  {isCreation ? (
+                                    <span className="text-green-300">
+                                      Initial name: {entry.newValue.length > 40 ? `${entry.newValue.substring(0, 40)}...` : entry.newValue}
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      {entry.newValue.length > 50 
+                                        ? `${entry.newValue.substring(0, 50)}...` 
+                                        : entry.newValue}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-gray-500 text-right ml-2">
+                              <div className={isCreation ? 'text-green-400' : ''}>{formatAddress(entry.editorAddress)}</div>
+                              <div className={`text-gray-600 ${isCreation ? 'text-green-500' : ''}`}>{formatTimestamp(entry.timestamp)}</div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : editHistoryQuery.data && editHistoryQuery.data.length === 0 ? (
-                <div className="text-xs text-gray-500">No edit history available</div>
-              ) : null}
-            </div>
-          )}
+                      );
+                    })}
+                  </div>
+                ) : editHistoryQuery.data && editHistoryQuery.data.length === 0 ? (
+                  <div className="text-xs text-gray-500">No edit history available</div>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="mt-6 space-y-2">
-        <button className="btn btn-error w-full" onClick={handleDelete}>
-          Delete
-        </button>
-      </div>
-      <Tooltip id="inspector-tooltip" className="z-50 max-w-xs" />
-    </aside>
+        <div className="mt-6 space-y-2">
+          <button className="btn btn-error w-full" onClick={handleDelete}>
+            Delete
+          </button>
+        </div>
+        <Tooltip id="inspector-tooltip" className="z-50 max-w-xs" />
+      </aside>
+
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+        itemType={isRelation ? 'Relation' : isDevMode ? 'Entity' : 'Topic'}
+        itemName={selectedNode?.data?.label || 'Untitled'}
+      />
+    </>
   );
 };
 
