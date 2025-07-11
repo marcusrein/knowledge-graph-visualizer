@@ -2250,7 +2250,7 @@ export default function GraphPage() {
 								</span>
 							</div>
 							<p className="text-gray-300 text-lg leading-relaxed">
-								Map topics into a knowledge graph collaboratively.
+								Learn knowledge graphs by building them collaboratively!
 							</p>
 							
 							{/* Mode Toggle */}
