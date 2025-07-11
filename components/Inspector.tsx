@@ -77,6 +77,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(!selectedNode);
 
   // Resize functionality
   const { size: inspectorWidth, isResizing, handleMouseDown, handleTouchStart } = useResizable({
@@ -101,6 +102,11 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     refetchOnWindowFocus: true,
     staleTime: 1000, // Consider data stale after 1 second
   });
+
+  // Handle collapsed state based on selectedNode
+  useEffect(() => {
+    setIsCollapsed(!selectedNode);
+  }, [selectedNode]);
 
   // Initialize state when selectedNode changes
   useEffect(() => {
@@ -198,6 +204,26 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const isRelation = selectedNode?.type === 'relation';
 
   const spaceLabelDescription = 'The name of your Space - a container for organizing related Topics and their relationships.';
+
+  // Handle collapsed state - show minimal tab when no node selected
+  if (isCollapsed) {
+    return (
+      <aside className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-10 flex flex-col w-12">
+        {/* Collapsed handle/tab */}
+        <div 
+          className="flex flex-col items-center justify-center h-full cursor-pointer hover:bg-gray-700 transition-colors group"
+          onClick={() => setIsCollapsed(false)}
+          tabIndex={0}
+          aria-label="Open inspector panel"
+        >
+          <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" />
+          <div className="transform -rotate-90 text-xs text-gray-400 group-hover:text-white transition-colors mt-4 whitespace-nowrap">
+            Inspector
+          </div>
+        </div>
+      </aside>
+    );
+  }
   
   // Visibility tooltip descriptions
   const visibilityDescription = `Choose who can see this Space:<br/><br/><strong>Public:</strong> Anyone can view this Space and its contents<br/><br/><strong>Private:</strong> Only you (the creator) can see this Space and its contents`;

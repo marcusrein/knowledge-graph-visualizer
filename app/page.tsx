@@ -1845,14 +1845,14 @@ export default function GraphPage() {
 
   const handleCenterView = () => {
     if (rfInstance) {
-      // Close inspector panel if it's open
+      // Close inspector panel if it's open (it will collapse but stay visible)
       if (selectedNode) {
         setSelectedNode(null);
         // Also clear selection state in socket
         socket.send(JSON.stringify({ type: 'selection', nodeId: null }));
       }
       
-      // Center view with standard padding since inspector is now closed
+      // Center view accounting for collapsed inspector
       rfInstance.fitView({ 
         padding: 0.15,
         duration: 600 
@@ -2185,36 +2185,34 @@ export default function GraphPage() {
 					<Controls />
 				</ReactFlow>
 
-				{selectedNode && (
-					<Inspector
-						selectedNode={selectedNode}
-						onClose={() => {
-							setSelectedNode(null);
-							socket.send(JSON.stringify({ type: "selection", nodeId: null }));
-						}}
-						onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
-						onDelete={(nodeId, isRelation) => {
-							const node = nodes.find((n) => n.id === nodeId);
-							const isSpace = node?.type === "group";
-							const itemType = isSpace
-								? "Space"
-								: isRelation
-								? "Relation"
-								: "Topic";
-							const itemName = node?.data?.label || "Untitled";
+				<Inspector
+					selectedNode={selectedNode}
+					onClose={() => {
+						setSelectedNode(null);
+						socket.send(JSON.stringify({ type: "selection", nodeId: null }));
+					}}
+					onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
+					onDelete={(nodeId, isRelation) => {
+						const node = nodes.find((n) => n.id === nodeId);
+						const isSpace = node?.type === "group";
+						const itemType = isSpace
+							? "Space"
+							: isRelation
+							? "Relation"
+							: "Topic";
+						const itemName = node?.data?.label || "Untitled";
 
-							const confirmMessage = `Are you sure you want to delete this ${itemType}? "${itemName}" will be permanently removed.`;
+						const confirmMessage = `Are you sure you want to delete this ${itemType}? "${itemName}" will be permanently removed.`;
 
-							if (window.confirm(confirmMessage)) {
-								if (isRelation) {
-									deleteRelation.mutate({ id: nodeId });
-								} else {
-									deleteEntity.mutate({ nodeId });
-								}
+						if (window.confirm(confirmMessage)) {
+							if (isRelation) {
+								deleteRelation.mutate({ id: nodeId });
+							} else {
+								deleteEntity.mutate({ nodeId });
 							}
-						}}
-					/>
-				)}
+						}
+					}}
+				/>
 
 				{showChecklist && (
 					<OnboardingChecklist
@@ -2252,8 +2250,7 @@ export default function GraphPage() {
 								</span>
 							</div>
 							<p className="text-gray-300 text-lg leading-relaxed">
-								Map concepts, ideas, and data into an interactive graph you can
-								expand and explore collaboratively.
+								Map topics into a knowledge graph collaboratively.
 							</p>
 							
 							{/* Mode Toggle */}
