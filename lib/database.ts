@@ -439,16 +439,19 @@ async function updateEntityPostgres(nodeId: string, updates: Record<string, unkn
 
     // Position updates (don't track in history for noise reduction)
     if (updates.x !== undefined && updates.y !== undefined) {
+      const x = typeof updates.x === 'number' ? updates.x : Number(updates.x) || 0;
+      const y = typeof updates.y === 'number' ? updates.y : Number(updates.y) || 0;
       await sql`
-        UPDATE entities SET x = ${updates.x}, y = ${updates.y} WHERE nodeId = ${nodeId}
+        UPDATE entities SET x = ${x}, y = ${y} WHERE nodeId = ${nodeId}
       `;
     }
 
     // Label updates (track in history)
     if (updates.label && updates.label !== currentData.label) {
-      await recordEdit('label', currentData.label, updates.label);
+      const label = String(updates.label);
+      await recordEdit('label', currentData.label, label);
       await sql`
-        UPDATE entities SET label = ${updates.label} WHERE nodeId = ${nodeId}
+        UPDATE entities SET label = ${label} WHERE nodeId = ${nodeId}
       `;
     }
 
@@ -466,24 +469,28 @@ async function updateEntityPostgres(nodeId: string, updates: Record<string, unkn
 
     // Visibility updates (track in history)
     if (updates.visibility && updates.visibility !== currentData.visibility) {
-      await recordEdit('visibility', currentData.visibility, updates.visibility);
+      const visibility = String(updates.visibility);
+      await recordEdit('visibility', currentData.visibility, visibility);
       await sql`
-        UPDATE entities SET visibility = ${updates.visibility} WHERE nodeId = ${nodeId}
+        UPDATE entities SET visibility = ${visibility} WHERE nodeId = ${nodeId}
       `;
     }
 
     // Parent updates (track in history)
     if (updates.parentId !== undefined && updates.parentId !== currentData.parentid) {
-      await recordEdit('parentId', currentData.parentid, updates.parentId);
+      const parentId = updates.parentId === null ? null : String(updates.parentId);
+      await recordEdit('parentId', currentData.parentid, parentId);
       await sql`
-        UPDATE entities SET parentId = ${updates.parentId} WHERE nodeId = ${nodeId}
+        UPDATE entities SET parentId = ${parentId} WHERE nodeId = ${nodeId}
       `;
     }
 
     // Size updates (don't track in history for noise reduction)
     if (updates.width !== undefined && updates.height !== undefined) {
+      const width = typeof updates.width === 'number' ? updates.width : Number(updates.width) || 0;
+      const height = typeof updates.height === 'number' ? updates.height : Number(updates.height) || 0;
       await sql`
-        UPDATE entities SET width = ${updates.width}, height = ${updates.height} WHERE nodeId = ${nodeId}
+        UPDATE entities SET width = ${width}, height = ${height} WHERE nodeId = ${nodeId}
       `;
     }
 

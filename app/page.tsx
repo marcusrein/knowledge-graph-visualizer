@@ -150,7 +150,7 @@ export default function GraphPage() {
       const duration = Date.now() - startTime;
       logger.info('Component', 'GraphPage unmounting', { duration }, address);
     };
-  }, []);
+  }, [address, selectedDate]);
 
   // Track selected date changes
   useEffect(() => {
@@ -939,6 +939,16 @@ export default function GraphPage() {
           const isSelected = selectedNode?.id === e.nodeId;
 
           const handleResize = (width: number, height: number) => {
+            // Immediately update the node's dimensions in React Flow state for instant visual feedback
+            setNodes(prevNodes => 
+              prevNodes.map(node => 
+                node.id === e.nodeId 
+                  ? { ...node, style: { ...node.style, width, height } }
+                  : node
+              )
+            );
+            
+            // Send the update to the backend
             updateEntityPatch.mutate({ nodeId: e.nodeId, width, height });
           };
 
@@ -1177,7 +1187,7 @@ export default function GraphPage() {
       setNodes(built);
       setEdges(newEdges);
     }
-  }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor, isDevMode]);
+  }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor, isDevMode, address, selectedNode?.id]);
 
   const onConnect: OnConnect = useCallback(
     (params: Connection | Edge) => {
@@ -1411,6 +1421,9 @@ export default function GraphPage() {
     };
 
     addEntity.mutate(spacePayload);
+    
+    // Mark the create-space step as completed
+    completeStep('create-space');
 
     // Center view to include the new space after a brief delay
     setTimeout(() => {
@@ -1654,6 +1667,12 @@ export default function GraphPage() {
             const spaceNode = nodes.find((n) => n.id === newParentId);
             const spaceName = spaceNode?.data?.label || 'Space';
             toast.success(`Moved ${entityName} into ${spaceName}`);
+            
+            // Complete onboarding step when a topic is added to a space
+            // (only for topics, not relations or spaces themselves)
+            if (node.type === 'topic' && !isNumeric(node.id)) {
+              completeStep('add-topics-to-space');
+            }
           } else if (normalizedCurrentParent) {
             // Moving out of a space - show which space it was removed from
             const previousSpaceNode = nodes.find((n) => n.id === normalizedCurrentParent);
@@ -1972,7 +1991,7 @@ export default function GraphPage() {
 			{/* Main Content Area */}
 			<div className="flex-1 h-screen relative">
 				{/* Top Navigation - Responsive and Non-overlapping */}
-				<div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between gap-4">
+				<div className="absolute top-4 left-4 right-64 z-20 flex items-center gap-6">
 					{/* Left Navigation Group */}
 					<div className="flex items-center space-x-2 lg:space-x-4 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg min-w-0 flex-shrink-0">
 						{/* Hamburger Menu */}
@@ -2059,7 +2078,7 @@ export default function GraphPage() {
 						</button>
 
 						{/* App Title and Date - Responsive */}
-						<div className="hidden md:flex items-center space-x-2 min-w-0">
+						<div className="hidden md:flex items-center space-x-2 min-w-0 border-l border-gray-600 pl-4">
 							<div className="flex items-center space-x-2 min-w-0">
 								<span className="font-mono text-lg truncate">{terms.knowledgeGraph}</span>
 								<span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full border border-orange-200 dark:border-orange-700/50 flex-shrink-0">
@@ -2081,8 +2100,8 @@ export default function GraphPage() {
 						</div>
 					</div>
 
-					{/* Action Buttons - Responsive */}
-					<div className="flex items-center space-x-2 flex-shrink-0">
+					{/* Action Buttons Group */}
+					<div className="flex items-center space-x-3 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg flex-shrink-0">
 						<button
 							onClick={handleAddNode}
 							className="bg-purple-500 hover:bg-purple-600 focus:bg-purple-600 focus:ring-2 focus:ring-purple-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
@@ -2106,7 +2125,7 @@ export default function GraphPage() {
 						</button>
 
 						{/* Layout Tools - Hide on smaller screens */}
-						<div className="hidden lg:flex items-center space-x-2">
+						<div className="hidden lg:flex items-center space-x-2 border-l border-gray-600 pl-3">
 							<button
 								onClick={handleAutoLayout}
 								className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
@@ -2129,26 +2148,29 @@ export default function GraphPage() {
 								☉
 							</button>
 						</div>
+					</div>
 
-						{/* User Avatars - Responsive */}
-						<div className="flex items-center space-x-2">
-							{presentUsers
-								.filter((u) => u.address !== address)
-								.slice(0, 3) // Limit avatars on smaller screens
-								.map((user) => (
-									<Avatar key={user.id} address={user.address} />
-								))}
-							{presentUsers.filter((u) => u.address !== address).length > 3 && (
-								<span className="text-xs text-gray-400 bg-gray-600 rounded-full w-6 h-6 flex items-center justify-center">
-									+{presentUsers.filter((u) => u.address !== address).length - 3}
-								</span>
-							)}
-						</div>
+					{/* User Avatars Section */}
+					<div className="flex items-center space-x-2 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg flex-shrink-0">
+						{presentUsers
+							.filter((u) => u.address !== address)
+							.slice(0, 3)
+							.map((user) => (
+								<Avatar key={user.id} address={user.address} />
+							))}
+						{presentUsers.filter((u) => u.address !== address).length > 3 && (
+							<span className="text-xs text-gray-400 bg-gray-600 rounded-full w-6 h-6 flex items-center justify-center">
+								+{presentUsers.filter((u) => u.address !== address).length - 3}
+							</span>
+						)}
+						{presentUsers.filter((u) => u.address !== address).length === 0 && (
+							<span className="text-xs text-gray-400 px-2">No other users</span>
+						)}
 					</div>
 				</div>
 
-				{/* Right Status Panel - Non-overlapping with Inspector */}
-				<div className="absolute top-4 right-4 flex flex-col items-end space-y-3 max-w-sm" style={{ zIndex: 70 }}>
+				{/* Wallet Status Panel - Top Right Corner */}
+				<div className="absolute top-4 right-4 flex flex-col items-end space-y-3 w-60 z-status">
 					{/* Private Space Ownership Indicator */}
 					{selectedNode && selectedNode.type === 'group' && selectedNode.data?.visibility === 'private' && 
 					 selectedNode.data?.owner && address && selectedNode.data.owner.toLowerCase() === address.toLowerCase() && (
@@ -2218,7 +2240,7 @@ export default function GraphPage() {
 				</div>
 
 				{!hasWallet && (
-					<div className="absolute inset-0 z-30 flex items-center justify-center backdrop-blur-xs">
+					<div className="absolute inset-0 z-overlay flex items-center justify-center backdrop-blur-xs">
 						<div className="bg-gray-800/90 rounded-lg px-6 py-4 flex flex-col items-center space-y-4">
 							<p className="text-white text-lg font-medium text-center">
 								The Knowledge Graph Visualizer
@@ -2305,7 +2327,7 @@ export default function GraphPage() {
 
 				{/* Onboarding Checklist - Responsive Positioning */}
 				{showChecklist && (
-					<div className="absolute top-20 right-4 z-50 max-w-sm">
+					<div className="absolute top-[90px] left-4 z-checklist max-w-sm">
 						<OnboardingChecklist
 							steps={ONBOARDING_STEPS.map(step => ({
 								...step,
@@ -2318,7 +2340,7 @@ export default function GraphPage() {
 				)}
 
 				{/* Bottom Right Action Buttons - Systematic Layout */}
-				<div className="absolute bottom-4 right-4 z-40 flex flex-col-reverse gap-3">
+				<div className="absolute bottom-4 right-4 z-actions flex flex-col-reverse gap-3">
 					{/* Help/Checklist Toggle */}
 					<button
 						onClick={toggleChecklist}
@@ -2338,14 +2360,14 @@ export default function GraphPage() {
 				<Tooltip
 					id="kg-node-tip"
 					place="bottom"
-					className="z-50 max-w-xs whitespace-pre-line"
+					className="z-tooltip max-w-xs whitespace-pre-line"
 				/>
 			</div>
 
 			{/* Welcome Modal - Full Screen Overlay */}
 			{showWelcome && (
 				<div 
-					className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+					className="absolute inset-0 z-modal flex items-center justify-center bg-black/80 backdrop-blur-sm"
 					onClick={() => setShowWelcome(false)}
 				>
 					<div 
