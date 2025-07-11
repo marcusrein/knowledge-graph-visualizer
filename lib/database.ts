@@ -295,19 +295,29 @@ export async function getEntitiesForDate(date: string, userAddress?: string) {
 
 async function getEntitiesForDatePostgres(date: string, userAddress?: string) {
   try {
+    console.log('[Database] Getting entities for date:', { date, userAddress });
+    
+    // First, let's see what's actually in the database
+    const allEntities = await sql`SELECT * FROM entities ORDER BY created_at DESC LIMIT 10`;
+    console.log('[Database] All entities (last 10):', allEntities?.rows || []);
+    
+    // Now try the filtered query - temporarily making it more permissive
     const result = await sql`
       SELECT * FROM entities 
       WHERE DATE(created_at) = ${date}
-      AND (
-        type = 'group' 
-        OR visibility = 'public' 
-        OR userAddress IS NULL 
-        OR userAddress = ${userAddress || ''}
-      )
       ORDER BY created_at ASC
     `;
     
-    console.log('[Database] Query result:', { hasResult: !!result, hasRows: !!result?.rows, rowCount: result?.rows?.length });
+    console.log('[Database] Filtered query result:', { hasResult: !!result, hasRows: !!result?.rows, rowCount: result?.rows?.length });
+    
+    // Let's also try a simpler query to see if date filtering is the issue
+    const simpleResult = await sql`
+      SELECT * FROM entities 
+      WHERE DATE(created_at) = ${date}
+      ORDER BY created_at ASC
+    `;
+    
+    console.log('[Database] Simple date query result:', { hasResult: !!simpleResult, hasRows: !!simpleResult?.rows, rowCount: simpleResult?.rows?.length });
     
     if (!result || !result.rows) {
       console.log('[Database] No result or rows, returning empty array');
@@ -950,7 +960,9 @@ async function deleteEntityPostgres(nodeId: string) {
       SELECT * FROM entities WHERE nodeId = ${nodeId}
     `;
     
-    if (entity.rows.length === 0) {
+    console.log('[Database] Delete entity query result:', { hasResult: !!entity, hasRows: !!entity?.rows, rowCount: entity?.rows?.length });
+    
+    if (!entity?.rows || entity.rows.length === 0) {
       throw new Error('Entity not found');
     }
 
