@@ -288,10 +288,12 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                   />
                 </div>
                 <select
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   value={visibility}
                   disabled={!canEditVisibility}
                   onChange={(e) => handleVisibilityChange(e.target.value as 'public' | 'private')}
+                  tabIndex={0}
+                  aria-label="Space visibility"
                 >
                   <option value="public">Public</option>
                   <option value="private">Private</option>
@@ -304,8 +306,11 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
               {/* Edit History Section for Spaces */}
               <div>
                 <button
-                  className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors"
+                  className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-400 hover:text-gray-300 focus:ring-2 focus:ring-blue-300 transition-all duration-200 rounded p-1"
                   onClick={() => setShowHistory(!showHistory)}
+                  tabIndex={0}
+                  aria-label={`${showHistory ? 'Hide' : 'Show'} edit history`}
+                  aria-expanded={showHistory}
                 >
                   {showHistory ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   <Clock size={16} />
@@ -449,7 +454,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
               </div>
               <input
                 type="text"
-                className="input input-bordered w-full"
+                className="input input-bordered w-full focus:ring-2 focus:ring-blue-300 transition-all duration-200"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 onBlur={() => {
@@ -460,6 +465,8 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                     }, {} as Record<string, string>) });
                   }
                 }}
+                tabIndex={0}
+                aria-label={`${isRelation ? 'Relation' : 'Topic'} label`}
               />
             </div>
 
@@ -478,7 +485,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                   <div key={prop.id} className="flex items-center gap-2">
                     <input
                       type="text"
-                      className="input input-bordered input-sm w-full"
+                      className="input input-bordered input-sm w-full focus:ring-2 focus:ring-blue-300 transition-all duration-200"
                       value={prop.key}
                       placeholder={terms.inspectorPropertyKey}
                       onChange={(e) => {
@@ -504,10 +511,12 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                           });
                         }
                       }}
+                      tabIndex={0}
+                      aria-label="Property key"
                     />
                     <input
                       type="text"
-                      className="input input-bordered input-sm w-full"
+                      className="input input-bordered input-sm w-full focus:ring-2 focus:ring-blue-300 transition-all duration-200"
                       value={prop.value}
                       placeholder={terms.inspectorPropertyValue}
                       onChange={(e) => {
@@ -533,6 +542,8 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                           });
                         }
                       }}
+                      tabIndex={0}
+                      aria-label="Property value"
                     />
                     <button 
                       onClick={() => {
@@ -558,7 +569,9 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                           return newProperties;
                         });
                       }}
-                      className="btn btn-ghost btn-sm"
+                      className="btn btn-ghost btn-sm focus:ring-2 focus:ring-red-300 transition-all duration-200"
+                      tabIndex={0}
+                      aria-label="Remove property"
                     >
                       &times;
                     </button>
@@ -569,7 +582,9 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                 onClick={() => {
                   setProperties(prev => [...prev, { id: Date.now(), key: '', value: '' }]);
                 }}
-                className="btn btn-sm btn-outline mt-2 w-full"
+                className="btn btn-sm btn-outline mt-2 w-full focus:ring-2 focus:ring-blue-300 transition-all duration-200"
+                tabIndex={0}
+                aria-label="Add property"
               >
                 {terms.inspectorAddProperty}
               </button>
@@ -578,8 +593,11 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
             {/* Edit History Section */}
             <div>
               <button
-                className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-400 hover:text-gray-300 transition-colors"
+                className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-400 hover:text-gray-300 focus:ring-2 focus:ring-blue-300 transition-all duration-200 rounded p-1"
                 onClick={() => setShowHistory(!showHistory)}
+                tabIndex={0}
+                aria-label={`${showHistory ? 'Hide' : 'Show'} edit history`}
+                aria-expanded={showHistory}
               >
                 {showHistory ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 <Clock size={16} />
@@ -618,8 +636,10 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
 
           <div className="mt-6 space-y-2">
             <button 
-              className="btn btn-error w-full" 
+              className="btn btn-error w-full focus:ring-2 focus:ring-red-300 transition-all duration-200" 
               onClick={() => setShowDeleteModal(true)}
+              tabIndex={0}
+              aria-label="Delete item"
             >
               Delete
             </button>

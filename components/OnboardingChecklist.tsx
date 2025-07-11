@@ -20,7 +20,12 @@ const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({ steps, onDism
     <div className="fixed bottom-4 right-4 w-72 bg-gray-700 text-white rounded-lg shadow-lg p-4 z-20">
       <div className="flex justify-between items-start">
         <h3 className="font-bold mb-2 text-md">Getting Started</h3>
-        <button onClick={onDismiss} className="text-gray-400 hover:text-white">
+        <button 
+          onClick={onDismiss} 
+          className="text-gray-400 hover:text-white focus:ring-2 focus:ring-blue-300 transition-all duration-200 rounded p-1"
+          tabIndex={0}
+          aria-label="Dismiss onboarding checklist"
+        >
           <X size={20} />
         </button>
       </div>
