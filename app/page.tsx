@@ -21,9 +21,10 @@ import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { usePartySocket } from 'partysocket/react';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
+import Image from 'next/image';
 import 'reactflow/dist/style.css';
 import * as dagre from 'dagre';
-import { logger, logNodeOperation, logApiCall } from '@/lib/logger';
+import { logger } from '@/lib/logger';
 
 import RelationNode from '@/components/RelationNode';
 import SpaceNode from '@/components/SpaceNode';
@@ -34,8 +35,7 @@ import TopicNode from '@/components/TopicNode';
 import { Tooltip } from 'react-tooltip';
 import { useTerminology } from '@/lib/TerminologyContext';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal';
-import ErrorBoundary from '@/components/ErrorBoundary';
-import { errorLogger, safeAsync, safeSetState, retryOperation } from '@/lib/errorHandler';
+import { errorLogger } from '@/lib/errorHandler';
 
 // Define nodeTypes outside component to fix React Flow warnings
 const nodeTypes = {
@@ -136,18 +136,9 @@ export default function GraphPage() {
   // Track selected date changes
   useEffect(() => {
     logger.info('Navigation', 'Date changed', { newDate: selectedDate, previousDate: today }, address);
-  }, [selectedDate]);
+  }, [selectedDate, today, address]);
 
   // Track user interactions
-  const loggedHandleAddNode = useCallback(() => {
-    logNodeOperation('create', 'topic', `topic-${Date.now()}`, {}, address);
-    handleAddNode();
-  }, [address]);
-
-  const loggedHandleAddSpace = useCallback(() => {
-    logNodeOperation('create', 'space', `space-${Date.now()}`, {}, address);
-    handleAddSpace();
-  }, [address]);
 
 
 
@@ -177,22 +168,22 @@ export default function GraphPage() {
           if (prev.find(n => n.id === event.data.nodeId)) return prev;
           
           const newNode: Node = {
-            id: event.data.nodeId,
+            id: String(event.data.nodeId),
             type: event.data.type === 'group' ? 'group' : 'topic',
-            position: { x: event.data.x || 0, y: event.data.y || 0 },
+            position: { x: Number(event.data.x) || 0, y: Number(event.data.y) || 0 },
             data: { 
-              label: event.data.label || 'Untitled',
-              properties: event.data.properties || {},
-              owner: event.data.userAddress,
-              visibility: event.data.visibility || 'public'
+              label: String(event.data.label || 'Untitled'),
+              properties: (event.data.properties as Record<string, string>) || {},
+              owner: String(event.data.userAddress),
+              visibility: (event.data.visibility as 'public' | 'private') || 'public'
             },
             draggable: true
           };
           
           if (event.data.type === 'group') {
             newNode.style = {
-              width: event.data.width || 400,
-              height: event.data.height || 300,
+              width: Number(event.data.width) || 400,
+              height: Number(event.data.height) || 300,
               backgroundColor: 'rgba(208, 192, 247, 0.2)',
               borderColor: '#D0C0F7',
             };
@@ -207,8 +198,8 @@ export default function GraphPage() {
           // Handle real-time node movement
           setNodes(prev => 
             prev.map(n => 
-              n.id === event.data.nodeId 
-                ? { ...n, position: event.data.position }
+              n.id === String(event.data.nodeId) 
+                ? { ...n, position: event.data.position as { x: number; y: number } }
                 : n
             )
           );
@@ -216,7 +207,7 @@ export default function GraphPage() {
           // Handle other updates (label, properties, etc.)
           setNodes(prev => 
             prev.map(n => 
-              n.id === event.data.nodeId 
+              n.id === String(event.data.nodeId) 
                 ? { ...n, data: { ...n.data, ...event.data } }
                 : n
             )
@@ -225,8 +216,8 @@ export default function GraphPage() {
         break;
 
       case 'entity-delete':
-        setNodes(prev => prev.filter(n => n.id !== event.data.nodeId));
-        setEdges(prev => prev.filter(e => e.source !== event.data.nodeId && e.target !== event.data.nodeId));
+        setNodes(prev => prev.filter(n => n.id !== String(event.data.nodeId)));
+        setEdges(prev => prev.filter(e => e.source !== String(event.data.nodeId) && e.target !== String(event.data.nodeId)));
         break;
 
       case 'relation-create':
@@ -237,10 +228,10 @@ export default function GraphPage() {
           const newRelationNode: Node = {
             id: String(event.data.id),
             type: 'relation',
-            position: { x: event.data.x || 0, y: event.data.y || 0 },
+            position: { x: Number(event.data.x) || 0, y: Number(event.data.y) || 0 },
             data: {
-              label: event.data.relationType || 'relation',
-              properties: event.data.properties || {},
+              label: String(event.data.relationType || 'relation'),
+              properties: (event.data.properties as Record<string, string>) || {},
               selectionColor: null,
               selectingAddress: null
             },
@@ -274,7 +265,7 @@ export default function GraphPage() {
     }
   }, [queryClient, selectedDate]);
 
-  const handleDataAcknowledgment = useCallback((ack: any) => {
+  const handleDataAcknowledgment = useCallback((ack: { eventId: string; status: string; resolution?: { loserEventId: string } }) => {
     console.log('Received acknowledgment:', ack);
     
     // Clear pending operation
@@ -290,7 +281,7 @@ export default function GraphPage() {
     } else if (ack.status === 'conflict-resolved') {
       // Handle conflict resolution
       const op = optimisticOperations.current.get(ack.eventId);
-      if (op && ack.resolution.loserEventId === ack.eventId) {
+      if (op && ack.resolution && ack.resolution.loserEventId === ack.eventId) {
         // Our operation lost, rollback
         op.rollback();
         optimisticOperations.current.delete(ack.eventId);
@@ -299,7 +290,7 @@ export default function GraphPage() {
     }
   }, []);
 
-  const handleConflictResolution = useCallback((resolution: any) => {
+  const handleConflictResolution = useCallback((resolution: { resolution: string; loserEventId?: string }) => {
     console.log('Conflict resolved:', resolution);
     
     // Only show toast for conflicts that actually impact the user
@@ -1382,7 +1373,6 @@ export default function GraphPage() {
       // Show toast for relation movement only when crossing space boundaries
       if (isNumeric(node.id)) {
         // Check if relation is currently inside any space
-        const spaces = nodes.filter(n => n.type === 'group');
         // Debug logging reduced to minimize console noise
         
         // Get absolute position (convert from relative if inside a space)
@@ -1993,7 +1983,7 @@ export default function GraphPage() {
 							</span>
 						</div>
 						<span className="font-mono text-lg text-gray-400">/</span>
-						<img src="/globe.svg" alt="Globe" className="w-6 h-6" />
+						<Image src="/globe.svg" alt="Globe" width={24} height={24} />
 						<input
 							type="date"
 							value={selectedDate}

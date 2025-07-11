@@ -98,7 +98,7 @@ export function useResizable({
         document.removeEventListener('touchend', handleMouseUp);
       };
     }
-  }, [isResizing, handleMouseMove, handleMouseUp, handleTouchMove]);
+  }, [isResizing, direction, handleMouseMove, handleMouseUp, handleTouchMove]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {

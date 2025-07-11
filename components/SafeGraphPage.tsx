@@ -21,7 +21,7 @@ export default function SafeGraphPage({ children }: SafeGraphPageProps) {
     return () => {
       logger.info('App', 'Application unmounting', undefined, address);
     };
-  }, []);
+  }, [address]);
 
   // Track wallet connection changes
   useEffect(() => {
