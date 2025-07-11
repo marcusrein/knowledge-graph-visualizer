@@ -355,17 +355,34 @@ async function getEntitiesForDatePostgres(date: string, userAddress?: string) {
       // Handle both useraddress and userAddress column names (case sensitivity)
       const rowUserAddress = row.useraddress || row.userAddress;
       
+      // PostgreSQL returns column names in lowercase, so we need to map them
+      const normalizedRow = {
+        id: row.id,
+        nodeId: row.nodeid || row.nodeId,  // Handle case sensitivity
+        label: row.label,
+        type: row.type,
+        userAddress: rowUserAddress,
+        parentId: row.parentid || row.parentId,
+        x: row.x,
+        y: row.y,
+        width: row.width,
+        height: row.height,
+        visibility: row.visibility,
+        properties: row.properties,
+        created_at: row.created_at
+      };
+      
       if (
-        row.type === 'group' &&
-        row.visibility === 'private' &&
-        rowUserAddress &&
-        String(rowUserAddress).toLowerCase() !== (userAddress || '').toLowerCase()
+        normalizedRow.type === 'group' &&
+        normalizedRow.visibility === 'private' &&
+        normalizedRow.userAddress &&
+        String(normalizedRow.userAddress).toLowerCase() !== (userAddress || '').toLowerCase()
       ) {
-        return { ...row, label: '', properties: {} };
+        return { ...normalizedRow, label: '', properties: {} };
       }
       return {
-        ...row,
-        properties: typeof row.properties === 'string' ? JSON.parse(row.properties) : row.properties
+        ...normalizedRow,
+        properties: typeof normalizedRow.properties === 'string' ? JSON.parse(normalizedRow.properties) : normalizedRow.properties
       };
     });
   } catch (error) {
@@ -404,17 +421,34 @@ function getEntitiesForDateSQLite(date: string, userAddress?: string) {
       stmt.all(date, userAddress || '') as Record<string, unknown>[];
     
     return rows.map((row) => {
+      // Ensure consistent field names (SQLite might also return lowercase)
+      const normalizedRow = {
+        id: row.id,
+        nodeId: row.nodeid || row.nodeId,  // Handle case sensitivity
+        label: row.label,
+        type: row.type,
+        userAddress: row.useraddress || row.userAddress,
+        parentId: row.parentid || row.parentId,
+        x: row.x,
+        y: row.y,
+        width: row.width,
+        height: row.height,
+        visibility: row.visibility,
+        properties: row.properties,
+        created_at: row.created_at
+      };
+      
       if (
-        row.type === 'group' &&
-        row.visibility === 'private' &&
-        row.userAddress &&
-        String(row.userAddress).toLowerCase() !== (userAddress || '').toLowerCase()
+        normalizedRow.type === 'group' &&
+        normalizedRow.visibility === 'private' &&
+        normalizedRow.userAddress &&
+        String(normalizedRow.userAddress).toLowerCase() !== (userAddress || '').toLowerCase()
       ) {
-        return { ...row, label: '', properties: {} };
+        return { ...normalizedRow, label: '', properties: {} };
       }
       return {
-        ...row,
-        properties: row.properties ? JSON.parse(String(row.properties)) : {}
+        ...normalizedRow,
+        properties: normalizedRow.properties ? JSON.parse(String(normalizedRow.properties)) : {}
       };
     });
   } catch (error) {
