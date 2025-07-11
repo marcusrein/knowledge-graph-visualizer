@@ -869,76 +869,10 @@ export default function GraphPage() {
           const selection = selections.find(s => s.nodeId === e.nodeId);
           const isOwner = Boolean(e.userAddress && address && e.userAddress.toLowerCase() === address.toLowerCase());
           const maskedLabel = e.visibility === 'private' && !isOwner ? `${e.userAddress?.slice(0,6)}...${e.userAddress?.slice(-4)}` : e.label;
-          
+          const isSelected = selectedNode?.id === e.nodeId;
+
           const handleResize = (width: number, height: number) => {
-            // Get current node from React state to ensure we have the latest dimensions
-            const currNode = nodes.find((n) => n.id === e.nodeId);
-            const prevStyle = currNode?.style as { width?: number; height?: number; backgroundColor?: string; borderColor?: string };
-            
-            // Use stored style dimensions as the source of truth, not DOM measurements
-            const currentStoredWidth = prevStyle?.width || 400;
-            const currentStoredHeight = prevStyle?.height || 300;
-            
-            console.log(`%c[handleResize] Space ${e.nodeId} resize requested`, 'color: cyan; font-weight: bold');
-            console.log('[handleResize] Resize operation:', {
-              nodeId: e.nodeId,
-              label: e.label,
-              storedDimensions: { width: currentStoredWidth, height: currentStoredHeight },
-              requestedDimensions: { width, height },
-              deltaFromStored: {
-                width: width - currentStoredWidth,
-                height: height - currentStoredHeight,
-              },
-              nodeFound: !!currNode,
-              timestamp: new Date().toISOString(),
-            });
-
-            // Validate that the requested size is actually different
-            if (width === currentStoredWidth && height === currentStoredHeight) {
-              console.warn('[handleResize] No change in dimensions, skipping update');
-              return;
-            }
-
-            // Ensure dimensions are within reasonable bounds
-            const finalWidth = Math.max(200, Math.min(2000, width));
-            const finalHeight = Math.max(150, Math.min(1500, height));
-            
-            if (finalWidth !== width || finalHeight !== height) {
-              console.log('[handleResize] Dimensions clamped:', {
-                requested: { width, height },
-                final: { width: finalWidth, height: finalHeight }
-              });
-            }
-
-            console.log(`%c[handleResize] Persisting to database`, 'color: yellow');
-            updateEntityPatch.mutate({
-              nodeId: e.nodeId,
-              width: finalWidth,
-              height: finalHeight,
-            });
-            
-            console.log(`%c[handleResize] Updating React Flow node state`, 'color: lightblue');
-            // Update the node style immediately for visual feedback
-            setNodes((nds) => {
-              const updated = nds.map((n) =>
-                n.id === e.nodeId
-                  ? { 
-                      ...n, 
-                      style: { 
-                        ...n.style, 
-                        width: finalWidth, 
-                        height: finalHeight 
-                      } 
-                    }
-                  : n
-              );
-              const updatedNode = updated.find(n => n.id === e.nodeId);
-              console.log('[handleResize] Node after update:', {
-                id: updatedNode?.id,
-                style: updatedNode?.style,
-              });
-              return updated;
-            });
+            updateEntityPatch.mutate({ nodeId: e.nodeId, width, height });
           };
 
           const node: Node = {
@@ -963,12 +897,25 @@ export default function GraphPage() {
             },
           };
 
+          // Add gentle highlighting for currently selected space
+          if (isSelected) {
+            node.style = {
+              ...node.style,
+              borderColor: '#3B82F6',
+              borderWidth: '2px',
+              boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.3), 0 0 12px rgba(59, 130, 246, 0.2)',
+            };
+          }
+
+          // Add selection styling for other users
           if (selection) {
             node.style = {
               ...node.style,
-              borderColor: addressToColor(selection.address),
-              borderWidth: 3,
-              boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
+              borderColor: isSelected ? '#3B82F6' : addressToColor(selection.address),
+              borderWidth: isSelected ? '2px' : '3px',
+              boxShadow: isSelected 
+                ? '0 0 0 2px rgba(59, 130, 246, 0.3), 0 0 12px rgba(59, 130, 246, 0.2)'
+                : `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
             };
           }
 
@@ -985,6 +932,7 @@ export default function GraphPage() {
         const topicNodes = topicEntities.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; type: string; parentId: string | null; userAddress: string; visibility: string; }) => {
           const selection = selections.find(s => s.nodeId === e.nodeId);
           const hasWallet = !!address;
+          const isSelected = selectedNode?.id === e.nodeId;
           
           // Transform default labels based on current mode, but preserve custom labels
           let displayLabel = e.label;
@@ -1015,17 +963,29 @@ export default function GraphPage() {
             }
           }
 
+          // Add gentle highlighting for currently selected entity
+          if (isSelected) {
+            node.style = {
+              ...node.style,
+              boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.5), 0 0 8px rgba(59, 130, 246, 0.3)',
+              borderRadius: '8px',
+            };
+          }
+
+          // Add selection styling for other users
           if (selection) {
             node.style = {
               ...node.style,
               borderColor: addressToColor(selection.address),
-              borderWidth: 3,
-              boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
+              borderWidth: 2,
+              boxShadow: isSelected 
+                ? `0 0 0 2px rgba(59, 130, 246, 0.5), 0 0 8px rgba(59, 130, 246, 0.3), 0 0 0 4px ${addressToColor(selection.address)}`
+                : `0 0 0 2px ${addressToColor(selection.address)}, 0 0 6px ${addressToColor(selection.address)}`,
             };
           }
 
           return node;
-        });
+        }).filter(Boolean);
 
         // Build a quick map of relationId -> [sourceId, targetId]
         const relLinkMap = new Map<number, { source?: string; target?: string }>();
@@ -1040,6 +1000,7 @@ export default function GraphPage() {
           const idStr = String(r.id);
           const selection = selections.find(s => s.nodeId === idStr);
           const hasWallet = !!address;
+          const isSelected = selectedNode?.id === idStr;
 
           // Detect if both endpoints live inside the same Space
           let parentId: string | undefined;
@@ -1076,17 +1037,32 @@ export default function GraphPage() {
             },
             position: initPos,
             draggable: hasWallet,
-            style: selection ? {
-              borderColor: addressToColor(selection.address),
-              borderWidth: 3,
-              boxShadow: `0 0 0 3px ${addressToColor(selection.address)}, 0 0 10px ${addressToColor(selection.address)}`,
-            } : undefined
           };
+
+          // Add gentle highlighting for currently selected relation
+          if (isSelected) {
+            relNode.style = {
+              boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.5), 0 0 8px rgba(59, 130, 246, 0.3)',
+              borderRadius: '8px',
+            };
+          }
+
+          // Add selection styling for other users
+          if (selection) {
+            relNode.style = {
+              ...relNode.style,
+              borderColor: addressToColor(selection.address),
+              borderWidth: 2,
+              boxShadow: isSelected 
+                ? '0 0 0 2px rgba(59, 130, 246, 0.5), 0 0 8px rgba(59, 130, 246, 0.3)'
+                : `0 0 0 2px ${addressToColor(selection.address)}, 0 0 6px ${addressToColor(selection.address)}`,
+            };
+          }
 
           return relNode;
         });
 
-          const allNodes = [...groupNodes, ...topicNodes.filter(Boolean), ...relationNodes];
+          const allNodes = [...groupNodes, ...topicNodes, ...relationNodes];
           
           // Final safety check: remove any nodes with orphaned parent references
           const validParentIds = new Set(groupNodes.map((n: Node) => n.id));
@@ -1192,15 +1168,16 @@ export default function GraphPage() {
     if (!requireWallet()) return;
     console.log('Creating a new topic...');
 
-    // --- helper: find first non-overlapping spot ---
+    // --- helper: find first non-overlapping spot OUTSIDE of any space ---
     const TOPIC_W = 180;
     const TOPIC_H = 60;
-    const PADDING = 20;
-    const STEP = 40; // grid step when scanning for space
+    const PADDING = 40; // Increased padding for better spacing
+    const STEP = 60; // Larger grid step for better distribution
 
-    const doesOverlap = (x: number, y: number): boolean => {
+    // Check if position overlaps with existing nodes OR is inside any space
+    const doesOverlapOrInsideSpace = (x: number, y: number): boolean => {
+      // Check overlap with existing nodes
       for (const n of nodes) {
-        // Approximate dimensions
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const nW = ((n.style as any)?.width ?? (n.type === 'group' ? 400 : TOPIC_W)) as number;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1209,27 +1186,73 @@ export default function GraphPage() {
         const overlapY = y + TOPIC_H + PADDING > n.position.y && n.position.y + nH + PADDING > y;
         if (overlapX && overlapY) return true;
       }
+
+      // Check if position is inside any space boundary (ensure nodes stay OUTSIDE spaces)
+      for (const space of nodes.filter(n => n.type === 'group')) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const spaceW = ((space.style as any)?.width ?? 400) as number;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const spaceH = ((space.style as any)?.height ?? 300) as number;
+        
+        // Check if the new node would be entirely inside the space
+        const nodeLeft = x;
+        const nodeRight = x + TOPIC_W;
+        const nodeTop = y;
+        const nodeBottom = y + TOPIC_H;
+        
+        const spaceLeft = space.position.x;
+        const spaceRight = space.position.x + spaceW;
+        const spaceTop = space.position.y;
+        const spaceBottom = space.position.y + spaceH;
+        
+        // If node is entirely inside space boundaries, it's invalid
+        if (nodeLeft >= spaceLeft && nodeRight <= spaceRight && 
+            nodeTop >= spaceTop && nodeBottom <= spaceBottom) {
+          return true; // Position is inside a space - avoid it
+        }
+      }
+      
       return false;
     };
 
-    let posX = 50;
-    let posY = 50;
-    const MAX_RANGE = 2000; // search bounds
-    while (doesOverlap(posX, posY) && posY < MAX_RANGE) {
+    // Start searching from a position that's more likely to be outside spaces
+    let posX = 100;
+    let posY = 100;
+    const MAX_RANGE = 2500; // Expanded search bounds
+    
+    while (doesOverlapOrInsideSpace(posX, posY) && posY < MAX_RANGE) {
       posX += STEP;
       if (posX > MAX_RANGE) {
-        posX = 50;
+        posX = 100;
         posY += STEP;
       }
     }
 
+    console.log(`[AddNode] Found position outside spaces: (${posX}, ${posY})`);
+
+    // --- Auto-numbering for new entities ---
+    const baseLabel = isDevMode ? 'New Entity' : 'New Topic';
+    const existingLabels = nodes
+      .filter(n => n.type === 'topic' || n.type === 'knowledge')
+      .map(n => n.data?.label || '')
+      .filter(label => label.startsWith(baseLabel));
+    
+    // Extract numbers from existing labels and find the next available number
+    const existingNumbers = existingLabels
+      .map(label => {
+        const match = label.match(new RegExp(`^${baseLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} (\\d+)$`));
+        return match ? parseInt(match[1], 10) : (label === baseLabel ? 1 : 0);
+      })
+      .filter(num => num > 0);
+    
+    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+    const numberedLabel = `${baseLabel} ${nextNumber}`;
+
     const nodeId = crypto.randomUUID();
-    // Use the terminology context to set the appropriate default label
-    const defaultLabel = isDevMode ? 'New Entity' : 'New Topic';
 
     addEntity.mutate({
       nodeId,
-      label: defaultLabel,
+      label: numberedLabel,
       type: 'knowledge',
       x: posX,
       y: posY,
@@ -1237,27 +1260,98 @@ export default function GraphPage() {
       date: selectedDate,
       userAddress: address!,
     });
+
+    // Center view to include the new node after a brief delay
+    setTimeout(() => {
+      if (rfInstance) {
+        console.log('[AddNode] Centering view to include new node');
+        rfInstance.fitView({ padding: 0.2, duration: 800 });
+      }
+    }, 300);
   };
 
   const handleAddSpace = () => {
     if (!requireWallet()) return;
     console.log('Creating a new space...');
+    
+    // --- Find non-overlapping position for new space ---
+    const SPACE_W = 400;
+    const SPACE_H = 300;
+    const PADDING = 60; // Generous padding between spaces
+    const STEP = 80; // Large grid step for space distribution
+
+    // Check if space position overlaps with existing nodes/spaces
+    const doesSpaceOverlap = (x: number, y: number): boolean => {
+      for (const n of nodes) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nW = ((n.style as any)?.width ?? (n.type === 'group' ? 400 : 180)) as number;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nH = ((n.style as any)?.height ?? (n.type === 'group' ? 300 : 60)) as number;
+        
+        const overlapX = x + SPACE_W + PADDING > n.position.x && n.position.x + nW + PADDING > x;
+        const overlapY = y + SPACE_H + PADDING > n.position.y && n.position.y + nH + PADDING > y;
+        if (overlapX && overlapY) return true;
+      }
+      return false;
+    };
+
+    // Start searching from a position that spreads spaces out
+    let posX = 150;
+    let posY = 150;
+    const MAX_RANGE = 3000; // Large search area for spaces
+    
+    while (doesSpaceOverlap(posX, posY) && posY < MAX_RANGE) {
+      posX += STEP;
+      if (posX > MAX_RANGE) {
+        posX = 150;
+        posY += STEP;
+      }
+    }
+
+    console.log(`[AddSpace] Found position for new space: (${posX}, ${posY})`);
+    
+    // --- Auto-numbering for new spaces ---
+    const baseLabel = 'New Space';
+    const existingLabels = nodes
+      .filter(n => n.type === 'group')
+      .map(n => n.data?.label || '')
+      .filter(label => label.startsWith(baseLabel));
+    
+    // Extract numbers from existing labels and find the next available number
+    const existingNumbers = existingLabels
+      .map(label => {
+        const match = label.match(/^New Space (\d+)$/);
+        return match ? parseInt(match[1], 10) : (label === baseLabel ? 1 : 0);
+      })
+      .filter(num => num > 0);
+    
+    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+    const numberedLabel = `${baseLabel} ${nextNumber}`;
+    
     const nodeId = crypto.randomUUID();
 
     const spacePayload = {
       nodeId,
-      label: 'New Space',
+      label: numberedLabel,
       type: 'group' as const,
-      x: 200,
-      y: 200,
-      width: 400,
-      height: 300,
+      x: posX,
+      y: posY,
+      width: SPACE_W,
+      height: SPACE_H,
       properties: {},
       date: selectedDate,
       userAddress: address!,
     };
 
     addEntity.mutate(spacePayload);
+
+    // Center view to include the new space after a brief delay
+    setTimeout(() => {
+      if (rfInstance) {
+        console.log('[AddSpace] Centering view to include new space');
+        rfInstance.fitView({ padding: 0.2, duration: 800 });
+      }
+    }, 300);
   };
 
   const updateEntityPatch = useMutation({
@@ -1540,22 +1634,32 @@ export default function GraphPage() {
     console.log('%c[AutoLayout] Triggered', 'color: lightgreen; font-weight: bold');
     console.log('[AutoLayout] Current node positions', nodes.map((n) => ({ id: n.id, parentId: n.parentId, pos: n.position })));
 
-    // helper to run dagre on a subset and return new positions
+    // Helper to run dagre layout with improved spacing and alignment
     const runLayout = (
       subsetNodes: Node[],
       subsetEdges: Edge[],
       offsetX = 0,
-      offsetY = 0
+      offsetY = 0,
+      isSpace = false
     ) => {
+      if (subsetNodes.length === 0) return new Map();
+
       const g = new dagre.graphlib.Graph();
       g.setDefaultEdgeLabel(() => ({}));
-      g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 80 });
+      
+      // Improved spacing parameters for better design
+      const spacing = isSpace 
+        ? { rankdir: 'TB', nodesep: 80, ranksep: 100, align: 'UL' } // More compact inside spaces
+        : { rankdir: 'TB', nodesep: 120, ranksep: 140, align: 'UL' }; // More spacious globally
+      
+      g.setGraph(spacing);
 
       subsetNodes.forEach((n) => {
+        // Get actual dimensions or use standardized defaults
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const w = (n.style as any)?.width || 180;
+        const w = (n.style as any)?.width || (n.type === 'group' ? 300 : 180);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const h = (n.style as any)?.height || 60;
+        const h = (n.style as any)?.height || (n.type === 'group' ? 200 : 60);
         g.setNode(n.id, { width: w, height: h });
       });
 
@@ -1568,9 +1672,9 @@ export default function GraphPage() {
         const nodeWithPos = g.node(n.id);
         if (nodeWithPos) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const w = (n.style as any)?.width || 180;
+          const w = (n.style as any)?.width || (n.type === 'group' ? 300 : 180);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const h = (n.style as any)?.height || 60;
+          const h = (n.style as any)?.height || (n.type === 'group' ? 200 : 60);
           // Convert Dagre center to React Flow top-left coordinates
           const topLeftX = nodeWithPos.x - w / 2;
           const topLeftY = nodeWithPos.y - h / 2;
@@ -1579,7 +1683,7 @@ export default function GraphPage() {
       });
 
       console.log('[runLayout] subset ids', subsetNodes.map((n) => n.id));
-      console.log('[runLayout] offset', { offsetX, offsetY });
+      console.log('[runLayout] offset', { offsetX, offsetY }, 'isSpace:', isSpace);
       console.table(Array.from(posMap.entries()).map(([id, p]) => ({ id, ...p })));
 
       return posMap;
@@ -1588,113 +1692,146 @@ export default function GraphPage() {
     setNodes((curr) => {
       let next = [...curr];
  
-      // --- Detect relation nodes that live entirely inside a Space ---
+      // Separate nodes by their current container state
       const spaces = next.filter((n) => n.type === 'group');
-      const internalRelationIds = new Set<string>();
+      const globalNodes = next.filter((n) => !n.parentId && n.type !== 'group');
+      
+      console.log('[AutoLayout] === Spaces found ===', spaces.length);
+      console.log('[AutoLayout] === Global nodes ===', globalNodes.length);
 
-      spaces.forEach((space) => {
-        const childIds = new Set(
-          next.filter((c) => c.parentId === space.id).map((c) => c.id)
+      // --- 1) Layout global nodes (entities outside of spaces) ---
+      if (globalNodes.length > 0) {
+        console.log('[AutoLayout] === Global layout ===');
+        
+        const globalNodeIds = new Set(globalNodes.map((n) => n.id));
+        const globalEdges = edges.filter(
+          (e) => globalNodeIds.has(e.source.toString()) && globalNodeIds.has(e.target.toString())
         );
-
-        // Find relation nodes with all endpoints inside this space
-        next
-          .filter((n) => n.type === 'relation' && !n.parentId)
-          .forEach((rel) => {
-            const relEdges = edges.filter(
-              (e) => e.source.toString() === rel.id || e.target.toString() === rel.id
-            );
-            if (relEdges.length === 0) return;
-            const allInside = relEdges.every((e) => {
-              const otherId =
-                e.source.toString() === rel.id ? e.target.toString() : e.source.toString();
-              return childIds.has(otherId);
-            });
-            if (allInside) {
-              internalRelationIds.add(rel.id);
-            }
-          });
-      });
-
-      console.log('[AutoLayout] === Global layout ===');
+        
+        // Include spaces in global layout for proper positioning
+        const allGlobalEntities = [...globalNodes, ...spaces];
+        const globalPos = runLayout(allGlobalEntities, globalEdges, 50, 50, false);
+        
+        // Apply new positions to global entities
+        next = next.map((n) => {
+          if (globalPos.has(n.id)) {
+            return { ...n, position: globalPos.get(n.id)! };
+          }
+          return n;
+        });
+      }
  
-      // 1) Global layout (nodes without parentId)
-      const globalNodes = next.filter(
-        (n) => !n.parentId && n.type !== 'group' && !internalRelationIds.has(n.id)
-      );
-      const globalNodeIds = new Set(globalNodes.map((n) => n.id));
-      const globalEdges = edges.filter(
-        (e) => globalNodeIds.has(e.source.toString()) && globalNodeIds.has(e.target.toString())
-      );
-      const globalPos = runLayout(globalNodes, globalEdges);
-      next = next.map((n) => (globalPos.has(n.id) ? { ...n, position: globalPos.get(n.id)! } : n));
- 
+      // --- 2) Layout entities within each space ---
       console.log('[AutoLayout] === Per-Space layout ===');
- 
-      // 2) Per-space layout (reuse spaces found above)
-      // `spaces` already declared
+      
       spaces.forEach((space) => {
-        const children = [
-          ...next.filter((c) => c.parentId === space.id),
-          ...next.filter((c) => internalRelationIds.has(c.id)),
-        ];
-        if (!children.length) return;
+        const spaceChildren = next.filter((c) => c.parentId === space.id);
+        
+        if (spaceChildren.length === 0) {
+          console.log(`[SpaceLayout] Space ${space.id} is empty, skipping`);
+          return;
+        }
  
-        console.log(`\n[SpaceLayout] Space ${space.id} (${children.length} children)`);
+        console.log(`[SpaceLayout] Space ${space.id} (${spaceChildren.length} children)`);
  
-        // Dimensions of the space (with sensible fallbacks)
+        // Get space dimensions
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sWidth = ((space.style as any)?.width ?? 400) as number;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sHeight = ((space.style as any)?.height ?? 300) as number;
  
-        // --- Dagre layout inside the space ---
-        const childIds = new Set(children.map((c) => c.id));
+        // Layout children within the space
+        const childIds = new Set(spaceChildren.map((c) => c.id));
         const childEdges = edges.filter(
           (e) => childIds.has(e.source.toString()) && childIds.has(e.target.toString())
         );
  
-        console.log('[SpaceLayout] Running dagre for children', Array.from(childIds));
+        console.log('[SpaceLayout] Running layout for children', Array.from(childIds));
  
-        // Offset children by 20px padding inside the space
-        const posInsideRaw = runLayout(children, childEdges, 20, 20);
+        // Use generous padding inside spaces for better visual hierarchy
+        const padding = 40;
+        const posInsideRaw = runLayout(spaceChildren, childEdges, padding, padding, true);
  
         console.log('[SpaceLayout] Raw positions', Array.from(posInsideRaw.entries()));
  
-        // Clamp positions to remain within space bounds
-        const clamped = new Map<string, { x: number; y: number }>();
-        children.forEach((child) => {
+        // Ensure nodes stay within space bounds with proper padding
+        const layoutPositions = new Map<string, { x: number; y: number }>();
+        spaceChildren.forEach((child) => {
           const raw = posInsideRaw.get(child.id);
           if (!raw) return;
+          
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const cW = ((child.style as any)?.width ?? 180) as number;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const cH = ((child.style as any)?.height ?? 60) as number;
-          const maxX = Math.max(0, sWidth - cW - 20);
-          const maxY = Math.max(0, sHeight - cH - 20);
-          clamped.set(child.id, {
-            x: Math.min(Math.max(raw.x, 20), maxX),
-            y: Math.min(Math.max(raw.y, 20), maxY),
+          
+          // Ensure minimum and maximum bounds with padding
+          const minX = padding;
+          const minY = padding;
+          const maxX = Math.max(minX, sWidth - cW - padding);
+          const maxY = Math.max(minY, sHeight - cH - padding);
+          
+          layoutPositions.set(child.id, {
+            x: Math.max(minX, Math.min(raw.x, maxX)),
+            y: Math.max(minY, Math.min(raw.y, maxY)),
           });
         });
  
-        console.log('[SpaceLayout] Clamped positions', Array.from(clamped.entries()));
+        console.log('[SpaceLayout] Final clamped positions', Array.from(layoutPositions.entries()));
  
+        // Apply the new positions to children
         next = next.map((n) => {
-          if (clamped.has(n.id)) {
-            const newPos = clamped.get(n.id)!;
-            // If this was an internal relation without parentId, attach it to the space so
-            // React Flow treats its coordinates as relative to the Space.
-            if (internalRelationIds.has(n.id)) {
-              return { ...n, parentId: space.id, position: newPos };
-            }
-            return { ...n, position: newPos };
+          if (layoutPositions.has(n.id)) {
+            return { ...n, position: layoutPositions.get(n.id)! };
           }
           return n;
         });
       });
+
+      // --- 3) Handle orphaned relations (relations that should be inside spaces) ---
+      const orphanedRelations = next.filter((n) => n.type === 'relation' && !n.parentId);
+      
+      orphanedRelations.forEach((relation) => {
+        const relatedEdges = edges.filter(
+          (e) => e.source.toString() === relation.id || e.target.toString() === relation.id
+        );
+        
+        if (relatedEdges.length > 0) {
+          // Check if all connected nodes are in the same space
+          const connectedNodeIds = relatedEdges.flatMap((e) => [
+            e.source.toString() === relation.id ? e.target.toString() : e.source.toString()
+          ]);
+          
+          const connectedNodes = next.filter((n) => connectedNodeIds.includes(n.id));
+          const parentSpaces = [...new Set(connectedNodes.map((n) => n.parentId).filter(Boolean))];
+          
+          // If all connected nodes are in the same space, move the relation there
+          if (parentSpaces.length === 1) {
+            const targetSpaceId = parentSpaces[0];
+            const targetSpace = next.find((n) => n.id === targetSpaceId);
+            
+            if (targetSpace) {
+              // Position the relation in the center of its connected nodes within the space
+              const connectedInSpace = connectedNodes.filter((n) => n.parentId === targetSpaceId);
+              if (connectedInSpace.length > 0) {
+                const avgX = connectedInSpace.reduce((sum, n) => sum + n.position.x, 0) / connectedInSpace.length;
+                const avgY = connectedInSpace.reduce((sum, n) => sum + n.position.y, 0) / connectedInSpace.length;
+                
+                next = next.map((n) => 
+                  n.id === relation.id 
+                    ? { ...n, parentId: targetSpaceId, position: { x: avgX, y: avgY } }
+                    : n
+                );
+                
+                console.log(`[AutoLayout] Moved relation ${relation.id} into space ${targetSpaceId}`);
+              }
+            }
+          }
+        }
+      });
  
       console.log('[AutoLayout] Final positions', next.map((n) => ({ id: n.id, pos: n.position, parentId: n.parentId })));
+      console.log('%c[AutoLayout] Complete', 'color: lightgreen; font-weight: bold');
  
       return next;
     });
@@ -1827,7 +1964,12 @@ export default function GraphPage() {
 							</div>
 						</div>
 
-						<span className="font-mono text-lg">{terms.knowledgeGraph}</span>
+						<div className="flex items-center space-x-2">
+							<span className="font-mono text-lg">{terms.knowledgeGraph}</span>
+							<span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full border border-orange-200 dark:border-orange-700/50">
+								BETA
+							</span>
+						</div>
 						<span className="font-mono text-lg text-gray-400">/</span>
 						<img src="/globe.svg" alt="Globe" className="w-6 h-6" />
 						<input
@@ -2059,13 +2201,18 @@ export default function GraphPage() {
 					onClick={() => setShowWelcome(false)}
 				>
 					<div 
-						className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-2xl mx-4 shadow-2xl border border-gray-700"
+						className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-4xl mx-4 shadow-2xl border border-gray-700"
 						onClick={(e) => e.stopPropagation()}
 					>
 						<div className="space-y-3">
-							<h2 className="text-3xl font-extrabold text-white">
-								Welcome to the {terms.knowledgeGraph}
-							</h2>
+							<div className="flex items-center justify-center space-x-3">
+								<h2 className="text-3xl font-extrabold text-white">
+									Welcome to the {terms.knowledgeGraph}
+								</h2>
+								<span className="inline-flex items-center px-3 py-1 text-sm font-semibold bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full border border-orange-200 dark:border-orange-700/50 shadow-sm">
+									BETA
+								</span>
+							</div>
 							<p className="text-gray-300 text-lg leading-relaxed">
 								Map concepts, ideas, and data into an interactive graph you can
 								expand and explore collaboratively.
