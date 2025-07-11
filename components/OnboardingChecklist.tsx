@@ -36,10 +36,17 @@ const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
     title = title.replace(/Topics/g, `<span class="text-purple-500">${terms.topics}</span>`);
     title = title.replace(/Topic/g, `<span class="text-purple-500">${terms.topic}</span>`);
     
-    // Replace terminology in descriptions WITHOUT purple styling
+    // Replace Space with blue styling ONLY in titles
+    // Handle plural first to avoid partial replacement
+    title = title.replace(/Spaces/g, `<span class="text-blue-400">Spaces</span>`);
+    title = title.replace(/Space/g, `<span class="text-blue-400">Space</span>`);
+    
+    // Replace terminology in descriptions WITHOUT styling
     // Handle plural first to avoid partial replacement
     description = description.replace(/Topics/g, terms.topics);
     description = description.replace(/Topic/g, terms.topic);
+    description = description.replace(/Spaces/g, 'Spaces');
+    description = description.replace(/Space/g, 'Space');
     
     return {
       ...step,
@@ -49,7 +56,7 @@ const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
   });
 
   return (
-    <div className="fixed top-20 right-[63px] w-80 bg-gray-700 text-white rounded-lg shadow-lg p-4 z-10 border border-gray-600">
+    <div className="w-full bg-gray-700/95 backdrop-blur-sm text-white rounded-lg shadow-lg p-4 border border-gray-600">
       <div className="flex justify-between items-start mb-2">
         <h3 className="font-bold text-md">
           {allCompleted ? "🎉 Welcome Complete!" : "Getting Started"}

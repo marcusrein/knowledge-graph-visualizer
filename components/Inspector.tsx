@@ -221,18 +221,18 @@ const Inspector = ({ selectedNode, onSave, onDelete }: InspectorProps) => {
   // Handle collapsed state - show minimal tab
   if (isCollapsed) {
     return (
-      <aside className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-60 flex flex-col w-12">
+      <aside className="absolute top-0 right-0 h-full bg-transparent z-inspector flex flex-col w-2 layout-transition">
         {/* Collapsed handle/tab */}
         <div 
-          className="flex flex-col items-center justify-center h-full cursor-pointer hover:bg-gray-700 transition-colors group"
+          className="h-full w-full cursor-pointer group relative"
           onClick={() => setIsCollapsed(false)}
           tabIndex={0}
           aria-label="Open inspector panel"
         >
-          <ChevronRight className="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" />
-          <div className="transform -rotate-90 text-xs text-gray-400 group-hover:text-white transition-colors mt-4 whitespace-nowrap">
-            Inspector
-          </div>
+          {/* Thin handle bar */}
+          <div className="absolute inset-0 bg-gray-600 group-hover:bg-blue-500 transition-colors duration-200 rounded-l-sm" />
+          {/* Subtle grip indicator */}
+          <div className="absolute inset-y-0 left-0.5 w-0.5 bg-gray-400 group-hover:bg-white transition-colors duration-200 opacity-60" />
         </div>
       </aside>
     );
@@ -246,7 +246,7 @@ const Inspector = ({ selectedNode, onSave, onDelete }: InspectorProps) => {
   if (!selectedNode) {
     return (
       <aside 
-        className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-60 flex flex-col transition-all duration-200"
+        className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-inspector flex flex-col inspector-lg inspector-md inspector-sm layout-transition"
         style={{ width: `${inspectorWidth}px` }}
       >
         {/* Header with collapse button */}
@@ -316,7 +316,7 @@ const Inspector = ({ selectedNode, onSave, onDelete }: InspectorProps) => {
     return (
       <>
         <aside 
-          className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-60 flex flex-col"
+          className="absolute top-0 right-0 h-full bg-base-200 shadow-lg z-inspector flex flex-col inspector-lg inspector-md inspector-sm layout-transition"
           style={{ width: `${inspectorWidth}px` }}
         >
           {/* Resize handle */}

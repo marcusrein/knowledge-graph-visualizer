@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactFlow, {
   Controls,
   Background,
@@ -71,6 +71,24 @@ const ONBOARDING_STEPS = [
     id: 'create-connection',
     title: 'Connect two Topics',
     description: 'Create another Topic and connect it to the first one by dragging from one node to another.',
+    isCompleted: false,
+  },
+  {
+    id: 'create-space',
+    title: 'Create a Space',
+    description: 'Click the □ button to create a Space for organizing your Topics.',
+    isCompleted: false,
+  },
+  {
+    id: 'add-topics-to-space',
+    title: 'Add Topics to the Space',
+    description: 'Drag your Topics into the Space to organize them together.',
+    isCompleted: false,
+  },
+  {
+    id: 'set-space-visibility',
+    title: 'Make the Space public or private',
+    description: 'Select your Space and use the inspector to set its visibility to public or private.',
     isCompleted: false,
   },
 ];
@@ -1950,11 +1968,15 @@ export default function GraphPage() {
   const hasWallet = !!address;
 
   return (
-		<div className="flex h-screen bg-gray-800 text-white">
+		<div className="flex h-screen bg-gray-800 text-white overflow-hidden">
+			{/* Main Content Area */}
 			<div className="flex-1 h-screen relative">
-				<div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
-					<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-						<div ref={menuRef} className="relative">
+				{/* Top Navigation - Responsive and Non-overlapping */}
+				<div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between gap-4">
+					{/* Left Navigation Group */}
+					<div className="flex items-center space-x-2 lg:space-x-4 bg-gray-700/95 backdrop-blur-sm p-2 rounded-lg shadow-lg min-w-0 flex-shrink-0">
+						{/* Hamburger Menu */}
+						<div ref={menuRef} className="relative flex-shrink-0">
 							<button
 								className="flex items-center justify-center w-8 h-8 transition-transform duration-200 focus:ring-2 focus:ring-blue-300 rounded"
 								onClick={() => setShowMenu((prev) => !prev)}
@@ -1969,7 +1991,7 @@ export default function GraphPage() {
 								</div>
 							</button>
 							{showMenu && (
-								<ul className="absolute top-full left-0 mt-2 bg-gray-800 rounded-lg shadow-lg p-2 w-48">
+								<ul className="absolute top-full left-0 mt-2 bg-gray-800 rounded-lg shadow-lg p-2 w-48 z-50">
 									<li>
 										<a
 											href="#"
@@ -2012,9 +2034,11 @@ export default function GraphPage() {
 								</ul>
 							)}
 						</div>
+
+						{/* Mode Toggle */}
 						<button
 							onClick={toggleMode}
-							className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1 focus:ring-2 focus:ring-blue-300 transition-all duration-200"
+							className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1 focus:ring-2 focus:ring-blue-300 transition-all duration-200 flex-shrink-0"
 							tabIndex={0}
 							aria-label={`Switch to ${isDevMode ? 'Normie' : 'Dev'} mode`}
 						>
@@ -2034,80 +2058,97 @@ export default function GraphPage() {
 							</div>
 						</button>
 
-						<div className="flex items-center space-x-2">
-							<span className="font-mono text-lg">{terms.knowledgeGraph}</span>
-							<span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full border border-orange-200 dark:border-orange-700/50">
-								BETA
-							</span>
+						{/* App Title and Date - Responsive */}
+						<div className="hidden md:flex items-center space-x-2 min-w-0">
+							<div className="flex items-center space-x-2 min-w-0">
+								<span className="font-mono text-lg truncate">{terms.knowledgeGraph}</span>
+								<span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full border border-orange-200 dark:border-orange-700/50 flex-shrink-0">
+									BETA
+								</span>
+							</div>
+							<span className="font-mono text-lg text-gray-400 flex-shrink-0">/</span>
+							<Image src="/globe.svg" alt="Globe" width={24} height={24} className="flex-shrink-0" />
+							<input
+								type="date"
+								value={selectedDate}
+								onChange={(e) => setSelectedDate(e.target.value)}
+								className="bg-gray-600 border border-gray-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 rounded px-2 py-1 text-sm transition-all duration-200 min-w-0 flex-shrink"
+								data-tooltip-id="kg-node-tip"
+								data-tooltip-content={`Select a date to view the ${terms.knowledgeGraph} for that day. \n\n As this app is multiplayer, you can see how daily collaborative knowledge graphs are built over time.`}
+								tabIndex={0}
+								aria-label="Select date for knowledge graph"
+							/>
 						</div>
-						<span className="font-mono text-lg text-gray-400">/</span>
-						<Image src="/globe.svg" alt="Globe" width={24} height={24} />
-						<input
-							type="date"
-							value={selectedDate}
-							onChange={(e) => setSelectedDate(e.target.value)}
-							className="bg-gray-600 border border-gray-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 rounded px-2 py-1 text-sm transition-all duration-200"
-							data-tooltip-id="kg-node-tip"
-							data-tooltip-content={`Select a date to view the ${terms.knowledgeGraph} for that day. \n\n As this app is multiplayer, you can see how daily collaborative knowledge graphs are built over time.`}
-							tabIndex={0}
-							aria-label="Select date for knowledge graph"
-						/>
 					</div>
 
-					<button
-						onClick={handleAddNode}
-						className="bg-purple-500 hover:bg-purple-600 focus:bg-purple-600 focus:ring-2 focus:ring-purple-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-						data-tooltip-id="kg-node-tip"
-						data-tooltip-content="Create Topic"
-						tabIndex={0}
-						aria-label="Create Topic"
-					>
-						+
-					</button>
+					{/* Action Buttons - Responsive */}
+					<div className="flex items-center space-x-2 flex-shrink-0">
+						<button
+							onClick={handleAddNode}
+							className="bg-purple-500 hover:bg-purple-600 focus:bg-purple-600 focus:ring-2 focus:ring-purple-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+							data-tooltip-id="kg-node-tip"
+							data-tooltip-content="Create Topic"
+							tabIndex={0}
+							aria-label="Create Topic"
+						>
+							+
+						</button>
 
-					<button
-						onClick={handleAddSpace}
-						className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-						data-tooltip-id="kg-node-tip"
-						data-tooltip-content="Create Space"
-						tabIndex={0}
-						aria-label="Create Space"
-					>
-						□
-					</button>
+						<button
+							onClick={handleAddSpace}
+							className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+							data-tooltip-id="kg-node-tip"
+							data-tooltip-content="Create Space"
+							tabIndex={0}
+							aria-label="Create Space"
+						>
+							□
+						</button>
 
-					<button
-						onClick={handleAutoLayout}
-						className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-						data-tooltip-id="kg-node-tip"
-						data-tooltip-content="Tidy up layout"
-						tabIndex={0}
-						aria-label="Tidy up layout"
-					>
-						⇆
-					</button>
+						{/* Layout Tools - Hide on smaller screens */}
+						<div className="hidden lg:flex items-center space-x-2">
+							<button
+								onClick={handleAutoLayout}
+								className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+								data-tooltip-id="kg-node-tip"
+								data-tooltip-content="Tidy up layout"
+								tabIndex={0}
+								aria-label="Tidy up layout"
+							>
+								⇆
+							</button>
 
-					<button
-						onClick={handleCenterView}
-						className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
-						data-tooltip-id="kg-node-tip"
-						data-tooltip-content="Center view"
-						tabIndex={0}
-						aria-label="Center view"
-					>
-						☉
-					</button>
+							<button
+								onClick={handleCenterView}
+								className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+								data-tooltip-id="kg-node-tip"
+								data-tooltip-content="Center view"
+								tabIndex={0}
+								aria-label="Center view"
+							>
+								☉
+							</button>
+						</div>
 
-					<div className="flex items-center space-x-2">
-						{presentUsers
-							.filter((u) => u.address !== address)
-							.map((user) => (
-								<Avatar key={user.id} address={user.address} />
-							))}
+						{/* User Avatars - Responsive */}
+						<div className="flex items-center space-x-2">
+							{presentUsers
+								.filter((u) => u.address !== address)
+								.slice(0, 3) // Limit avatars on smaller screens
+								.map((user) => (
+									<Avatar key={user.id} address={user.address} />
+								))}
+							{presentUsers.filter((u) => u.address !== address).length > 3 && (
+								<span className="text-xs text-gray-400 bg-gray-600 rounded-full w-6 h-6 flex items-center justify-center">
+									+{presentUsers.filter((u) => u.address !== address).length - 3}
+								</span>
+							)}
+						</div>
 					</div>
 				</div>
 
-				<div className="absolute top-4 right-16 z-10 flex flex-col items-end space-y-2">
+				{/* Right Status Panel - Non-overlapping with Inspector */}
+				<div className="absolute top-4 right-4 flex flex-col items-end space-y-3 max-w-sm" style={{ zIndex: 70 }}>
 					{/* Private Space Ownership Indicator */}
 					{selectedNode && selectedNode.type === 'group' && selectedNode.data?.visibility === 'private' && 
 					 selectedNode.data?.owner && address && selectedNode.data.owner.toLowerCase() === address.toLowerCase() && (
@@ -2128,27 +2169,27 @@ export default function GraphPage() {
 					{/* Wallet Connection Status */}
 					<div className="flex items-center space-x-2">
 						{connecting ? (
-							<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-								<span className="text-sm font-mono">Loading...</span>
+							<div className="flex items-center space-x-3 bg-gray-800/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-xl border border-gray-600">
+								<div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+								<span className="text-sm font-medium text-gray-200">Connecting...</span>
 							</div>
 						) : address ? (
-							<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-								<span className="flex items-center space-x-2">
+							<div className="flex items-center space-x-3 bg-gradient-to-r from-gray-800/95 to-gray-700/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-xl border border-gray-600">
+								<div className="flex items-center space-x-2">
 									<span
-										className="w-3 h-3 rounded-full bg-green-500 animate-pulse"
+										className="w-3 h-3 rounded-full bg-emerald-400 shadow-emerald-400/50"
 										style={{ 
-											animation: 'gentle-flash 2s ease-in-out infinite',
-											boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)'
+											boxShadow: '0 0 12px rgba(52, 211, 153, 0.8)'
 										}}
 									/>
-									<span className="text-sm font-mono">{`${address.slice(
-										0,
-										6
-									)}...${address.slice(-4)}`}</span>
-								</span>
+									<div className="flex flex-col">
+										<span className="text-xs font-medium text-emerald-300 uppercase tracking-wide">Connected</span>
+										<span className="text-sm font-mono text-white">{`${address.slice(0, 6)}...${address.slice(-4)}`}</span>
+									</div>
+								</div>
 								<button
 									onClick={() => disconnect()}
-									className="bg-red-500 hover:bg-red-600 focus:bg-red-600 focus:ring-2 focus:ring-red-300 text-white font-bold py-1 px-2 rounded text-xs transition-all duration-200"
+									className="bg-red-500/90 hover:bg-red-500 focus:bg-red-500 focus:ring-2 focus:ring-red-300 text-white font-medium py-1.5 px-3 rounded-lg text-xs transition-all duration-200 shadow-md hover:shadow-lg"
 									tabIndex={0}
 									aria-label="Disconnect wallet"
 								>
@@ -2161,11 +2202,14 @@ export default function GraphPage() {
 									<button
 										key={connector.uid}
 										onClick={() => connect({ connector })}
-										className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+										className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 focus:from-blue-600 focus:to-blue-700 focus:ring-2 focus:ring-blue-300 text-white font-medium py-3 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl border border-blue-400/30"
 										tabIndex={0}
 										aria-label={`Connect with ${connector.name}`}
 									>
-										{connector.name}
+										<span className="flex items-center space-x-2">
+											<span>🔌</span>
+											<span>{connector.name}</span>
+										</span>
 									</button>
 								))}
 							</div>
@@ -2194,7 +2238,7 @@ export default function GraphPage() {
 					</div>
 				)}
 
-				{/* Default edge styling */}
+				{/* ReactFlow - Main Canvas */}
 				<ReactFlow
 					onInit={setRfInstance}
 					deleteKeyCode={null}
@@ -2233,6 +2277,7 @@ export default function GraphPage() {
 					<Controls />
 				</ReactFlow>
 
+				{/* Inspector Panel - Right Side */}
 				<Inspector
 					selectedNode={selectedNode}
 					onSave={(nodeId, data) => updateNodeData.mutate({ nodeId, data })}
@@ -2258,38 +2303,37 @@ export default function GraphPage() {
 					}}
 				/>
 
+				{/* Onboarding Checklist - Responsive Positioning */}
 				{showChecklist && (
-					<OnboardingChecklist
-						steps={ONBOARDING_STEPS.map(step => ({
-							...step,
-							isCompleted: completedSteps.includes(step.id)
-						}))}
-						onDismiss={dismissChecklist}
-						onTryAgain={resetChecklist}
-					/>
+					<div className="absolute top-20 right-4 z-50 max-w-sm">
+						<OnboardingChecklist
+							steps={ONBOARDING_STEPS.map(step => ({
+								...step,
+								isCompleted: completedSteps.includes(step.id)
+							}))}
+							onDismiss={dismissChecklist}
+							onTryAgain={resetChecklist}
+						/>
+					</div>
 				)}
 
-				{/* Bottom Right Button Layout - Well arranged according to design principles */}
-				{/* 
-					Layout from right to left:
-					1. Inspector panel (always visible, collapsible)
-					2. Debug drawer button (right-20)
-					3. Todo list toggle (right-[196px] hidden, right-[212px] shown) - moved 100px farther left
-					This creates proper visual hierarchy and spacing
-				*/}
-				<button
-					onClick={toggleChecklist}
-					className={`fixed z-30 p-3 rounded-full shadow-lg ${
-						showChecklist 
-							? 'bottom-4 right-[212px] bg-gray-600 text-gray-300' 
-							: 'bottom-4 right-[196px] bg-blue-600 text-white'
-					}`}
-					title={showChecklist ? 'Hide getting started guide' : 'Show getting started guide'}
-					tabIndex={0}
-					aria-label={showChecklist ? 'Hide getting started guide' : 'Show getting started guide'}
-				>
-					{showChecklist ? <X size={20} /> : <HelpCircle size={20} />}
-				</button>
+				{/* Bottom Right Action Buttons - Systematic Layout */}
+				<div className="absolute bottom-4 right-4 z-40 flex flex-col-reverse gap-3">
+					{/* Help/Checklist Toggle */}
+					<button
+						onClick={toggleChecklist}
+						className={`p-3 rounded-full shadow-lg transition-all duration-200 ${
+							showChecklist 
+								? 'bg-gray-600 text-gray-300 hover:bg-gray-500' 
+								: 'bg-blue-600 text-white hover:bg-blue-500'
+						}`}
+						title={showChecklist ? 'Hide getting started guide' : 'Show getting started guide'}
+						tabIndex={0}
+						aria-label={showChecklist ? 'Hide getting started guide' : 'Show getting started guide'}
+					>
+						{showChecklist ? <X size={20} /> : <HelpCircle size={20} />}
+					</button>
+				</div>
 
 				<Tooltip
 					id="kg-node-tip"
@@ -2298,9 +2342,10 @@ export default function GraphPage() {
 				/>
 			</div>
 
+			{/* Welcome Modal - Full Screen Overlay */}
 			{showWelcome && (
 				<div 
-					className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+					className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
 					onClick={() => setShowWelcome(false)}
 				>
 					<div 
@@ -2390,7 +2435,6 @@ export default function GraphPage() {
 									About This App
 								</h3>
 								<ul className="text-sm text-gray-300 space-y-2">
-				
 									<li>
 										• Multiple users can connect wallets and build together in
 										real-time
@@ -2460,6 +2504,7 @@ export default function GraphPage() {
 				</div>
 			)}
 
+			{/* Delete Confirmation Modal */}
 			<DeleteConfirmModal
 				isOpen={showDeleteModal}
 				onClose={() => {

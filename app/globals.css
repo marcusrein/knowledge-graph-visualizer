@@ -123,3 +123,116 @@ body {
     transform: scale(1.05);
   }
 }
+
+/* Z-Index Scale - Systematic layering to prevent overlaps */
+.z-modal { z-index: 100; }
+.z-overlay { z-index: 90; }
+.z-dropdown { z-index: 80; }
+.z-tooltip { z-index: 70; }
+.z-inspector { z-index: 60; }
+.z-checklist { z-index: 50; }
+.z-actions { z-index: 40; }
+.z-nav { z-index: 30; }
+.z-status { z-index: 20; }
+.z-content { z-index: 10; }
+
+/* Responsive Layout Utilities */
+@media (max-width: 1280px) {
+  /* Large screens - hide some secondary actions */
+  .lg-hide { display: none !important; }
+}
+
+@media (max-width: 1024px) {
+  /* Medium screens - compact spacing */
+  .md-compact .space-x-4 > * + * { margin-left: 0.5rem; }
+  .md-compact .space-x-2 > * + * { margin-left: 0.25rem; }
+}
+
+@media (max-width: 768px) {
+  /* Small screens - stack elements */
+  .sm-stack { flex-direction: column !important; }
+  .sm-hide { display: none !important; }
+  .sm-full { width: 100% !important; }
+}
+
+/* Inspector Responsive Widths */
+@media (min-width: 1024px) {
+  .inspector-lg { max-width: 400px; }
+}
+
+@media (max-width: 1023px) {
+  .inspector-md { max-width: 320px; }
+}
+
+@media (max-width: 767px) {
+  .inspector-sm { max-width: 280px; }
+}
+
+/* Navigation Responsive Styles */
+.nav-responsive {
+  @apply flex items-center justify-between gap-2;
+}
+
+@media (max-width: 1024px) {
+  .nav-responsive {
+    @apply gap-1;
+  }
+  
+  .nav-responsive .space-x-4 > * + * {
+    margin-left: 0.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .nav-responsive {
+    @apply flex-col gap-2;
+  }
+}
+
+/* Prevent Text Selection on UI Elements */
+.select-none {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Smooth Transitions for Layout Changes */
+.layout-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Backdrop Effects */
+.backdrop-blur-xs {
+  backdrop-filter: blur(2px);
+}
+
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+}
+
+/* Focus Improvements */
+.focus-visible:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+/* Custom Scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(55, 65, 81, 0.5);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(107, 114, 128, 0.8);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 114, 128, 1);
+}
