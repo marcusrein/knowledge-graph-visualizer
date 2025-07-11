@@ -1923,8 +1923,11 @@ export default function GraphPage() {
 					<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
 						<div ref={menuRef} className="relative">
 							<button
-								className="flex items-center justify-center w-8 h-8 transition-transform duration-200"
+								className="flex items-center justify-center w-8 h-8 transition-transform duration-200 focus:ring-2 focus:ring-blue-300 rounded"
 								onClick={() => setShowMenu((prev) => !prev)}
+								tabIndex={0}
+								aria-label={`${showMenu ? 'Close' : 'Open'} navigation menu`}
+								aria-expanded={showMenu}
 							>
 								<div className={`flex flex-col space-y-1 transition-transform duration-300 ${showMenu ? 'rotate-90' : ''}`}>
 									<div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? 'rotate-45 translate-y-1.5' : ''}`}></div>
@@ -1976,9 +1979,11 @@ export default function GraphPage() {
 								</ul>
 							)}
 						</div>
-						<div
+						<button
 							onClick={toggleMode}
-							className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1"
+							className="flex items-center font-mono text-sm bg-gray-800 rounded-full cursor-pointer select-none p-1 focus:ring-2 focus:ring-blue-300 transition-all duration-200"
+							tabIndex={0}
+							aria-label={`Switch to ${isDevMode ? 'Normie' : 'Dev'} mode`}
 						>
 							<div
 								className={`px-3 py-1 rounded-full transition-colors duration-300 ${
@@ -1994,7 +1999,7 @@ export default function GraphPage() {
 							>
 								Dev Mode
 							</div>
-						</div>
+						</button>
 
 						<div className="flex items-center space-x-2">
 							<span className="font-mono text-lg">{terms.knowledgeGraph}</span>
@@ -2008,44 +2013,54 @@ export default function GraphPage() {
 							type="date"
 							value={selectedDate}
 							onChange={(e) => setSelectedDate(e.target.value)}
-							className="bg-gray-600 border border-gray-500 rounded px-2 py-1 text-sm"
+							className="bg-gray-600 border border-gray-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 rounded px-2 py-1 text-sm transition-all duration-200"
 							data-tooltip-id="kg-node-tip"
 							data-tooltip-content={`Select a date to view the ${terms.knowledgeGraph} for that day. \n\n As this app is multiplayer, you can see how daily collaborative knowledge graphs are built over time.`}
+							tabIndex={0}
+							aria-label="Select date for knowledge graph"
 						/>
 					</div>
 
 					<button
 						onClick={handleAddNode}
-						className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+						className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
 						data-tooltip-id="kg-node-tip"
 						data-tooltip-content="Create Topic"
+						tabIndex={0}
+						aria-label="Create Topic"
 					>
 						+
 					</button>
 
 					<button
 						onClick={handleAddSpace}
-						className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded"
+						className="bg-purple-500 hover:bg-purple-600 focus:bg-purple-600 focus:ring-2 focus:ring-purple-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
 						data-tooltip-id="kg-node-tip"
 						data-tooltip-content="Create Space"
+						tabIndex={0}
+						aria-label="Create Space"
 					>
 						□
 					</button>
 
 					<button
 						onClick={handleAutoLayout}
-						className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+						className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
 						data-tooltip-id="kg-node-tip"
 						data-tooltip-content="Tidy up layout"
+						tabIndex={0}
+						aria-label="Tidy up layout"
 					>
 						⇆
 					</button>
 
 					<button
 						onClick={handleCenterView}
-						className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+						className="bg-gray-500 hover:bg-gray-600 focus:bg-gray-600 focus:ring-2 focus:ring-gray-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
 						data-tooltip-id="kg-node-tip"
 						data-tooltip-content="Center view"
+						tabIndex={0}
+						aria-label="Center view"
 					>
 						☉
 					</button>
@@ -2100,7 +2115,9 @@ export default function GraphPage() {
 								</span>
 								<button
 									onClick={() => disconnect()}
-									className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs"
+									className="bg-red-500 hover:bg-red-600 focus:bg-red-600 focus:ring-2 focus:ring-red-300 text-white font-bold py-1 px-2 rounded text-xs transition-all duration-200"
+									tabIndex={0}
+									aria-label="Disconnect wallet"
 								>
 									Disconnect
 								</button>
@@ -2111,7 +2128,9 @@ export default function GraphPage() {
 									<button
 										key={connector.uid}
 										onClick={() => connect({ connector })}
-										className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+										className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+										tabIndex={0}
+										aria-label={`Connect with ${connector.name}`}
 									>
 										{connector.name}
 									</button>
@@ -2132,7 +2151,9 @@ export default function GraphPage() {
 								onClick={() =>
 									connectors[0] && connect({ connector: connectors[0] })
 								}
-								className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+								className="bg-blue-500 hover:bg-blue-600 focus:bg-blue-600 focus:ring-2 focus:ring-blue-300 text-white font-bold py-2 px-4 rounded transition-all duration-200"
+								tabIndex={0}
+								aria-label="Connect with MetaMask"
 							>
 								Connect with MetaMask
 							</button>

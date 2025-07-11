@@ -248,7 +248,14 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
           <div className="p-4 flex flex-col h-full">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold">Space Inspector</h3>
-              <button onClick={onClose} className="btn btn-sm btn-ghost">&times;</button>
+              <button 
+                onClick={onClose} 
+                className="btn btn-sm btn-ghost focus:ring-2 focus:ring-blue-300 transition-all duration-200"
+                tabIndex={0}
+                aria-label="Close inspector"
+              >
+                &times;
+              </button>
             </div>
 
             <div className="flex-1 space-y-6 overflow-y-auto">
@@ -409,7 +416,12 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                 }
               />
             </h3>
-            <button onClick={onClose} className="btn btn-sm btn-ghost">
+            <button 
+              onClick={onClose} 
+              className="btn btn-sm btn-ghost focus:ring-2 focus:ring-blue-300 transition-all duration-200"
+              tabIndex={0}
+              aria-label="Close inspector"
+            >
               &times;
             </button>
           </div>
