@@ -295,11 +295,15 @@ export async function getEntitiesForDate(date: string, userAddress?: string) {
 
 async function getEntitiesForDatePostgres(date: string, userAddress?: string) {
   try {
-    console.log('[Database] Getting entities for date:', { date, userAddress });
+    console.log(`[Database] QUERY START: Getting entities for date: ${date}, userAddress: ${userAddress}`);
     
     // First, let's see what's actually in the database
     const allEntities = await sql`SELECT * FROM entities ORDER BY created_at DESC LIMIT 10`;
-    console.log('[Database] All entities (last 10):', allEntities?.rows || []);
+    console.log(`[Database] ALL ENTITIES COUNT: ${allEntities?.rows?.length || 0}`);
+    
+    if (allEntities?.rows && allEntities.rows.length > 0) {
+      console.log(`[Database] SAMPLE ENTITY:`, JSON.stringify(allEntities.rows[0]));
+    }
     
     // Now try the filtered query - temporarily making it more permissive
     const result = await sql`
@@ -308,19 +312,18 @@ async function getEntitiesForDatePostgres(date: string, userAddress?: string) {
       ORDER BY created_at ASC
     `;
     
-    console.log('[Database] Filtered query result:', { hasResult: !!result, hasRows: !!result?.rows, rowCount: result?.rows?.length });
+    console.log(`[Database] FILTERED QUERY RESULT: ${result?.rows?.length || 0} rows`);
     
-    // Let's also try a simpler query to see if date filtering is the issue
-    const simpleResult = await sql`
+    // Let's also try without date filtering to see if that's the issue
+    const allResult = await sql`
       SELECT * FROM entities 
-      WHERE DATE(created_at) = ${date}
       ORDER BY created_at ASC
     `;
     
-    console.log('[Database] Simple date query result:', { hasResult: !!simpleResult, hasRows: !!simpleResult?.rows, rowCount: simpleResult?.rows?.length });
+    console.log(`[Database] ALL ENTITIES (no date filter): ${allResult?.rows?.length || 0} rows`);
     
     if (!result || !result.rows) {
-      console.log('[Database] No result or rows, returning empty array');
+      console.log('[Database] RETURNING EMPTY ARRAY - no result or rows');
       return [];
     }
     
@@ -662,14 +665,17 @@ async function createEntityPostgres(data: {
   properties?: Record<string, unknown>;
 }) {
   try {
+    console.log(`[Database] CREATE ENTITY START:`, JSON.stringify(data));
+    
     // Check for duplicates
     const existing = await sql`
       SELECT id FROM entities WHERE nodeId = ${data.nodeId}
     `;
     
-    console.log('[Database] Duplicate check result:', { hasResult: !!existing, hasRows: !!existing?.rows, rowCount: existing?.rows?.length });
+    console.log(`[Database] DUPLICATE CHECK: ${existing?.rows?.length || 0} existing rows`);
     
     if (existing?.rows && existing.rows.length > 0) {
+      console.log(`[Database] FOUND DUPLICATE, returning existing id: ${existing.rows[0].id}`);
       return { id: existing.rows[0].id, duplicated: true };
     }
 
@@ -689,10 +695,14 @@ async function createEntityPostgres(data: {
         ${JSON.stringify(data.properties || {})},
         ${data.visibility || 'public'}
       )
-      RETURNING id
+      RETURNING id, created_at
     `;
 
-    console.log('[Database] Insert result:', { hasResult: !!result, hasRows: !!result?.rows, rowCount: result?.rows?.length });
+    console.log(`[Database] INSERT RESULT: ${result?.rows?.length || 0} rows inserted`);
+    
+    if (result?.rows && result.rows.length > 0) {
+      console.log(`[Database] CREATED ENTITY: id=${result.rows[0].id}, created_at=${result.rows[0].created_at}`);
+    }
 
     // Record creation in edit history
     await sql`
@@ -701,10 +711,11 @@ async function createEntityPostgres(data: {
     `;
 
     if (!result?.rows || result.rows.length === 0) {
-      console.log('[Database] No result from insert, returning default id');
+      console.log('[Database] INSERT FAILED - No result from insert, returning default id');
       return { id: 1 }; // Fallback ID
     }
 
+    console.log(`[Database] CREATE ENTITY SUCCESS: returning id ${result.rows[0].id}`);
     return { id: result.rows[0].id };
   } catch (error) {
     console.error('[Database] Error creating entity (PostgreSQL):', error);

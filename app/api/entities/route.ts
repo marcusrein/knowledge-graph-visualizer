@@ -35,11 +35,13 @@ export async function GET(req: NextRequest) {
     const dateParam = searchParams.get('date');
     const date = dateParam ?? format(new Date(), 'yyyy-MM-dd');
 
+    console.log(`[API] GET ENTITIES START: date=${date}, userAddress=${addressParam}`);
     logger.info('API', 'GET /api/entities started', { date, userAddress: addressParam }, addressParam || undefined);
     
     try {
       const sanitized = await getEntitiesForDate(date, addressParam || undefined);
       
+      console.log(`[API] GET ENTITIES RESULT: ${sanitized.length} entities returned`);
       log('GET', { date, rows: sanitized.length });
       
       const duration = Date.now() - startTime;
@@ -51,11 +53,11 @@ export async function GET(req: NextRequest) {
       
       return NextResponse.json(sanitized);
     } catch (dbError) {
-      console.error('Database error in entities GET:', dbError);
+      console.error('[API] Database error in entities GET:', dbError);
       return NextResponse.json([], { status: 200 }); // Return empty array instead of failing
     }
   } catch (error) {
-    console.error('Entities GET route error:', error);
+    console.error('[API] Entities GET route error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { nodeId, label, type, userAddress, parentId, visibility, x, y, width, height, properties } = body;
     
+    console.log(`[API] POST ENTITIES START: nodeId=${nodeId}, label=${label}, type=${type}`);
     log('POST payload', body);
     
     if (!nodeId || !label || !type) {
@@ -87,10 +90,11 @@ export async function POST(req: NextRequest) {
       properties
     });
     
+    console.log(`[API] POST ENTITIES RESULT: id=${result.id}, duplicated=${result.duplicated}`);
     log('POST created', { id: result.id, nodeId, duplicated: result.duplicated });
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Error creating entity:', error);
+    console.error('[API] Error creating entity:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
