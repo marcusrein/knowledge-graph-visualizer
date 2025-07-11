@@ -1835,11 +1835,43 @@ export default function GraphPage() {
  
       return next;
     });
+
+    // Automatically center view after tidying up with a brief delay
+    setTimeout(() => {
+      console.log('[AutoLayout] Auto-centering view after tidy');
+      handleCenterView();
+    }, 400);
   };
 
   const handleCenterView = () => {
     if (rfInstance) {
-      rfInstance.fitView({ padding: 0.2 });
+      // Account for inspector panel width when it's open
+      if (selectedNode) {
+        // Get inspector width from localStorage or use default
+        const storedWidth = localStorage.getItem('inspector-width');
+        const inspectorWidth = storedWidth ? parseInt(storedWidth, 10) : 320;
+        
+        // Calculate the effective viewport for centering (subtract inspector width)
+        const viewportWidth = window.innerWidth;
+        const effectiveViewportWidth = viewportWidth - inspectorWidth;
+        
+        // Calculate padding as a percentage of total viewport, accounting for inspector
+        const basePadding = 0.15;
+        const inspectorRatio = inspectorWidth / viewportWidth;
+        const adjustedPadding = basePadding + (inspectorRatio * 0.7); // Scale the adjustment
+        
+        // Center view with additional padding to account for inspector
+        rfInstance.fitView({ 
+          padding: adjustedPadding,
+          duration: 600 // Smooth animation
+        });
+      } else {
+        // No inspector open, use standard symmetric padding
+        rfInstance.fitView({ 
+          padding: 0.15,
+          duration: 600 
+        });
+      }
     }
   };
 

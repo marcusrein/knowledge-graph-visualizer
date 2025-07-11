@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface DeleteConfirmModalProps {
   isOpen: boolean;
@@ -15,21 +15,63 @@ export default function DeleteConfirmModal({
   itemType,
   itemName,
 }: DeleteConfirmModalProps) {
-  // Handle Escape key
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Handle keyboard navigation
   useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape' && isOpen) {
-        onClose();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!isOpen) return;
+
+      switch (event.key) {
+        case 'Escape':
+          event.preventDefault();
+          onClose();
+          break;
+        case 'Enter':
+          event.preventDefault();
+          onConfirm();
+          break;
+        case 'Tab':
+          // Let default tab behavior work, but ensure we stay within modal
+          const focusableElements = [cancelButtonRef.current, deleteButtonRef.current].filter(Boolean);
+          const activeElement = document.activeElement;
+          const currentIndex = focusableElements.findIndex(el => el === activeElement);
+          
+          if (event.shiftKey) {
+            // Shift+Tab - go backwards
+            if (currentIndex <= 0) {
+              event.preventDefault();
+              deleteButtonRef.current?.focus();
+            }
+          } else {
+            // Tab - go forwards
+            if (currentIndex >= focusableElements.length - 1) {
+              event.preventDefault();
+              cancelButtonRef.current?.focus();
+            }
+          }
+          break;
       }
     }
 
     if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
+      document.addEventListener('keydown', handleKeyDown);
       return () => {
-        document.removeEventListener('keydown', handleEscape);
+        document.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, onConfirm]);
+
+  // Auto-focus when modal opens
+  useEffect(() => {
+    if (isOpen && cancelButtonRef.current) {
+      // Focus the Cancel button by default (safer option)
+      setTimeout(() => {
+        cancelButtonRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
