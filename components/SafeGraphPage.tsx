@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import ErrorBoundary from './ErrorBoundary';
 import { errorLogger, safeSetState } from '@/lib/errorHandler';
+import { logger } from '@/lib/logger';
+import DebugDrawer from './DebugDrawer';
 
 interface SafeGraphPageProps {
   children: React.ReactNode;
@@ -12,6 +14,23 @@ interface SafeGraphPageProps {
 export default function SafeGraphPage({ children }: SafeGraphPageProps) {
   const { address } = useAccount();
   const [hasUnrecoverableError, setHasUnrecoverableError] = useState(false);
+
+  // Initialize logging
+  useEffect(() => {
+    logger.appStart(address);
+    return () => {
+      logger.info('App', 'Application unmounting', undefined, address);
+    };
+  }, []);
+
+  // Track wallet connection changes
+  useEffect(() => {
+    if (address) {
+      logger.userConnected(address);
+    } else {
+      logger.userDisconnected();
+    }
+  }, [address]);
 
   // Global error handler for unhandled promise rejections
   useEffect(() => {
@@ -128,6 +147,7 @@ export default function SafeGraphPage({ children }: SafeGraphPageProps) {
           {children}
         </ErrorBoundary>
       </ErrorBoundary>
+      <DebugDrawer />
     </ErrorBoundary>
   );
 } 

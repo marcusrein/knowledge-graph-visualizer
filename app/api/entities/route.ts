@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { format } from 'date-fns';
+import { logger } from '@/lib/logger';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Verbose logging helper
 const log = (...args: unknown[]) => console.log('[Entities]', new Date().toISOString(), ...args);
 
 export async function GET(req: NextRequest) {
+  const startTime = Date.now();
+  const addressParam = req.nextUrl.searchParams.get('address');
+  
   try {
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get('date');
     const date = dateParam ?? format(new Date(), 'yyyy-MM-dd');
 
-    const addressParam = searchParams.get('address');
+    logger.info('API', 'GET /api/entities started', { date, userAddress: addressParam }, addressParam || undefined);
     
     try {
       const rows = db
@@ -32,6 +36,14 @@ export async function GET(req: NextRequest) {
         return r;
       });
       log('GET', { date, rows: sanitized.length });
+      
+      const duration = Date.now() - startTime;
+      logger.info('API', 'GET /api/entities completed', { 
+        date, 
+        rowCount: sanitized.length, 
+        duration 
+      }, addressParam || undefined);
+      
       return NextResponse.json(sanitized);
     } catch (dbError) {
       console.error('Database error in entities GET:', dbError);

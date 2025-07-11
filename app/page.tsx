@@ -23,6 +23,7 @@ import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
 import 'reactflow/dist/style.css';
 import * as dagre from 'dagre';
+import { logger, logNodeOperation, logApiCall } from '@/lib/logger';
 
 import RelationNode from '@/components/RelationNode';
 import SpaceNode from '@/components/SpaceNode';
@@ -120,6 +121,33 @@ export default function GraphPage() {
   const pendingOperations = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const optimisticOperations = useRef<Map<string, { type: string; rollback: () => void }>>(new Map());
   const positionDebounceRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Initialize component logging
+  useEffect(() => {
+    const startTime = Date.now();
+    logger.info('Component', 'GraphPage mounting', { date: selectedDate }, address);
+    
+    return () => {
+      const duration = Date.now() - startTime;
+      logger.info('Component', 'GraphPage unmounting', { duration }, address);
+    };
+  }, []);
+
+  // Track selected date changes
+  useEffect(() => {
+    logger.info('Navigation', 'Date changed', { newDate: selectedDate, previousDate: today }, address);
+  }, [selectedDate]);
+
+  // Track user interactions
+  const loggedHandleAddNode = useCallback(() => {
+    logNodeOperation('create', 'topic', `topic-${Date.now()}`, {}, address);
+    handleAddNode();
+  }, [address]);
+
+  const loggedHandleAddSpace = useCallback(() => {
+    logNodeOperation('create', 'space', `space-${Date.now()}`, {}, address);
+    handleAddSpace();
+  }, [address]);
 
 
 
