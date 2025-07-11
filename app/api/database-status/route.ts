@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbProtection } from '@/lib/databaseProtection';
 import { cleanupScheduler } from '@/lib/databaseCleanup';
+import { getDatabaseSize } from '@/lib/database';
 import { errorLogger } from '@/lib/errorHandler';
 
 export async function GET(req: NextRequest) {
@@ -10,7 +11,6 @@ export async function GET(req: NextRequest) {
     const userAddress = searchParams.get('userAddress');
 
     // Get database size and health metrics
-    const { getDatabaseSize } = await import('@/lib/database');
     const dbSize = await getDatabaseSize();
     const sizeMB = dbSize.sizeKB / 1024;
 
