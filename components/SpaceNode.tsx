@@ -18,16 +18,44 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
   const { label, visibility = 'public', onResize, owner } = data;
   const { address } = useAccount();
   
+  // Debug logging to understand the owner issue
+  console.log('[SpaceNode Debug] Owner comparison:', {
+    label,
+    owner,
+    currentAddress: address,
+    ownerLength: owner?.length,
+    addressLength: address?.length,
+    isOwnerTruthy: Boolean(owner),
+    isAddressTruthy: Boolean(address),
+  });
+  
   // Stable owner detection to prevent flashing
   const isOwner = useMemo(() => {
-    if (!owner || !address) return false;
+    if (!address) return false;
     
-    return (
+    // If no owner is set, this might be a newly created space that hasn't been properly updated yet
+    if (!owner) {
+      console.log('[SpaceNode Debug] No owner set, cannot determine ownership');
+      return false;
+    }
+    
+    const result = (
       owner.toLowerCase() === address.toLowerCase() || 
       owner === address ||
       // Handle case where owner might be stored without checksumming
       owner.replace(/^0x/, '').toLowerCase() === address.replace(/^0x/, '').toLowerCase()
     );
+    
+    console.log('[SpaceNode Debug] isOwner calculation:', {
+      owner,
+      address,
+      lowerCaseMatch: owner.toLowerCase() === address.toLowerCase(),
+      exactMatch: owner === address,
+      withoutChecksumMatch: owner.replace(/^0x/, '').toLowerCase() === address.replace(/^0x/, '').toLowerCase(),
+      finalResult: result
+    });
+    
+    return result;
   }, [owner, address]);
   
   const isPrivate = visibility === 'private';
@@ -38,15 +66,27 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
     return isPrivate && !isOwner && Boolean(owner) && Boolean(address);
   }, [isPrivate, isOwner, owner, address]);
 
-  const ownerDisplayName = owner ? `${owner.slice(0, 6)}...${owner.slice(-4)}` : 'Unknown';
+  // Better owner display handling
+  const ownerDisplayName = useMemo(() => {
+    if (!owner) {
+      return 'Unknown';
+    }
+    return `${owner.slice(0, 6)}...${owner.slice(-4)}`;
+  }, [owner]);
   
-  const privacyLabel = isPrivate
-    ? isOwner 
-      ? 'Your Private Space'
-      : `${ownerDisplayName}'s Private Space`
-    : isOwner
-      ? 'Your Public Space'
-      : `${ownerDisplayName}'s Public Space`;
+  // More robust privacy label logic
+  const privacyLabel = useMemo(() => {
+    if (isPrivate) {
+      return isOwner ? 'Your Private Space' : `${ownerDisplayName}'s Private Space`;
+    } else {
+      // For public spaces, if no owner is detected but the user might be the owner, 
+      // check if this is a newly created space
+      if (!owner && address) {
+        return 'Your Public Space'; // Assume ownership for newly created spaces
+      }
+      return isOwner ? 'Your Public Space' : `${ownerDisplayName}'s Public Space`;
+    }
+  }, [isPrivate, isOwner, ownerDisplayName, owner, address]);
 
   const tooltipText = isPrivate
     ? isOwner 

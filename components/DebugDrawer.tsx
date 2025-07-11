@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { logger } from '../lib/logger';
+import { useResizable } from '../lib/useResizable';
 
 interface LogEntry {
   id: string;
@@ -23,6 +24,16 @@ export default function DebugDrawer() {
   const [autoScroll, setAutoScroll] = useState(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  // Resize functionality - vertical for bottom drawer
+  const { size: drawerHeight, isResizing, handleMouseDown, handleTouchStart } = useResizable({
+    initialSize: typeof window !== 'undefined' ? window.innerHeight * 0.6 : 400, // 60vh or fallback
+    minSize: 200,
+    maxSize: typeof window !== 'undefined' ? window.innerHeight * 0.8 : 800, // 80vh max or fallback
+    storageKey: 'debug-drawer-height',
+    direction: 'vertical',
+  });
 
   useEffect(() => {
     // Subscribe to log updates
@@ -47,6 +58,38 @@ export default function DebugDrawer() {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs, autoScroll]);
+
+  // Escape key to close debug drawer
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('keydown', handleEscape);
+      };
+    }
+  }, [isOpen]);
+
+  // Click outside to close drawer
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (drawerRef.current && !drawerRef.current.contains(event.target as HTMLElement) && isOpen) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('click', handleClickOutside);
+      return () => {
+        document.removeEventListener('click', handleClickOutside);
+      };
+    }
+  }, [isOpen]);
 
   const filteredLogs = logs.filter(log => {
     // Filter by level
@@ -77,23 +120,23 @@ export default function DebugDrawer() {
 
   const getLevelColor = (level: string): string => {
     switch (level) {
-      case 'error': return 'text-red-500';
-      case 'warn': return 'text-yellow-500';
-      case 'info': return 'text-blue-500';
-      case 'debug': return 'text-gray-500';
-      case 'performance': return 'text-green-500';
-      default: return 'text-gray-400';
+      case 'error': return 'text-red-400';
+      case 'warn': return 'text-yellow-400';
+      case 'info': return 'text-blue-400';
+      case 'debug': return 'text-gray-400';
+      case 'performance': return 'text-green-400';
+      default: return 'text-gray-500';
     }
   };
 
   const getLevelBg = (level: string): string => {
     switch (level) {
-      case 'error': return 'bg-red-100 border-red-200';
-      case 'warn': return 'bg-yellow-100 border-yellow-200';
-      case 'info': return 'bg-blue-100 border-blue-200';
-      case 'debug': return 'bg-gray-100 border-gray-200';
-      case 'performance': return 'bg-green-100 border-green-200';
-      default: return 'bg-gray-50 border-gray-200';
+      case 'error': return 'bg-red-900/30 border-red-700/50';
+      case 'warn': return 'bg-yellow-900/30 border-yellow-700/50';
+      case 'info': return 'bg-blue-900/30 border-blue-700/50';
+      case 'debug': return 'bg-gray-800/50 border-gray-600/50';
+      case 'performance': return 'bg-green-900/30 border-green-700/50';
+      default: return 'bg-gray-800/30 border-gray-600/50';
     }
   };
 
@@ -140,16 +183,29 @@ export default function DebugDrawer() {
 
       {/* Debug drawer */}
       <div
-        className={`fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-200 shadow-2xl transition-all duration-300 z-40 ${
+        ref={drawerRef}
+        className={`fixed bottom-0 left-0 right-0 bg-gray-900 border-t-2 border-gray-600 shadow-2xl transition-all duration-300 z-40 ${
           isOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
-        style={{ height: isOpen ? '60vh' : '0' }}
+        style={{ height: isOpen ? `${drawerHeight}px` : '0' }}
       >
-        <div className="h-full flex flex-col">
+        {/* Resize handle */}
+        <div
+          className={`absolute top-0 left-0 right-0 h-1 bg-gray-600/50 hover:bg-blue-500 transition-colors cursor-ns-resize group ${
+            isResizing ? 'bg-blue-500' : ''
+          }`}
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+        >
+          {/* Visual indicator */}
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-0.5 w-8 bg-white/30 group-hover:bg-white/60 transition-colors rounded-full" />
+        </div>
+
+        <div className="h-full flex flex-col pt-1">
           {/* Header */}
-          <div className="bg-gray-50 border-b border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-gray-800 border-b border-gray-600 p-4 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <h3 className="text-lg font-semibold text-gray-800">Debug Console</h3>
+              <h3 className="text-lg font-semibold text-white">Debug Console</h3>
               
               {/* Log level toggle */}
               <label className="flex items-center gap-2 cursor-pointer">
@@ -157,9 +213,9 @@ export default function DebugDrawer() {
                   type="checkbox"
                   checked={isVerbose}
                   onChange={(e) => setIsVerbose(e.target.checked)}
-                  className="toggle toggle-sm"
+                  className="rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800"
                 />
-                <span className="text-sm font-medium">
+                <span className="text-sm font-medium text-gray-300">
                   {isVerbose ? 'Verbose' : 'Minimal'}
                 </span>
               </label>
@@ -170,28 +226,28 @@ export default function DebugDrawer() {
                   type="checkbox"
                   checked={autoScroll}
                   onChange={(e) => setAutoScroll(e.target.checked)}
-                  className="toggle toggle-sm"
+                  className="rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800"
                 />
-                <span className="text-sm">Auto-scroll</span>
+                <span className="text-sm text-gray-300">Auto-scroll</span>
               </label>
             </div>
 
             <div className="flex items-center gap-2 text-xs">
               {/* Log counts */}
               <div className="flex gap-2">
-                <span className="px-2 py-1 bg-red-100 text-red-700 rounded">
+                <span className="px-2 py-1 bg-red-900/40 text-red-300 rounded border border-red-700/50">
                   E: {logCounts.error || 0}
                 </span>
-                <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
+                <span className="px-2 py-1 bg-yellow-900/40 text-yellow-300 rounded border border-yellow-700/50">
                   W: {logCounts.warn || 0}
                 </span>
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                <span className="px-2 py-1 bg-blue-900/40 text-blue-300 rounded border border-blue-700/50">
                   I: {logCounts.info || 0}
                 </span>
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded">
+                <span className="px-2 py-1 bg-green-900/40 text-green-300 rounded border border-green-700/50">
                   P: {logCounts.performance || 0}
                 </span>
-                <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
+                <span className="px-2 py-1 bg-gray-700/40 text-gray-300 rounded border border-gray-600/50">
                   D: {logCounts.debug || 0}
                 </span>
               </div>
@@ -199,12 +255,12 @@ export default function DebugDrawer() {
           </div>
 
           {/* Controls */}
-          <div className="bg-gray-50 border-b border-gray-200 p-3 flex flex-wrap items-center gap-3">
+          <div className="bg-gray-800 border-b border-gray-600 p-3 flex flex-wrap items-center gap-3">
             {/* Filter */}
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="select select-sm select-bordered"
+              className="bg-gray-700 border-gray-600 text-gray-100 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">All Levels</option>
               <option value="error">Errors</option>
@@ -220,28 +276,28 @@ export default function DebugDrawer() {
               placeholder="Search logs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="input input-sm input-bordered flex-1 min-w-32"
+              className="bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400 rounded px-3 py-1 text-sm flex-1 min-w-32 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
 
             {/* Actions */}
             <div className="flex gap-2">
               <button
                 onClick={clearLogs}
-                className="btn btn-sm btn-outline"
+                className="bg-gray-700 hover:bg-gray-600 text-gray-100 border border-gray-600 px-3 py-1 text-sm rounded transition-colors"
                 title="Clear all logs"
               >
                 Clear
               </button>
               <button
                 onClick={exportLogs}
-                className="btn btn-sm btn-outline"
+                className="bg-gray-700 hover:bg-gray-600 text-gray-100 border border-gray-600 px-3 py-1 text-sm rounded transition-colors"
                 title="Export logs as JSON"
               >
                 Export
               </button>
               <button
                 onClick={() => setIsOpen(false)}
-                className="btn btn-sm btn-ghost"
+                className="bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-1 text-sm rounded transition-colors"
                 title="Close drawer"
               >
                 ✕
@@ -252,7 +308,7 @@ export default function DebugDrawer() {
           {/* Logs */}
           <div
             ref={logsContainerRef}
-            className="flex-1 overflow-y-auto p-2 bg-gray-50"
+            className="flex-1 overflow-y-auto p-2 bg-gray-900"
           >
             {filteredLogs.length === 0 ? (
               <div className="text-center text-gray-500 py-8">
@@ -266,19 +322,19 @@ export default function DebugDrawer() {
                     className={`p-2 rounded border text-xs font-mono ${getLevelBg(log.level)}`}
                   >
                     <div className="flex items-start gap-3">
-                      <span className="text-gray-600 min-w-20 text-right">
+                      <span className="text-gray-400 min-w-20 text-right">
                         {formatTimestamp(log.timestamp)}
                       </span>
                       <span className={`font-semibold min-w-12 uppercase ${getLevelColor(log.level)}`}>
                         {log.level}
                       </span>
-                      <span className="font-medium text-gray-700 min-w-20">
+                      <span className="font-medium text-gray-300 min-w-20">
                         {log.category}
                       </span>
-                      <span className="text-gray-800 flex-1">
+                      <span className="text-gray-100 flex-1">
                         {log.message}
                         {log.duration && (
-                          <span className="text-green-600 ml-2">
+                          <span className="text-green-400 ml-2">
                             ({log.duration}ms)
                           </span>
                         )}
@@ -290,7 +346,7 @@ export default function DebugDrawer() {
                       )}
                     </div>
                     {log.data && Object.keys(log.data).length > 0 && (
-                      <div className="mt-1 ml-24 text-gray-600 bg-gray-100 p-1 rounded text-xs">
+                      <div className="mt-1 ml-24 text-gray-400 bg-gray-800/50 p-1 rounded text-xs border border-gray-600/30">
                         {JSON.stringify(log.data, null, 2)}
                       </div>
                     )}
