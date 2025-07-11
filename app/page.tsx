@@ -1742,12 +1742,14 @@ export default function GraphPage() {
 					<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
 						<div ref={menuRef} className="relative">
 							<button
-								className="flex items-center space-x-2"
+								className="flex items-center justify-center w-8 h-8 transition-transform duration-200"
 								onClick={() => setShowMenu((prev) => !prev)}
 							>
-								<img src="/file.svg" alt="File" className="w-6 h-6" />
-								<span className="text-sm font-mono">GRC-20</span>
-								<span className="text-xs">▼</span>
+								<div className={`flex flex-col space-y-1 transition-transform duration-300 ${showMenu ? 'rotate-90' : ''}`}>
+									<div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? 'rotate-45 translate-y-1.5' : ''}`}></div>
+									<div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? 'opacity-0' : ''}`}></div>
+									<div className={`w-5 h-0.5 bg-white transition-all duration-300 ${showMenu ? '-rotate-45 -translate-y-1.5' : ''}`}></div>
+								</div>
 							</button>
 							{showMenu && (
 								<ul className="absolute top-full left-0 mt-2 bg-gray-800 rounded-lg shadow-lg p-2 w-48">
@@ -2040,8 +2042,14 @@ export default function GraphPage() {
 			</div>
 
 			{showWelcome && (
-				<div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-					<div className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-2xl mx-4 shadow-2xl border border-gray-700">
+				<div 
+					className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+					onClick={() => setShowWelcome(false)}
+				>
+					<div 
+						className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-2xl mx-4 shadow-2xl border border-gray-700"
+						onClick={(e) => e.stopPropagation()}
+					>
 						<div className="space-y-3">
 							<h2 className="text-3xl font-extrabold text-white">
 								Welcome to the {terms.knowledgeGraph}
