@@ -1646,6 +1646,11 @@ export default function GraphPage() {
         address &&
         gData.owner.toLowerCase() !== address.toLowerCase()
       ) {
+        // Show helpful message when non-owner tries to interact with private space
+        toast('This is a private space. Only the creator can view and edit its contents.', {
+          duration: 3000,
+          icon: '🔒'
+        });
         return; // non-owner cannot inspect private space
       }
     }
@@ -1799,46 +1804,66 @@ export default function GraphPage() {
 					</div>
 				</div>
 
-				<div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
-					{connecting ? (
-						<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-							<span className="text-sm font-mono">Loading...</span>
-						</div>
-					) : address ? (
-						<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
-							<span className="flex items-center space-x-2">
-								<span
-									className="w-3 h-3 rounded-full bg-green-500 animate-pulse"
-									style={{ 
-										animation: 'gentle-flash 2s ease-in-out infinite',
-										boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)'
-									}}
-								/>
-								<span className="text-sm font-mono">{`${address.slice(
-									0,
-									6
-								)}...${address.slice(-4)}`}</span>
-							</span>
-							<button
-								onClick={() => disconnect()}
-								className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs"
-							>
-								Disconnect
-							</button>
-						</div>
-					) : (
-						<div className="flex items-center space-x-2">
-							{connectors.map((connector) => (
-								<button
-									key={connector.uid}
-									onClick={() => connect({ connector })}
-									className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-								>
-									{connector.name}
-								</button>
-							))}
+				<div className="absolute top-4 right-4 z-10 flex flex-col items-end space-y-2">
+					{/* Private Space Ownership Indicator */}
+					{selectedNode && selectedNode.type === 'group' && selectedNode.data?.visibility === 'private' && 
+					 selectedNode.data?.owner && address && selectedNode.data.owner.toLowerCase() === address.toLowerCase() && (
+						<div className="bg-gradient-to-r from-green-600/90 to-emerald-600/90 backdrop-blur-sm p-3 rounded-lg border border-green-400/30 shadow-lg">
+							<div className="flex items-center space-x-2">
+								<div className="flex items-center space-x-1">
+									<span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+									<span className="text-green-100 text-sm font-semibold">Your Private Space</span>
+								</div>
+								<span className="text-xl">🔒</span>
+							</div>
+							<div className="text-green-200 text-xs mt-1">
+								Only you can view and edit this space&apos;s contents
+							</div>
 						</div>
 					)}
+
+					{/* Wallet Connection Status */}
+					<div className="flex items-center space-x-2">
+						{connecting ? (
+							<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
+								<span className="text-sm font-mono">Loading...</span>
+							</div>
+						) : address ? (
+							<div className="flex items-center space-x-2 bg-gray-700 p-2 rounded-lg">
+								<span className="flex items-center space-x-2">
+									<span
+										className="w-3 h-3 rounded-full bg-green-500 animate-pulse"
+										style={{ 
+											animation: 'gentle-flash 2s ease-in-out infinite',
+											boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)'
+										}}
+									/>
+									<span className="text-sm font-mono">{`${address.slice(
+										0,
+										6
+									)}...${address.slice(-4)}`}</span>
+								</span>
+								<button
+									onClick={() => disconnect()}
+									className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-xs"
+								>
+									Disconnect
+								</button>
+							</div>
+						) : (
+							<div className="flex items-center space-x-2">
+								{connectors.map((connector) => (
+									<button
+										key={connector.uid}
+										onClick={() => connect({ connector })}
+										className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+									>
+										{connector.name}
+									</button>
+								))}
+							</div>
+						)}
+					</div>
 				</div>
 
 				{!hasWallet && (
