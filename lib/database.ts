@@ -253,9 +253,9 @@ function getEntitiesForDateSQLite(date: string, userAddress?: string) {
       ORDER BY created_at ASC
     `);
     
-    const rows = stmt.all(date, userAddress || '');
+    const rows = stmt.all(date, userAddress || '') as Record<string, unknown>[];
     
-    return rows.map((row: Record<string, unknown>) => {
+    return rows.map((row) => {
       if (
         row.type === 'group' &&
         row.visibility === 'private' &&
@@ -266,7 +266,7 @@ function getEntitiesForDateSQLite(date: string, userAddress?: string) {
       }
       return {
         ...row,
-        properties: row.properties ? JSON.parse(row.properties) : {}
+        properties: row.properties ? JSON.parse(String(row.properties)) : {}
       };
     });
   } catch (error) {
@@ -327,11 +327,11 @@ async function createEntityPostgres(data: {
         ${data.label},
         ${data.type},
         ${data.userAddress || null},
-        ${data.parentId as any || null},
-        ${data.x as any || null},
-        ${data.y as any || null},
-        ${data.width as any || null},
-        ${data.height as any || null},
+        ${data.parentId || null},
+        ${data.x || null},
+        ${data.y || null},
+        ${data.width || null},
+        ${data.height || null},
         ${JSON.stringify(data.properties || {})},
         ${data.visibility || 'public'}
       )
