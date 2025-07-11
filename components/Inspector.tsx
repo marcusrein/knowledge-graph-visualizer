@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, Clock, Info } from 'lucide-react';
 import { Tooltip } from 'react-tooltip';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import { useResizable } from '@/lib/useResizable';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface InspectorProps {
   selectedNode: Node | null;
@@ -71,11 +71,12 @@ const safeParseProperties = (value: unknown): Record<string, string> => {
 const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) => {
   const { address } = useAccount();
   const { terms, isDevMode } = useTerminology();
+  const queryClient = useQueryClient();
   const [label, setLabel] = useState('');
   const [properties, setProperties] = useState<Property[]>([]);
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  const [showHistory, setShowHistory] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
 
   // Resize functionality
   const { size: inspectorWidth, isResizing, handleMouseDown, handleTouchStart } = useResizable({
@@ -86,7 +87,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     direction: 'horizontal',
   });
 
-  // Fetch edit history for the selected node
+  // Fetch edit history for the selected node with real-time updates
   const editHistoryQuery = useQuery({
     queryKey: ['editHistory', selectedNode?.id],
     queryFn: async () => {
@@ -95,7 +96,10 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
       if (!res.ok) throw new Error('Failed to fetch edit history');
       return res.json();
     },
-    enabled: !!selectedNode?.id && showHistory,
+    enabled: !!selectedNode?.id,
+    refetchInterval: showHistory ? 2000 : false, // Refetch every 2 seconds when history is visible
+    refetchOnWindowFocus: true,
+    staleTime: 1000, // Consider data stale after 1 second
   });
 
   // Initialize state when selectedNode changes
@@ -126,7 +130,19 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
     if (selectedNode.type === 'group') {
       setVisibility(selectedNode.data.visibility ?? 'public');
     }
-  }, [selectedNode]);
+
+    // Invalidate and refetch edit history when a new node is selected
+    queryClient.invalidateQueries({ queryKey: ['editHistory', selectedNode.id] });
+  }, [selectedNode, queryClient]);
+
+  // Enhanced save function that invalidates edit history
+  const handleSave = (nodeId: string, data: { label?: string; properties?: Record<string, string>; visibility?: 'public' | 'private' }) => {
+    onSave(nodeId, data);
+    // Invalidate edit history to trigger a refetch after save
+    setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['editHistory', nodeId] });
+    }, 500); // Small delay to ensure the backend has processed the change
+  };
 
   // Helper function to format edit history entries
   const formatEditHistoryEntry = (entry: EditHistoryEntry) => {
@@ -201,14 +217,14 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
       setLabel(value);
       // Immediate save for spaces (simpler, less frequent changes)
       setTimeout(() => {
-        onSave(selectedNode.id, { label: value, visibility });
+        handleSave(selectedNode.id, { label: value, visibility });
       }, 500);
     };
 
     const handleVisibilityChange = (value: 'public' | 'private') => {
       setVisibility(value);
       // Immediate save for visibility changes
-      onSave(selectedNode.id, { label, visibility: value });
+      handleSave(selectedNode.id, { label, visibility: value });
     };
 
     return (
@@ -249,7 +265,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                   className="input input-bordered w-full"
                   value={label}
                   onChange={(e) => handleSpaceLabelChange(e.target.value)}
-                  onBlur={() => onSave(selectedNode.id, { label, visibility })}
+                  onBlur={() => handleSave(selectedNode.id, { label, visibility })}
                 />
               </div>
 
@@ -417,7 +433,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                 onChange={(e) => setLabel(e.target.value)}
                 onBlur={() => {
                   if (selectedNode) {
-                    onSave(selectedNode.id, { label, properties: properties.reduce((acc, prop) => {
+                    handleSave(selectedNode.id, { label, properties: properties.reduce((acc, prop) => {
                       if (prop.key && prop.value) acc[prop.key] = prop.value;
                       return acc;
                     }, {} as Record<string, string>) });
@@ -460,7 +476,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                             return acc;
                           }, {} as Record<string, string>);
                           console.log('[Inspector] Saving properties on key blur:', propertiesObject);
-                          onSave(selectedNode.id, { 
+                          handleSave(selectedNode.id, { 
                             label, 
                             properties: propertiesObject,
                             visibility: visibility
@@ -489,7 +505,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                             return acc;
                           }, {} as Record<string, string>);
                           console.log('[Inspector] Saving properties on value blur:', propertiesObject);
-                          onSave(selectedNode.id, { 
+                          handleSave(selectedNode.id, { 
                             label, 
                             properties: propertiesObject,
                             visibility: visibility
@@ -511,7 +527,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                             }, {} as Record<string, string>);
                             console.log('[Inspector] Saving properties after removal:', propertiesObject);
                             setTimeout(() => {
-                              onSave(selectedNode.id, { 
+                              handleSave(selectedNode.id, { 
                                 label, 
                                 properties: propertiesObject,
                                 visibility: visibility
