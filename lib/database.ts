@@ -2,8 +2,6 @@ import { sql } from '@vercel/postgres';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { dbProtection, DatabaseOperation } from './databaseProtection';
-import { errorLogger } from './errorHandler';
 
 // Environment detection
 const isProduction = process.env.NODE_ENV === 'production';
@@ -277,233 +275,7 @@ function getEntitiesForDateSQLite(date: string, userAddress?: string) {
   }
 }
 
-// Add quota tracking functions
-export async function getUserQuota(userAddress: string): Promise<{ entities: number; relations: number; totalSizeKB: number }> {
-  if (usePostgres) {
-    return getUserQuotaPostgres(userAddress);
-  } else {
-    return getUserQuotaSQLite(userAddress);
-  }
-}
-
-async function getUserQuotaPostgres(userAddress: string): Promise<{ entities: number; relations: number; totalSizeKB: number }> {
-  try {
-    const entityCount = await sql`SELECT COUNT(*) as count FROM entities WHERE userAddress = ${userAddress}`;
-    const relationCount = await sql`SELECT COUNT(*) as count FROM relations WHERE userAddress = ${userAddress}`;
-    
-    // Calculate approximate total size
-    const entitySize = await sql`
-      SELECT COALESCE(SUM(
-        LENGTH(COALESCE(label, '')) + 
-        LENGTH(COALESCE(properties::text, '{}')) + 
-        LENGTH(COALESCE(type, ''))
-      ), 0) as size FROM entities WHERE userAddress = ${userAddress}
-    `;
-    
-    const relationSize = await sql`
-      SELECT COALESCE(SUM(
-        LENGTH(COALESCE(relationType, '')) + 
-        LENGTH(COALESCE(properties::text, '{}'))
-      ), 0) as size FROM relations WHERE userAddress = ${userAddress}
-    `;
-
-    return {
-      entities: Number(entityCount.rows[0].count) || 0,
-      relations: Number(relationCount.rows[0].count) || 0,
-      totalSizeKB: Math.ceil((Number(entitySize.rows[0].size) + Number(relationSize.rows[0].size)) / 1024)
-    };
-  } catch (error) {
-    errorLogger.logError(
-      error instanceof Error ? error : new Error(String(error)),
-      'Failed to get user quota (PostgreSQL)',
-      userAddress
-    );
-    return { entities: 0, relations: 0, totalSizeKB: 0 };
-  }
-}
-
-function getUserQuotaSQLite(userAddress: string): { entities: number; relations: number; totalSizeKB: number } {
-  if (!sqliteDb) throw new Error('SQLite not initialized');
-  
-  try {
-    const entityCount = sqliteDb.prepare('SELECT COUNT(*) as count FROM entities WHERE userAddress = ?').get(userAddress) as { count: number };
-    const relationCount = sqliteDb.prepare('SELECT COUNT(*) as count FROM relations WHERE userAddress = ?').get(userAddress) as { count: number };
-    
-    // Calculate approximate total size
-    const entitySizeResult = sqliteDb.prepare(`
-      SELECT COALESCE(SUM(
-        LENGTH(COALESCE(label, '')) + 
-        LENGTH(COALESCE(properties, '{}')) + 
-        LENGTH(COALESCE(type, ''))
-      ), 0) as size FROM entities WHERE userAddress = ?
-    `).get(userAddress) as { size: number };
-    
-    const relationSizeResult = sqliteDb.prepare(`
-      SELECT COALESCE(SUM(
-        LENGTH(COALESCE(relationType, '')) + 
-        LENGTH(COALESCE(properties, '{}'))
-      ), 0) as size FROM relations WHERE userAddress = ?
-    `).get(userAddress) as { size: number };
-
-    return {
-      entities: entityCount?.count || 0,
-      relations: relationCount?.count || 0,
-      totalSizeKB: Math.ceil((entitySizeResult.size + relationSizeResult.size) / 1024)
-    };
-  } catch (error) {
-    errorLogger.logError(
-      error instanceof Error ? error : new Error(String(error)),
-      'Failed to get user quota (SQLite)',
-      userAddress
-    );
-    return { entities: 0, relations: 0, totalSizeKB: 0 };
-  }
-}
-
-// Add cleanup function for old edit history
-export async function cleanupOldEditHistory(retentionDays: number = 30): Promise<{ deletedRecords: number }> {
-  if (usePostgres) {
-    return cleanupOldEditHistoryPostgres(retentionDays);
-  } else {
-    return cleanupOldEditHistorySQLite(retentionDays);
-  }
-}
-
-async function cleanupOldEditHistoryPostgres(retentionDays: number): Promise<{ deletedRecords: number }> {
-  try {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
-    
-    const result = await sql`
-      DELETE FROM edit_history 
-      WHERE created_at < ${cutoffDate.toISOString()}
-    `;
-    
-    console.log(`[Database] Cleaned up ${result.rowCount} old edit history records (PostgreSQL)`);
-    return { deletedRecords: result.rowCount || 0 };
-  } catch (error) {
-    errorLogger.logError(
-      error instanceof Error ? error : new Error(String(error)),
-      'Failed to cleanup old edit history (PostgreSQL)'
-    );
-    throw error;
-  }
-}
-
-function cleanupOldEditHistorySQLite(retentionDays: number): { deletedRecords: number } {
-  if (!sqliteDb) throw new Error('SQLite not initialized');
-  
-  try {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
-    
-    const result = sqliteDb.prepare(`
-      DELETE FROM edit_history 
-      WHERE datetime(created_at) < datetime(?)
-    `).run(cutoffDate.toISOString());
-    
-    console.log(`[Database] Cleaned up ${result.changes} old edit history records (SQLite)`);
-    return { deletedRecords: result.changes || 0 };
-  } catch (error) {
-    errorLogger.logError(
-      error instanceof Error ? error : new Error(String(error)),
-      'Failed to cleanup old edit history (SQLite)'
-    );
-    throw error;
-  }
-}
-
-// Add database size monitoring
-export async function getDatabaseSize(): Promise<{ sizeKB: number; tableStats: Record<string, number> }> {
-  if (usePostgres) {
-    return getDatabaseSizePostgres();
-  } else {
-    return getDatabaseSizeSQLite();
-  }
-}
-
-async function getDatabaseSizePostgres(): Promise<{ sizeKB: number; tableStats: Record<string, number> }> {
-  try {
-    // Get database size - this requires appropriate PostgreSQL permissions
-    const dbSizeResult = await sql`
-      SELECT pg_database_size(current_database()) as size
-    `;
-    
-    const tableStatsResults = await sql`
-      SELECT 
-        'entities' as table_name,
-        COUNT(*) as count
-      FROM entities
-      UNION ALL
-      SELECT 
-        'relations' as table_name,
-        COUNT(*) as count
-      FROM relations
-      UNION ALL
-      SELECT 
-        'edit_history' as table_name,
-        COUNT(*) as count
-      FROM edit_history
-    `;
-
-    const tableStats: Record<string, number> = {};
-    tableStatsResults.rows.forEach(row => {
-      tableStats[row.table_name] = Number(row.count);
-    });
-
-    return {
-      sizeKB: Math.ceil(Number(dbSizeResult.rows[0].size) / 1024),
-      tableStats
-    };
-  } catch (error) {
-    errorLogger.logError(
-      error instanceof Error ? error : new Error(String(error)),
-      'Failed to get database size (PostgreSQL)'
-    );
-    // Return default values on error
-    return { sizeKB: 0, tableStats: {} };
-  }
-}
-
-function getDatabaseSizeSQLite(): { sizeKB: number; tableStats: Record<string, number> } {
-  if (!sqliteDb) throw new Error('SQLite not initialized');
-  
-  try {
-    // Get SQLite file size
-    const dbPath = path.join(process.cwd(), 'data', 'graph.sqlite');
-    let fileSize = 0;
-    
-    try {
-      const stats = fs.statSync(dbPath);
-      fileSize = stats.size;
-    } catch {
-      // File might not exist yet
-      fileSize = 0;
-    }
-
-    // Get table counts
-    const entityCount = sqliteDb.prepare('SELECT COUNT(*) as count FROM entities').get() as { count: number };
-    const relationCount = sqliteDb.prepare('SELECT COUNT(*) as count FROM relations').get() as { count: number };
-    const historyCount = sqliteDb.prepare('SELECT COUNT(*) as count FROM edit_history').get() as { count: number };
-
-    return {
-      sizeKB: Math.ceil(fileSize / 1024),
-      tableStats: {
-        entities: entityCount.count,
-        relations: relationCount.count,
-        edit_history: historyCount.count
-      }
-    };
-  } catch (error) {
-    errorLogger.logError(
-      error instanceof Error ? error : new Error(String(error)),
-      'Failed to get database size (SQLite)'
-    );
-    return { sizeKB: 0, tableStats: {} };
-  }
-}
-
-// Update createEntity to use protection
+// Helper function to create an entity
 export async function createEntity(data: {
   nodeId: string;
   label: string;
@@ -517,29 +289,10 @@ export async function createEntity(data: {
   height?: number;
   properties?: Record<string, unknown>;
 }) {
-  // Validate with protection system
-  const operation: DatabaseOperation = {
-    type: 'create',
-    table: 'entities',
-    userAddress: data.userAddress,
-    payload: data
-  };
-
-  const validation = await dbProtection.validateOperation(operation);
-  if (!validation.allowed) {
-    throw new Error(validation.reason || 'Operation not allowed');
-  }
-
-  // Sanitize input data
-  const sanitizedData = {
-    ...data,
-    ...dbProtection.sanitizeInput(data)
-  };
-
   if (usePostgres) {
-    return createEntityPostgres(sanitizedData);
+    return createEntityPostgres(data);
   } else {
-    return createEntitySQLite(sanitizedData);
+    return createEntitySQLite(data);
   }
 }
 
@@ -654,26 +407,10 @@ function createEntitySQLite(data: {
 
 // Helper function to update an entity
 export async function updateEntity(nodeId: string, updates: Record<string, unknown>, editorAddress?: string) {
-  // Validate with protection system
-  const operation: DatabaseOperation = {
-    type: 'update',
-    table: 'entities',
-    userAddress: editorAddress,
-    payload: updates
-  };
-
-  const validation = await dbProtection.validateOperation(operation);
-  if (!validation.allowed) {
-    throw new Error(validation.reason || 'Operation not allowed');
-  }
-
-  // Sanitize input data
-  const sanitizedUpdates = dbProtection.sanitizeInput(updates);
-
   if (usePostgres) {
-    return updateEntityPostgres(nodeId, sanitizedUpdates, editorAddress);
+    return updateEntityPostgres(nodeId, updates, editorAddress);
   } else {
-    return updateEntitySQLite(nodeId, sanitizedUpdates, editorAddress);
+    return updateEntitySQLite(nodeId, updates, editorAddress);
   }
 }
 
