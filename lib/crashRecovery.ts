@@ -77,7 +77,7 @@ class CrashRecoveryService {
           const crashReport: CrashReport = {
             type: 'build_error',
             severity: 'high',
-            message: `Failed to load resource: ${(target as any).src || (target as any).href}`,
+            message: `Failed to load resource: ${target.tagName === 'SCRIPT' ? (target as HTMLScriptElement).src : (target as HTMLLinkElement).href}`,
             timestamp: new Date().toISOString(),
             recoveryAction: 'reload_page'
           };
@@ -107,8 +107,8 @@ class CrashRecoveryService {
     // Monitor memory usage and performance
     if ('memory' in performance) {
       setInterval(() => {
-        const memory = (performance as any).memory;
-        if (memory.usedJSHeapSize > memory.jsHeapSizeLimit * 0.9) {
+        const memory = (performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
+        if (memory && memory.usedJSHeapSize > memory.jsHeapSizeLimit * 0.9) {
           console.warn('⚠️ High memory usage detected');
           this.handleMemoryPressure();
         }
@@ -116,14 +116,14 @@ class CrashRecoveryService {
     }
   }
 
-  private analyzeCrash(error: any): CrashReport {
-    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+  private analyzeCrash(error: Error | Event | unknown): CrashReport {
+    const errorMessage = (error as Error)?.message || error?.toString() || 'Unknown error';
     
     return {
       type: this.categorizeError(errorMessage),
       severity: this.assessSeverity(errorMessage),
       message: errorMessage,
-      stack: error?.stack,
+      stack: (error as Error)?.stack,
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString()
     };
@@ -244,7 +244,8 @@ class CrashRecoveryService {
     }
   }
 
-  private async handleBuildError(crashReport: CrashReport): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async handleBuildError(_crashReport: CrashReport): Promise<void> {
     console.log('🏗️ Handling build error...');
     
     // Show user-friendly message
@@ -302,13 +303,14 @@ class CrashRecoveryService {
       await fetch(window.location.origin, { method: 'HEAD', cache: 'no-cache' });
       this.hideRecoveryMessage();
       console.log('✅ Network connectivity restored');
-    } catch (error) {
+    } catch {
       console.warn('Network still unavailable');
       setTimeout(() => this.handleNetworkError(crashReport), 5000);
     }
   }
 
-  private async handleWebSocketError(crashReport: CrashReport): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async handleWebSocketError(_crashReport: CrashReport): Promise<void> {
     console.log('🔌 Handling WebSocket error...');
     
     this.showRecoveryMessage('Connection Lost', 'Reconnecting...', 'warning');
@@ -342,7 +344,7 @@ class CrashRecoveryService {
       
       // Force garbage collection if available
       if ('gc' in window) {
-        (window as any).gc();
+        (window as Window & { gc?: () => void }).gc?.();
       }
       
     } catch (error) {

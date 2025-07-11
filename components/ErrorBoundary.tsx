@@ -116,7 +116,7 @@ class ErrorBoundary extends Component<Props, State> {
 
       // Force a full page reload as last resort
       window.location.reload();
-    } catch (error) {
+    } catch {
       // If even emergency reset fails, try a simple page reload
       window.location.href = window.location.href;
     }

@@ -21,7 +21,6 @@ import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { usePartySocket } from 'partysocket/react';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
-import Image from 'next/image';
 import 'reactflow/dist/style.css';
 import * as dagre from 'dagre';
 import { logger } from '@/lib/logger';
@@ -33,7 +32,6 @@ import Inspector from '@/components/Inspector';
 import Avatar from '@/components/Avatar';
 import OnboardingChecklist from '@/components/OnboardingChecklist';
 import TopicNode from '@/components/TopicNode';
-import { Tooltip } from 'react-tooltip';
 import { useTerminology } from '@/lib/TerminologyContext';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal';
 import { errorLogger } from '@/lib/errorHandler';
@@ -933,10 +931,10 @@ export default function GraphPage() {
   // map API to React Flow
   useEffect(() => {
     if (entitiesQuery.data && relationsQuery.data && linksQuery.data) {
-      const buildNodes = () => {
+      const buildNodes = (currentNodes: Node[]) => {
         try {
           // Build new nodes preserving positions
-          const positionMap = new Map(nodes.map(n => [n.id, n.position]));
+          const positionMap = new Map(currentNodes.map(n => [n.id, n.position]));
 
         // --- first pass: Spaces (groups) ---
         const groupEntities = entitiesQuery.data.filter((e: { type: string }) => e.type === 'group');
@@ -1191,12 +1189,15 @@ export default function GraphPage() {
         }
       });
 
-      const built = buildNodes();
-      console.log('[BuildNodes] count', built.length);
-      console.table(built.map((n) => ({ id: n.id, type: n.type, parentId: n.parentId, x: n.position.x, y: n.position.y })));
-      setNodes(built);
+      setNodes((currentNodes) => {
+        const built = buildNodes(currentNodes);
+        console.log('[BuildNodes] count', built.length);
+        console.table(built.map((n) => ({ id: n.id, type: n.type, parentId: n.parentId, x: n.position.x, y: n.position.y })));
+        return built;
+      });
       setEdges(newEdges);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor, isDevMode, address, selectedNode?.id]);
 
   const onConnect: OnConnect = useCallback(
@@ -1714,7 +1715,7 @@ export default function GraphPage() {
         });
       }
     },
-    [nodes, updateEntityPatch, updateRelationPosition, requireWallet, terms, broadcastPositionUpdate]
+    [nodes, updateEntityPatch, updateRelationPosition, requireWallet, terms, broadcastPositionUpdate, address]
   );
 
   const handlePaneClick = () => {

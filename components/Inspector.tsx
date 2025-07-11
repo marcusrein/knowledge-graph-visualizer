@@ -152,7 +152,7 @@ const Inspector = ({ selectedNode, onSave, onDelete }: InspectorProps) => {
 
     // Invalidate and refetch edit history when a new node is selected
     queryClient.invalidateQueries({ queryKey: ['editHistory', selectedNode.id] });
-  }, [selectedNode, queryClient]);
+  }, [selectedNode, queryClient, isCollapsed]);
 
   // Enhanced save function that invalidates edit history
   const handleSave = (nodeId: string, data: { label?: string; properties?: Record<string, string>; visibility?: 'public' | 'private' }) => {
