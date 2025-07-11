@@ -305,22 +305,19 @@ async function getEntitiesForDatePostgres(date: string, userAddress?: string) {
       console.log(`[Database] SAMPLE ENTITY:`, JSON.stringify(allEntities.rows[0]));
     }
     
-    // Now try the filtered query - temporarily making it more permissive
-    const result = await sql`
-      SELECT * FROM entities 
-      WHERE DATE(created_at) = ${date}
-      ORDER BY created_at ASC
-    `;
+    // Handle empty date parameter (get all entities) vs specific date
+    const result = date === '' ? 
+      await sql`
+        SELECT * FROM entities 
+        ORDER BY created_at ASC
+      ` :
+      await sql`
+        SELECT * FROM entities 
+        WHERE DATE(created_at) = ${date}
+        ORDER BY created_at ASC
+      `;
     
-    console.log(`[Database] FILTERED QUERY RESULT: ${result?.rows?.length || 0} rows`);
-    
-    // Let's also try without date filtering to see if that's the issue
-    const allResult = await sql`
-      SELECT * FROM entities 
-      ORDER BY created_at ASC
-    `;
-    
-    console.log(`[Database] ALL ENTITIES (no date filter): ${allResult?.rows?.length || 0} rows`);
+    console.log(`[Database] FILTERED QUERY RESULT: ${result?.rows?.length || 0} rows (date: ${date})`);
     
     if (!result || !result.rows) {
       console.log('[Database] RETURNING EMPTY ARRAY - no result or rows');
@@ -351,19 +348,30 @@ function getEntitiesForDateSQLite(date: string, userAddress?: string) {
   if (!sqliteDb) throw new Error('SQLite not initialized');
   
   try {
-    const stmt = sqliteDb.prepare(`
-      SELECT * FROM entities 
-      WHERE DATE(created_at) = ?
-      AND (
-        type = 'group' 
-        OR visibility = 'public' 
-        OR userAddress IS NULL 
-        OR userAddress = ?
-      )
-      ORDER BY created_at ASC
-    `);
+    // If date is empty, get all entities; otherwise filter by date
+    const query = date === '' ? 
+      `SELECT * FROM entities 
+       WHERE (
+         type = 'group' 
+         OR visibility = 'public' 
+         OR userAddress IS NULL 
+         OR userAddress = ?
+       )
+       ORDER BY created_at ASC` :
+      `SELECT * FROM entities 
+       WHERE DATE(created_at) = ?
+       AND (
+         type = 'group' 
+         OR visibility = 'public' 
+         OR userAddress IS NULL 
+         OR userAddress = ?
+       )
+       ORDER BY created_at ASC`;
     
-    const rows = stmt.all(date, userAddress || '') as Record<string, unknown>[];
+    const stmt = sqliteDb.prepare(query);
+    const rows = date === '' ? 
+      stmt.all(userAddress || '') as Record<string, unknown>[] :
+      stmt.all(date, userAddress || '') as Record<string, unknown>[];
     
     return rows.map((row) => {
       if (
