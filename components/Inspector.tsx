@@ -43,7 +43,13 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
 
   useEffect(() => {
     if (selectedNode) {
-      setLabel(selectedNode.data.label);
+      // Apply the same default label transformation logic as in the main page
+      let displayLabel = selectedNode.data.label;
+      if (selectedNode.data.label === 'New Topic' || selectedNode.data.label === 'New Entity') {
+        displayLabel = isDevMode ? 'New Entity' : 'New Topic';
+      }
+      setLabel(displayLabel);
+      
       const propsObject = safeParseProperties(selectedNode.data.properties);
       const propsArray = Object.entries(propsObject).map(([key, value], index) => ({
         id: index,
@@ -58,7 +64,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
         setOwner(selectedNode.data.owner);
       }
     }
-  }, [selectedNode]);
+  }, [selectedNode, isDevMode]);
 
   if (!selectedNode) return null;
 
@@ -188,9 +194,9 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   const labelDevDescription =
     "The `name` of the Entity, an implicit property per the GRC-20 spec. This should be a human-readable identifier.";
   
-  const propertiesDescription = `Add specific details to your Topic. Each detail has an Attribute and a Value.<br/><br/>For example, a 'Person' Topic might have an attribute 'Birth Year' with the value '1815'.`;
+  const propertiesDescription = `Add specific details to your Topic. Each detail has an Attribute and a Value.<br/><br/>For example, a 'Vitalik' Topic might have an attribute 'Birth Year' with the value '1815'.`;
   const propertiesDevDescription =
-    "Define the `values` for this Entity. Each value consists of a `property` (a UUID reference to a Property definition) and its literal `value`.";
+    "Define the Attributes for this Entity. Each Attribute consists of a `Key` and its `Value`.";
 
   return (
     <aside className="absolute top-0 right-0 h-full w-80 bg-base-200 shadow-lg z-10 p-4 flex flex-col">

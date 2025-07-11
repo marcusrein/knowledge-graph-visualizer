@@ -43,6 +43,7 @@ interface Selection {
   nodeId: string | null;
 }
 
+// Move nodeTypes outside or memoize to fix React Flow warnings
 const nodeTypes = {
   relation: RelationNode,
   topic: TopicNode,
@@ -223,8 +224,8 @@ export default function GraphPage() {
       return res.json();
     },
     onSuccess: (data, variables) => {
-      // Check if a non-default name has been set
-      if (variables.data.label && variables.data.label !== 'New Topic') {
+      // Check if a non-default name has been set (covers both normie and dev mode defaults)
+      if (variables.data.label && variables.data.label !== 'New Topic' && variables.data.label !== 'New Entity') {
         completeStep('name-topic');
       }
       // After successfully saving, update the node in React Flow state
@@ -472,32 +473,74 @@ export default function GraphPage() {
           const maskedLabel = e.visibility === 'private' && !isOwner ? `${e.userAddress?.slice(0,6)}...${e.userAddress?.slice(-4)}` : e.label;
           
           const handleResize = (width: number, height: number) => {
-            // Find current node position for richer debugging info
+            // Get current node from React state to ensure we have the latest dimensions
             const currNode = nodes.find((n) => n.id === e.nodeId);
-            console.log('[Resize] Space', e.nodeId, {
-              prevSize: {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                width: (currNode?.style as any)?.width,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                height: (currNode?.style as any)?.height,
+            const prevStyle = currNode?.style as { width?: number; height?: number; backgroundColor?: string; borderColor?: string };
+            
+            // Use stored style dimensions as the source of truth, not DOM measurements
+            const currentStoredWidth = prevStyle?.width || 400;
+            const currentStoredHeight = prevStyle?.height || 300;
+            
+            console.log(`%c[handleResize] Space ${e.nodeId} resize requested`, 'color: cyan; font-weight: bold');
+            console.log('[handleResize] Resize operation:', {
+              nodeId: e.nodeId,
+              label: e.label,
+              storedDimensions: { width: currentStoredWidth, height: currentStoredHeight },
+              requestedDimensions: { width, height },
+              deltaFromStored: {
+                width: width - currentStoredWidth,
+                height: height - currentStoredHeight,
               },
-              newSize: { width, height },
-              position: currNode?.position,
+              nodeFound: !!currNode,
+              timestamp: new Date().toISOString(),
             });
 
+            // Validate that the requested size is actually different
+            if (width === currentStoredWidth && height === currentStoredHeight) {
+              console.warn('[handleResize] No change in dimensions, skipping update');
+              return;
+            }
+
+            // Ensure dimensions are within reasonable bounds
+            const finalWidth = Math.max(200, Math.min(2000, width));
+            const finalHeight = Math.max(150, Math.min(1500, height));
+            
+            if (finalWidth !== width || finalHeight !== height) {
+              console.log('[handleResize] Dimensions clamped:', {
+                requested: { width, height },
+                final: { width: finalWidth, height: finalHeight }
+              });
+            }
+
+            console.log(`%c[handleResize] Persisting to database`, 'color: yellow');
             updateEntityPatch.mutate({
               nodeId: e.nodeId,
-              width,
-              height,
+              width: finalWidth,
+              height: finalHeight,
             });
+            
+            console.log(`%c[handleResize] Updating React Flow node state`, 'color: lightblue');
             // Update the node style immediately for visual feedback
-            setNodes((nds) =>
-              nds.map((n) =>
+            setNodes((nds) => {
+              const updated = nds.map((n) =>
                 n.id === e.nodeId
-                  ? { ...n, style: { ...n.style, width, height } }
+                  ? { 
+                      ...n, 
+                      style: { 
+                        ...n.style, 
+                        width: finalWidth, 
+                        height: finalHeight 
+                      } 
+                    }
                   : n
-              )
-            );
+              );
+              const updatedNode = updated.find(n => n.id === e.nodeId);
+              console.log('[handleResize] Node after update:', {
+                id: updatedNode?.id,
+                style: updatedNode?.style,
+              });
+              return updated;
+            });
           };
 
           const node: Node = {
@@ -544,10 +587,17 @@ export default function GraphPage() {
         const topicNodes = topicEntities.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; type: string; parentId: string | null; userAddress: string; visibility: string; }) => {
           const selection = selections.find(s => s.nodeId === e.nodeId);
           const hasWallet = !!address;
+          
+          // Transform default labels based on current mode, but preserve custom labels
+          let displayLabel = e.label;
+          if (e.label === 'New Topic' || e.label === 'New Entity') {
+            displayLabel = isDevMode ? 'New Entity' : 'New Topic';
+          }
+          
           const node: Node = {
             id: e.nodeId,
             type: 'topic',
-            data: { label: e.label, properties: e.properties, selectingAddress: selection ? selection.address : null, owner: e.userAddress, visibility: e.visibility },
+            data: { label: displayLabel, properties: e.properties, selectingAddress: selection ? selection.address : null, owner: e.userAddress, visibility: e.visibility },
             position: positionMap.get(e.nodeId) ?? { x: e.x ?? Math.random() * 400, y: e.y ?? Math.random() * 400 },
             draggable: hasWallet,
           };
@@ -653,7 +703,7 @@ export default function GraphPage() {
       setNodes(built);
       setEdges(newEdges);
     }
-  }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor]);
+  }, [entitiesQuery.data, relationsQuery.data, linksQuery.data, selections, addressToColor, isDevMode]);
 
   const onConnect: OnConnect = useCallback(
     (params: Connection | Edge) => {
@@ -743,10 +793,12 @@ export default function GraphPage() {
     }
 
     const nodeId = crypto.randomUUID();
+    // Use the terminology context to set the appropriate default label
+    const defaultLabel = isDevMode ? 'New Entity' : 'New Topic';
 
     addEntity.mutate({
       nodeId,
-      label: 'New Topic',
+      label: defaultLabel,
       type: 'knowledge',
       x: posX,
       y: posY,
@@ -777,11 +829,22 @@ export default function GraphPage() {
 
   const updateEntityPatch = useMutation({
     mutationFn: async (payload: { nodeId: string, x?: number, y?: number, parentId?: string | null, width?: number, height?: number }) => {
-      await fetch('/api/entities', {
+      console.log('[updateEntityPatch] Sending PATCH request:', payload);
+      const response = await fetch('/api/entities', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[updateEntityPatch] PATCH failed:', response.status, errorText);
+        throw new Error(`PATCH failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('[updateEntityPatch] PATCH successful:', result);
+      return result;
     },
   });
 
@@ -872,7 +935,11 @@ export default function GraphPage() {
         }
 
         // If parent is changing, convert between absolute and relative coords
-        if (newParentId !== node.parentId) {
+        // Normalize null/undefined comparison (both represent "no parent")
+        const normalizedCurrentParent = node.parentId ?? null;
+        const normalizedNewParent = newParentId ?? null;
+        
+        if (normalizedNewParent !== normalizedCurrentParent) {
           let adjustedX = node.position.x;
           let adjustedY = node.position.y;
 
@@ -914,8 +981,11 @@ export default function GraphPage() {
             const spaceNode = nodes.find((n) => n.id === newParentId);
             const spaceName = spaceNode?.data?.label || 'Space';
             toast.success(`Moved to ${spaceName}`);
-          } else {
-            toast.success('Removed from Space');
+          } else if (normalizedCurrentParent) {
+            // Moving out of a space - show which space it was removed from
+            const previousSpaceNode = nodes.find((n) => n.id === normalizedCurrentParent);
+            const previousSpaceName = previousSpaceNode?.data?.label || 'Space';
+            toast.success(`Removed from ${previousSpaceName}`);
           }
 
           // skip the later patch below to avoid duplicate if we already handled
@@ -1408,16 +1478,73 @@ export default function GraphPage() {
       </div>
 
       {showWelcome && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
-          <div className="bg-gray-800 p-8 rounded-lg text-center space-y-4 max-w-md">
-            <h2 className="text-2xl font-bold">Welcome to the Knowledge Graph Visualizer</h2>
-            <p className="text-gray-300">Create topics and connections to build your graph.</p>
-            <button
-              onClick={() => setShowWelcome(false)}
-              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-            >
-              Get Started
-            </button>
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-gray-900/95 p-8 rounded-xl text-center space-y-6 max-w-2xl mx-4 shadow-2xl border border-gray-700">
+            <div className="space-y-3">
+              <h2 className="text-3xl font-extrabold text-white">Welcome to the Knowledge Graph Visualizer</h2>
+              <p className="text-gray-300 text-lg leading-relaxed">
+                Map concepts, ideas, and data into an interactive graph you can expand and
+                explore collaboratively.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6 text-left">
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-2">How to Use</h3>
+                <ul className="text-sm text-gray-300 space-y-2">
+                  <li className="flex items-start space-x-2">
+                    <span className="text-blue-400 font-bold">+</span>
+                    <span><span className="font-semibold text-blue-400">Create Topics</span> to represent key ideas</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-purple-400 font-bold">□</span>
+                    <span><span className="font-semibold text-purple-400">Group Topics into Spaces</span> for organization</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-gray-400">→</span>
+                    <span>Draw relations to show how everything connects</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-white border-b border-gray-600 pb-2">About This App</h3>
+                <ul className="text-sm text-gray-300 space-y-2">
+                  <li>• Collaborative visualizer for exploring knowledge graph concepts</li>
+                  <li>• Multiple users can connect wallets and build together in real-time</li>
+                  <li>• Data is ephemeral and resets daily. Go play!</li>
+                </ul>
+              </div>
+            </div>
+
+                         <div className="pt-4 border-t border-gray-700">
+               <p className="text-sm text-gray-400 mb-4">
+                 To learn more, see the{' '}
+                 <a 
+                   href="https://github.com/yanivtal/graph-improvement-proposals/blob/new-ops/grcs/0020-knowledge-graph.md" 
+                   target="_blank" 
+                   rel="noopener noreferrer" 
+                   className="text-blue-400 hover:text-blue-300 underline transition-colors"
+                 >
+                   GRC-20 spec
+                 </a>
+                 {' '}and The Graph&apos;s knowledge graph{' '}
+                 <a 
+                   href="https://thegraph.com/blog/grc20-knowledge-graph/" 
+                   target="_blank" 
+                   rel="noopener noreferrer" 
+                   className="text-blue-400 hover:text-blue-300 underline transition-colors"
+                 >
+                   announcement
+                 </a>
+               </p>
+              <button
+                onClick={() => setShowWelcome(false)}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-colors duration-200 shadow-lg"
+              >
+                Start Building
+              </button>
+            </div>
           </div>
         </div>
       )}

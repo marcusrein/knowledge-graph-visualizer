@@ -24,7 +24,7 @@ const normie: Terminology = {
   relation: 'Connection',
   relations: 'Connections',
   createRelation: 'Create a Connection',
-  inspectorLabel: 'Label',
+  inspectorLabel: 'Name',
   inspectorProperties: 'Details',
   inspectorAddProperty: '+ Add Detail',
   inspectorPropertyKey: 'Attribute',
@@ -40,9 +40,9 @@ const dev: Terminology = {
   relations: 'Relations',
   createRelation: 'Create a Relation',
   inspectorLabel: 'Name',
-  inspectorProperties: 'Values',
-  inspectorAddProperty: '+ Add Value',
-  inspectorPropertyKey: 'Property ID',
+  inspectorProperties: 'Attributes',
+  inspectorAddProperty: '+ Add Attribute',
+  inspectorPropertyKey: 'Key',
   inspectorPropertyValue: 'Value',
 };
 

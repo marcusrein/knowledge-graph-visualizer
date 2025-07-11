@@ -27,17 +27,64 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
       e.stopPropagation();
       e.preventDefault(); // prevent drag start
 
-      // Prefer the node wrapper (react-flow__node) for accurate size
+      const buttonType = delta > 0 ? 'INCREASE (+)' : 'DECREASE (-)';
+      console.log(`%c[SpaceNode] ${buttonType} button clicked`, 'color: orange; font-weight: bold');
+
+      if (!onResize) {
+        console.error('[SpaceNode] No onResize callback - cannot resize');
+        return;
+      }
+
+      // Find the React Flow node wrapper to get the stored style dimensions
       const nodeWrapper = (e.currentTarget as HTMLElement).closest('[data-id]') as HTMLElement | null;
-      const rect = nodeWrapper?.getBoundingClientRect();
+      
+      if (!nodeWrapper) {
+        console.error('[SpaceNode] Node wrapper not found - cannot resize');
+        return;
+      }
 
-      if (!rect || !onResize) return;
+      const nodeId = nodeWrapper.getAttribute('data-id');
+      console.log('[SpaceNode] Found node wrapper:', {
+        nodeId,
+        classList: nodeWrapper.classList.toString(),
+      });
 
-      const newWidth = Math.max(MIN_W, rect.width + delta);
-      const newHeight = Math.max(MIN_H, rect.height + delta);
+      // Get current dimensions from the node wrapper's inline styles
+      // This is more reliable than getBoundingClientRect which can be affected by zoom/transforms
+      const computedStyle = window.getComputedStyle(nodeWrapper);
+      const currentWidth = parseFloat(computedStyle.width) || MIN_W;
+      const currentHeight = parseFloat(computedStyle.height) || MIN_H;
 
-      console.log('[SpaceNode] adjustSize', { delta, oldW: rect.width, oldH: rect.height, newW: newWidth, newH: newHeight });
+      console.log('[SpaceNode] Current stored dimensions:', {
+        width: currentWidth,
+        height: currentHeight,
+        computedWidth: computedStyle.width,
+        computedHeight: computedStyle.height,
+      });
 
+      // Calculate new dimensions with constraints
+      const newWidth = Math.max(MIN_W, currentWidth + delta);
+      const newHeight = Math.max(MIN_H, currentHeight + delta);
+
+      console.log('[SpaceNode] Size calculation:', {
+        delta,
+        currentSize: { width: currentWidth, height: currentHeight },
+        targetSize: { width: currentWidth + delta, height: currentHeight + delta },
+        finalSize: { width: newWidth, height: newHeight },
+        constraints: { MIN_W, MIN_H },
+        wasConstrained: {
+          width: (currentWidth + delta) !== newWidth,
+          height: (currentHeight + delta) !== newHeight,
+        }
+      });
+
+      // Validate the calculation makes sense
+      if (newWidth === currentWidth && newHeight === currentHeight) {
+        console.warn('[SpaceNode] No size change needed (hit constraints)');
+        return;
+      }
+
+      console.log(`%c[SpaceNode] Calling onResize with: ${newWidth}x${newHeight}`, 'color: lightgreen');
       onResize(newWidth, newHeight);
     },
     [onResize]
