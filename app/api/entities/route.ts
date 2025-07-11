@@ -125,9 +125,19 @@ export async function PATCH(req: NextRequest) {
   if (properties) {
     const oldProps = current.properties || '{}';
     const newProps = JSON.stringify(properties);
+    console.log('[Entities PATCH] Properties update:', {
+      nodeId,
+      oldProps,
+      newProps,
+      propertiesInput: properties,
+      propertyType: typeof properties
+    });
     if (oldProps !== newProps) {
       recordEdit('properties', oldProps, newProps);
       db.prepare('UPDATE entities SET properties=? WHERE nodeId=?').run(newProps, nodeId);
+      console.log('[Entities PATCH] Properties saved to database');
+    } else {
+      console.log('[Entities PATCH] Properties unchanged, skipping update');
     }
   }
 

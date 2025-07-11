@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { useTerminology } from '@/lib/TerminologyContext';
 import { Node } from 'reactflow';
-import { Info, Clock, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Info } from 'lucide-react';
 import { Tooltip } from 'react-tooltip';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import { useResizable } from '@/lib/useResizable';
@@ -24,13 +24,46 @@ interface Property {
   value: string;
 }
 
+interface EditHistoryEntry {
+  id: number;
+  nodeId: string;
+  nodeType: string;
+  action: string;
+  field: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  editorAddress: string | null;
+  timestamp: string;
+}
+
 const safeParseProperties = (value: unknown): Record<string, string> => {
   try {
-    if (typeof value === 'object' && value !== null) {
-      return value as Record<string, string>;
+    if (typeof value === 'string') {
+      // Parse JSON string
+      const parsed = JSON.parse(value);
+      if (typeof parsed === 'object' && parsed !== null) {
+        // Convert all values to strings and filter out null/undefined
+        const result: Record<string, string> = {};
+        for (const [key, val] of Object.entries(parsed)) {
+          if (val !== null && val !== undefined) {
+            result[key] = String(val);
+          }
+        }
+        return result;
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      // Already an object, convert values to strings
+      const result: Record<string, string> = {};
+      for (const [key, val] of Object.entries(value)) {
+        if (val !== null && val !== undefined) {
+          result[key] = String(val);
+        }
+      }
+      return result;
     }
     return {};
-  } catch {
+  } catch (error) {
+    console.warn('[Inspector] Failed to parse properties:', error, value);
     return {};
   }
 };
@@ -69,14 +102,25 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   useEffect(() => {
     if (!selectedNode) return;
 
+    console.log('[Inspector] Node selected:', {
+      id: selectedNode.id,
+      label: selectedNode.data?.label,
+      rawProperties: selectedNode.data?.properties,
+      propertyType: typeof selectedNode.data?.properties
+    });
+
     setLabel(selectedNode.data?.label || '');
     
     const nodeProperties = safeParseProperties(selectedNode.data?.properties);
+    console.log('[Inspector] Parsed properties:', nodeProperties);
+    
     const propsArray = Object.entries(nodeProperties).map(([key, value], index) => ({
       id: index,
       key,
       value: String(value),
     }));
+    
+    console.log('[Inspector] Properties array:', propsArray);
     setProperties(propsArray);
 
     if (selectedNode.type === 'group') {
@@ -85,15 +129,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
   }, [selectedNode]);
 
   // Helper function to format edit history entries
-  const formatEditHistoryEntry = (entry: {
-    id: number;
-    action: string;
-    field: string | null;
-    oldValue: string | null;
-    newValue: string | null;
-    editorAddress: string | null;
-    timestamp: string;
-  }) => {
+  const formatEditHistoryEntry = (entry: EditHistoryEntry) => {
     const formatAddress = (addr: string | null) => {
       if (!addr) return 'Unknown';
       return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -244,7 +280,7 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                       <div className="text-xs text-red-400">Failed to load history</div>
                     ) : editHistoryQuery.data && editHistoryQuery.data.length > 0 ? (
                       <div className="space-y-2">
-                        {editHistoryQuery.data.map((entry: any) => {
+                        {editHistoryQuery.data.map((entry: EditHistoryEntry) => {
                           const formatted = formatEditHistoryEntry(entry);
                           return (
                             <div key={entry.id} className="border-b border-gray-700 last:border-b-0 pb-2 last:pb-0">
@@ -394,16 +430,26 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                       value={prop.key}
                       placeholder={terms.inspectorPropertyKey}
                       onChange={(e) => {
+                        const newValue = e.target.value;
                         setProperties(prev => prev.map(p => 
-                          p.id === prop.id ? { ...p, key: e.target.value } : p
+                          p.id === prop.id ? { ...p, key: newValue } : p
                         ));
                       }}
                       onBlur={() => {
+                        // Save properties when key field loses focus
                         if (selectedNode) {
-                          onSave(selectedNode.id, { label, properties: properties.reduce((acc, prop) => {
-                            if (prop.key && prop.value) acc[prop.key] = prop.value;
+                          const propertiesObject = properties.reduce((acc, prop) => {
+                            if (prop.key && prop.value) {
+                              acc[prop.key] = prop.value;
+                            }
                             return acc;
-                          }, {} as Record<string, string>) });
+                          }, {} as Record<string, string>);
+                          console.log('[Inspector] Saving properties on key blur:', propertiesObject);
+                          onSave(selectedNode.id, { 
+                            label, 
+                            properties: propertiesObject,
+                            visibility: visibility
+                          });
                         }
                       }}
                     />
@@ -413,22 +459,52 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
                       value={prop.value}
                       placeholder={terms.inspectorPropertyValue}
                       onChange={(e) => {
+                        const newValue = e.target.value;
                         setProperties(prev => prev.map(p => 
-                          p.id === prop.id ? { ...p, value: e.target.value } : p
+                          p.id === prop.id ? { ...p, value: newValue } : p
                         ));
                       }}
                       onBlur={() => {
+                        // Save properties when value field loses focus
                         if (selectedNode) {
-                          onSave(selectedNode.id, { label, properties: properties.reduce((acc, prop) => {
-                            if (prop.key && prop.value) acc[prop.key] = prop.value;
-                          return acc;
-                          }, {} as Record<string, string>) });
+                          const propertiesObject = properties.reduce((acc, prop) => {
+                            if (prop.key && prop.value) {
+                              acc[prop.key] = prop.value;
+                            }
+                            return acc;
+                          }, {} as Record<string, string>);
+                          console.log('[Inspector] Saving properties on value blur:', propertiesObject);
+                          onSave(selectedNode.id, { 
+                            label, 
+                            properties: propertiesObject,
+                            visibility: visibility
+                          });
                         }
                       }}
                     />
                     <button 
                       onClick={() => {
-                        setProperties(prev => prev.filter(p => p.id !== prop.id));
+                        setProperties(prev => {
+                          const newProperties = prev.filter(p => p.id !== prop.id);
+                          // Save immediately after removing a property
+                          if (selectedNode) {
+                            const propertiesObject = newProperties.reduce((acc, prop) => {
+                              if (prop.key && prop.value) {
+                                acc[prop.key] = prop.value;
+                              }
+                              return acc;
+                            }, {} as Record<string, string>);
+                            console.log('[Inspector] Saving properties after removal:', propertiesObject);
+                            setTimeout(() => {
+                              onSave(selectedNode.id, { 
+                                label, 
+                                properties: propertiesObject,
+                                visibility: visibility
+                              });
+                            }, 0);
+                          }
+                          return newProperties;
+                        });
                       }}
                       className="btn btn-ghost btn-sm"
                     >
@@ -460,7 +536,29 @@ const Inspector = ({ selectedNode, onClose, onSave, onDelete }: InspectorProps) 
               
               {showHistory && (
                 <div className="mt-2 max-h-48 overflow-y-auto bg-gray-800/50 rounded-lg p-3">
-                  <div className="text-xs text-gray-500">Edit history would appear here</div>
+                  {editHistoryQuery.isLoading ? (
+                    <div className="text-xs text-gray-500">Loading history...</div>
+                  ) : editHistoryQuery.error ? (
+                    <div className="text-xs text-red-400">Failed to load history</div>
+                  ) : editHistoryQuery.data && editHistoryQuery.data.length > 0 ? (
+                    <div className="space-y-2">
+                      {editHistoryQuery.data.map((entry: EditHistoryEntry) => {
+                        const formatted = formatEditHistoryEntry(entry);
+                        return (
+                          <div key={entry.id} className="border-b border-gray-700 last:border-b-0 pb-2 last:pb-0">
+                            <div className="text-xs text-gray-300 font-medium">
+                              {formatted.actionDescription}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {formatted.editorDisplay} • {formatted.timestampDisplay}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500">No edit history yet</div>
+                  )}
                 </div>
               )}
             </div>

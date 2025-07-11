@@ -703,7 +703,6 @@ export default function GraphPage() {
           visibility: variables.visibility ?? 'public',
           onResize: undefined, // Will be set later when data comes back from server
         };
-        console.log('[DEBUG] Optimistic space node data:', newNode.data);
       }
 
       setNodes((nds) => [...nds, newNode]);
@@ -858,17 +857,7 @@ export default function GraphPage() {
         const groupEntities = entitiesQuery.data.filter((e: { type: string }) => e.type === 'group');
         const groupIds = new Set(groupEntities.map((g: { nodeId: string }) => g.nodeId));
 
-        console.log('[DEBUG] Group entities from server:', groupEntities);
-
         const groupNodes = groupEntities.map((e: { nodeId: string; label: string; properties: Record<string, string>; x: number; y: number; type: string; userAddress: string; visibility: string; width?: number; height?: number; }) => {
-          console.log('[DEBUG] Processing group entity:', {
-            nodeId: e.nodeId,
-            label: e.label,
-            userAddress: e.userAddress,
-            userAddressLength: e.userAddress?.length,
-            currentAddress: address,
-            currentAddressLength: address?.length,
-          });
           const selection = selections.find(s => s.nodeId === e.nodeId);
           const isOwner = Boolean(e.userAddress && address && e.userAddress.toLowerCase() === address.toLowerCase());
           const maskedLabel = e.visibility === 'private' && !isOwner ? `${e.userAddress?.slice(0,6)}...${e.userAddress?.slice(-4)}` : e.label;
@@ -1245,8 +1234,6 @@ export default function GraphPage() {
   const handleAddSpace = () => {
     if (!requireWallet()) return;
     console.log('Creating a new space...');
-    console.log('[DEBUG] Current user address:', address);
-    console.log('[DEBUG] Address length:', address?.length);
     const nodeId = crypto.randomUUID();
 
     const spacePayload = {
@@ -1261,8 +1248,6 @@ export default function GraphPage() {
       date: selectedDate,
       userAddress: address!,
     };
-    
-    console.log('[DEBUG] Space creation payload:', spacePayload);
 
     addEntity.mutate(spacePayload);
   };

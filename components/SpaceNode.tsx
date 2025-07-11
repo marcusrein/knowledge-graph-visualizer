@@ -18,44 +18,21 @@ const SpaceNode = ({ data }: NodeProps<SpaceData>) => {
   const { label, visibility = 'public', onResize, owner } = data;
   const { address } = useAccount();
   
-  // Debug logging to understand the owner issue
-  console.log('[SpaceNode Debug] Owner comparison:', {
-    label,
-    owner,
-    currentAddress: address,
-    ownerLength: owner?.length,
-    addressLength: address?.length,
-    isOwnerTruthy: Boolean(owner),
-    isAddressTruthy: Boolean(address),
-  });
-  
   // Stable owner detection to prevent flashing
   const isOwner = useMemo(() => {
     if (!address) return false;
     
     // If no owner is set, this might be a newly created space that hasn't been properly updated yet
     if (!owner) {
-      console.log('[SpaceNode Debug] No owner set, cannot determine ownership');
       return false;
     }
     
-    const result = (
+    return (
       owner.toLowerCase() === address.toLowerCase() || 
       owner === address ||
       // Handle case where owner might be stored without checksumming
       owner.replace(/^0x/, '').toLowerCase() === address.replace(/^0x/, '').toLowerCase()
     );
-    
-    console.log('[SpaceNode Debug] isOwner calculation:', {
-      owner,
-      address,
-      lowerCaseMatch: owner.toLowerCase() === address.toLowerCase(),
-      exactMatch: owner === address,
-      withoutChecksumMatch: owner.replace(/^0x/, '').toLowerCase() === address.replace(/^0x/, '').toLowerCase(),
-      finalResult: result
-    });
-    
-    return result;
   }, [owner, address]);
   
   const isPrivate = visibility === 'private';
