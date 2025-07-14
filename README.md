@@ -1,4 +1,4 @@
-# Knowledge Graph Visualizer
+# Knowledge Graph Visualizer -BETA
 
 A collaborative, real-time knowledge graph visualization tool built with React Flow, Next.js, and blockchain integration. Create, organize, and explore interconnected information with spaces, topics, and relations.
 
